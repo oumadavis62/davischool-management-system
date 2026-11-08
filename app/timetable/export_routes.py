@@ -60,7 +60,9 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
         class_id: int = 0,
         teacher_id: int = 0,
         room_id: int = 0,
+        remedial_display: str = "combined",
     ):
+        remedial_display = "separate" if remedial_display == "separate" else "combined"
         school, result, error = load_view(request, profile_id, view_type, class_id, teacher_id, room_id)
         if error:
             return error
@@ -68,15 +70,15 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
         from reportlab.lib.pagesizes import A4, landscape
         from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
         from reportlab.lib.enums import TA_CENTER
-        from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+        from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, KeepInFrame
 
         buffer = BytesIO()
         doc = SimpleDocTemplate(buffer, pagesize=landscape(A4), leftMargin=18, rightMargin=18, topMargin=18, bottomMargin=18)
         styles = getSampleStyleSheet()
         school_style = ParagraphStyle("DaviSchoolName", parent=styles["Title"], alignment=TA_CENTER, fontSize=16, leading=19, textColor=colors.HexColor("#174a31"))
         title_style = ParagraphStyle("TimetableTitle", parent=styles["Heading2"], alignment=TA_CENTER, fontSize=11, leading=14, textColor=colors.HexColor("#315b3e"))
-        cell_style = ParagraphStyle("TimetableCell", parent=styles["BodyText"], fontSize=6.5, leading=8)
-        header_style = ParagraphStyle("TimetableHeader", parent=styles["BodyText"], fontSize=7, leading=9, textColor=colors.white, alignment=TA_CENTER)
+        cell_style = ParagraphStyle("TimetableCell", parent=styles["BodyText"], fontSize=5.5, leading=6.5)
+        header_style = ParagraphStyle("TimetableHeader", parent=styles["BodyText"], fontSize=6, leading=7, textColor=colors.white, alignment=TA_CENTER)
         def pdf_text(value):
             return xml_escape(str(value).encode("latin-1", "replace").decode("latin-1"))
         school_name = pdf_text(str(school["name"] or "School"))
@@ -92,12 +94,29 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
             Spacer(1,10),
         ])
         starts, continued = cell_map(result)
-        headers = [Paragraph("Period", header_style), Paragraph("Time", header_style)] + [Paragraph(pdf_text(str(d["day_name"])), header_style) for d in result["days"]]
+        timeline = sorted(
+            [(str(p["start_time"]), "period", p) for p in result["periods"]] +
+            [(str(br["start_time"]), "break", br) for br in result.get("breaks", [])],
+            key=lambda item: (item[0], 0 if item[1] == "period" else 1),
+        )
+        headers = [Paragraph("Day", header_style)]
+        for _, item_type, item in timeline:
+            headers.append(Paragraph(
+                "<b>" + pdf_text(str(item["label"])) + "</b><br/>" +
+                pdf_text(str(item["start_time"])) + " - " + pdf_text(str(item["end_time"])),
+                header_style,
+            ))
         data = [headers]
-        for period in result["periods"]:
-            row = [Paragraph(pdf_text(str(period["label"])), cell_style), Paragraph(pdf_text(str(period["start_time"])) + " - " + pdf_text(str(period["end_time"])), cell_style)]
-            for day in result["days"]:
-                key = (int(day["id"]),int(period["id"]))
+        break_col_indexes = [i + 1 for i, (_, kind, _) in enumerate(timeline) if kind == "break"]
+        for day in result["days"]:
+            row = [Paragraph("<b>" + pdf_text(str(day["day_name"])) + "</b>", cell_style)]
+            for _, item_type, item in timeline:
+                if item_type == "break":
+                    row.append(Paragraph("<b>" + pdf_text(str(item["label"])) + "</b><br/>" +
+                                         pdf_text(str(item["start_time"])) + " - " +
+                                         pdf_text(str(item["end_time"])), cell_style))
+                    continue
+                key = (int(day["id"]), int(item["id"]))
                 if key in starts:
                     lines = []
                     for lesson in starts[key]:
@@ -114,10 +133,9 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                 row.append(Paragraph(cell, cell_style))
             data.append(row)
         available_width = doc.width
-        first_width = 65
-        time_width = 75
-        day_width = max(70,(available_width-first_width-time_width)/max(1,len(result["days"])))
-        table = Table(data, colWidths=[first_width,time_width]+[day_width]*len(result["days"]), repeatRows=1)
+        first_width = 42
+        slot_width = max(1, (available_width - first_width) / max(1, len(timeline)))
+        table = Table(data, colWidths=[first_width] + [slot_width] * len(timeline), repeatRows=1)
         table.setStyle(TableStyle([
             ("BACKGROUND",(0,0),(-1,0),colors.HexColor("#17633b")),
             ("TEXTCOLOR",(0,0),(-1,0),colors.white),
@@ -129,7 +147,90 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
             ("TOPPADDING",(0,0),(-1,-1),5),
             ("BOTTOMPADDING",(0,0),(-1,-1),5),
         ]))
+        for break_col in break_col_indexes:
+            table.setStyle(TableStyle([
+                ("BACKGROUND",(break_col,0),(break_col,-1),colors.HexColor("#f1ead8")),
+                ("TEXTCOLOR",(break_col,0),(break_col,-1),colors.HexColor("#75551d")),
+            ]))
         story.append(table)
+
+        if result.get("dated_instructional_sessions"):
+            from reportlab.platypus import PageBreak
+            story.append(PageBreak())
+            story.append(Paragraph("CALENDAR-DATED INSTRUCTIONAL LESSONS", title_style))
+            dated_rows = [[Paragraph("<b>Date / Day</b>",header_style),Paragraph("<b>Time</b>",header_style),Paragraph("<b>Subject / Activity</b>",header_style),Paragraph("<b>Class / Group</b>",header_style),Paragraph("<b>Teacher(s)</b>",header_style),Paragraph("<b>Venue</b>",header_style)]]
+            for item in result["dated_instructional_sessions"]:
+                dated_rows.append([
+                    Paragraph(pdf_text((item.get("session_date") or "") + (" · " + str(item.get("day_name")) if item.get("day_name") else "")),cell_style),
+                    Paragraph(pdf_text(str(item["start_time"])+"–"+str(item["end_time"])),cell_style),
+                    Paragraph(pdf_text(item.get("subject_name") or item.get("programme_name") or item.get("session_type") or "Lesson"),cell_style),
+                    Paragraph(pdf_text(item.get("class_names") or "—"),cell_style),
+                    Paragraph(pdf_text(item.get("teacher_names") or "—"),cell_style),
+                    Paragraph(pdf_text(item.get("room_name") or "—"),cell_style),
+                ])
+            dated_table = Table(dated_rows,colWidths=[doc.width*.16,doc.width*.13,doc.width*.20,doc.width*.18,doc.width*.18,doc.width*.15],repeatRows=1)
+            dated_table.setStyle(TableStyle([("BACKGROUND",(0,0),(-1,0),colors.HexColor("#17633b")),("TEXTCOLOR",(0,0),(-1,0),colors.white),("GRID",(0,0),(-1,-1),.3,colors.HexColor("#cbd8ce")),("VALIGN",(0,0),(-1,-1),"TOP"),("FONTSIZE",(0,1),(-1,-1),6),("LEFTPADDING",(0,0),(-1,-1),3),("RIGHTPADDING",(0,0),(-1,-1),3),("TOPPADDING",(0,0),(-1,-1),3),("BOTTOMPADDING",(0,0),(-1,-1),3)]))
+            story.append(dated_table)
+
+        def session_paragraphs(items, rotation=False):
+            values = []
+            for item in items:
+                heading = (str(item.get("rotation_label") or "Weekend rotation") + " · ") if rotation else ""
+                title = str(item.get("subject_name") or item.get("programme_name") or item.get("session_type") or "Session")
+                detail = " | ".join(filter(None, [
+                    str(item.get("session_date") or item.get("day_name") or "Weekly"),
+                    str(item["start_time"]) + "–" + str(item["end_time"]),
+                    str(item.get("class_names") or ""),
+                    str(item.get("teacher_names") or ""),
+                    str(item.get("room_name") or ""),
+                ]))
+                values.append(Paragraph("<b>"+pdf_text(heading+title)+"</b><br/>"+pdf_text(detail), cell_style))
+            return values
+
+        if result.get("weekday_remedials"):
+            from reportlab.platypus import PageBreak
+            if remedial_display == "separate":
+                story.append(PageBreak())
+            story.append(Paragraph("WEEKDAY REMEDIAL & STUDY SESSIONS", title_style))
+            remedial_rows = [[Paragraph("<b>Date / Day</b>",header_style),Paragraph("<b>Time</b>",header_style),Paragraph("<b>Programme / Subject</b>",header_style),Paragraph("<b>Class</b>",header_style),Paragraph("<b>Teacher(s)</b>",header_style),Paragraph("<b>Venue</b>",header_style)]]
+            for item in result["weekday_remedials"]:
+                remedial_rows.append([pdf_text(item.get("session_date") or item.get("day_name") or "Weekly"),
+                    pdf_text(str(item["start_time"])+"–"+str(item["end_time"])),
+                    pdf_text(item.get("subject_name") or item.get("programme_name") or item.get("session_type")),
+                    pdf_text(item.get("class_names") or "—"),pdf_text(item.get("teacher_names") or "—"),
+                    pdf_text(item.get("room_name") or "—")])
+            rt=Table(remedial_rows,colWidths=[65,70,130,100,115,75],repeatRows=1)
+            rt.setStyle(TableStyle([("BACKGROUND",(0,0),(-1,0),colors.HexColor("#17633b")),("TEXTCOLOR",(0,0),(-1,0),colors.white),("GRID",(0,0),(-1,-1),.3,colors.HexColor("#cbd8ce")),("FONTSIZE",(0,1),(-1,-1),7),("VALIGN",(0,0),(-1,-1),"TOP")]))
+            story.append(rt)
+
+        if result.get("weekend_sessions"):
+            from reportlab.platypus import PageBreak
+            story.append(PageBreak())
+            story.append(Paragraph("WEEKEND LESSONS & REMEDIALS", school_style))
+            story.append(Paragraph("All configured weekend rotations consolidated on one sheet", title_style))
+            weekend_rows = [[
+                Paragraph("<b>"+label+"</b>",header_style)
+                for label in ["Rotation","Date / Day","Time","Lesson / Activity","Class / Group","Teacher(s)","Venue"]
+            ]]
+            for item in result["weekend_sessions"]:
+                date_label = str(item.get("session_date") or item.get("day_name") or "Weekly")
+                if item.get("session_date") and item.get("day_name"):
+                    date_label += " · " + str(item["day_name"])
+                weekend_rows.append([
+                    Paragraph(pdf_text(item.get("rotation_label") or "Weekend schedule"),cell_style),
+                    Paragraph(pdf_text(date_label),cell_style),
+                    Paragraph(pdf_text(str(item["start_time"])+"–"+str(item["end_time"])),cell_style),
+                    Paragraph(pdf_text(item.get("subject_name") or item.get("programme_name") or item.get("session_type") or "Session"),cell_style),
+                    Paragraph(pdf_text(item.get("class_names") or "—"),cell_style),
+                    Paragraph(pdf_text(item.get("teacher_names") or "—"),cell_style),
+                    Paragraph(pdf_text(item.get("room_name") or "—"),cell_style),
+                ])
+            widths = [doc.width*.14,doc.width*.15,doc.width*.12,doc.width*.19,doc.width*.15,doc.width*.15,doc.width*.10]
+            weekend_table = Table(weekend_rows,colWidths=widths,repeatRows=1)
+            weekend_table.setStyle(TableStyle([("BACKGROUND",(0,0),(-1,0),colors.HexColor("#17633b")),("TEXTCOLOR",(0,0),(-1,0),colors.white),("GRID",(0,0),(-1,-1),.35,colors.HexColor("#b8d2bd")),("VALIGN",(0,0),(-1,-1),"TOP"),("LEFTPADDING",(0,0),(-1,-1),3),("RIGHTPADDING",(0,0),(-1,-1),3),("TOPPADDING",(0,0),(-1,-1),3),("BOTTOMPADDING",(0,0),(-1,-1),3)]))
+            # Keep both weekend rotations together on one A4 landscape page.
+            # Shrink only this consolidated sheet when a school has many entries.
+            story.append(KeepInFrame(doc.width, doc.height - 34, [weekend_table], mode="shrink", hAlign="LEFT", vAlign="TOP"))
         doc.build(story)
         buffer.seek(0)
         filename = filename_prefix(school,result) + ".pdf"
@@ -143,7 +244,9 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
         class_id: int = 0,
         teacher_id: int = 0,
         room_id: int = 0,
+        remedial_display: str = "combined",
     ):
+        remedial_display = "separate" if remedial_display == "separate" else "combined"
         school, result, error = load_view(request, profile_id, view_type, class_id, teacher_id, room_id)
         if error:
             return error
@@ -154,7 +257,13 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
         workbook = Workbook()
         sheet = workbook.active
         sheet.title = "Timetable"
-        last_col = 2 + len(result["days"])
+        from openpyxl.utils import get_column_letter
+        timeline = sorted(
+            [(str(p["start_time"]), "period", p) for p in result["periods"]] +
+            [(str(br["start_time"]), "break", br) for br in result.get("breaks", [])],
+            key=lambda item: (item[0], 0 if item[1] == "period" else 1),
+        )
+        last_col = 1 + len(timeline)
         sheet.merge_cells(start_row=1,start_column=1,end_row=1,end_column=last_col)
         sheet.cell(1,1,str(school["name"] or "School"))
         sheet.cell(1,1).font = Font(bold=True,size=16,color="174A31")
@@ -168,37 +277,101 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
         sheet.cell(3,1,profile_text)
         sheet.cell(3,1).alignment = Alignment(horizontal="center")
         header_row = 5
-        headers = ["Period","Time"] + [str(d["day_name"]) for d in result["days"]]
+        headers = ["Day"] + [
+            (str(item["label"]) + "\n" + str(item["start_time"]) + "–" + str(item["end_time"]))
+            for _, _, item in timeline
+        ]
         for col, value in enumerate(headers,1):
             cell = sheet.cell(header_row,col,value)
             cell.font = Font(bold=True,color="FFFFFF")
             cell.fill = PatternFill("solid",fgColor="17633B")
-            cell.alignment = Alignment(horizontal="center",vertical="center")
+            cell.alignment = Alignment(horizontal="center",vertical="center",wrap_text=True)
         starts, continued = cell_map(result)
-        for row_index, period in enumerate(result["periods"],header_row+1):
-            sheet.cell(row_index,1,str(period["label"]))
-            sheet.cell(row_index,2,str(period["start_time"])+"–"+str(period["end_time"]))
-            for col, day in enumerate(result["days"],3):
-                key = (int(day["id"]),int(period["id"]))
+        break_columns = {index + 2 for index, (_, kind, _) in enumerate(timeline) if kind == "break"}
+        row_index = header_row + 1
+        for day in result["days"]:
+            sheet.cell(row_index,1,str(day["day_name"]))
+            sheet.cell(row_index,1).font = Font(bold=True,color="315B3E")
+            for col, (_, item_type, item) in enumerate(timeline,2):
+                cell = sheet.cell(row_index,col)
+                if item_type == "break":
+                    cell.value = str(item["label"])
+                    cell.fill = PatternFill("solid",fgColor="F1EAD8")
+                    cell.font = Font(bold=True,color="75551D")
+                    cell.alignment = Alignment(horizontal="center",vertical="center",wrap_text=True)
+                    continue
+                key = (int(day["id"]),int(item["id"]))
                 if key in starts:
                     lines = []
                     for lesson in starts[key]:
                         class_label = str(lesson["class_name"]) + ((" " + str(lesson["stream"])) if lesson["stream"] else "")
                         lines.append(str(lesson["subject_name"]) + " — " + class_label + "\n" + str(lesson["teacher_name"]) + "\n" + str(lesson["room_name"] or "No room"))
-                    value = "\n\n".join(lines)
+                    cell.value = "\n\n".join(lines)
                 elif key in continued:
-                    value = "↳ " + str(continued[key]["subject_name"]) + " continues"
+                    cell.value = "↳ " + str(continued[key]["subject_name"]) + " continues"
                 else:
-                    value = ""
-                sheet.cell(row_index,col,value).alignment = Alignment(wrap_text=True,vertical="top")
+                    cell.value = ""
+                cell.alignment = Alignment(wrap_text=True,vertical="top")
             sheet.row_dimensions[row_index].height = 48
+            row_index += 1
         sheet.column_dimensions["A"].width = 16
-        sheet.column_dimensions["B"].width = 18
-        for col in range(3,last_col+1):
-            sheet.column_dimensions[chr(64+col)].width = 24
-        sheet.freeze_panes = "C6"
+        for col in range(2,last_col+1):
+            sheet.column_dimensions[get_column_letter(col)].width = 22
+        sheet.freeze_panes = "B6"
         sheet.sheet_view.showGridLines = False
-        sheet.auto_filter.ref = f"A{header_row}:{chr(64+last_col)}{header_row+len(result['periods'])}"
+        sheet.auto_filter.ref = f"A{header_row}:{get_column_letter(last_col)}{row_index-1}"
+
+
+        if result.get("dated_instructional_sessions"):
+            dated = workbook.create_sheet("Dated Lessons")
+            dated_headers = ["Date","Day","Start","End","Subject / Activity","Class / Group","Teacher(s)","Venue"]
+            dated.append(dated_headers)
+            for cell in dated[1]:
+                cell.font=Font(bold=True,color="FFFFFF"); cell.fill=PatternFill("solid",fgColor="17633B")
+            for item in result["dated_instructional_sessions"]:
+                dated.append([item.get("session_date") or "",item.get("day_name") or "",item["start_time"],item["end_time"],item.get("subject_name") or item.get("programme_name") or item.get("session_type"),item.get("class_names") or "—",item.get("teacher_names") or "—",item.get("room_name") or "—"])
+            dated.freeze_panes="A2"; dated.auto_filter.ref=dated.dimensions
+            for col in range(1,len(dated_headers)+1):
+                dated.column_dimensions[get_column_letter(col)].width=22
+            dated.sheet_properties.pageSetUpPr.fitToPage=True
+            dated.page_setup.orientation="landscape"; dated.page_setup.paperSize=dated.PAPERSIZE_A4
+            dated.page_setup.fitToWidth=1; dated.page_setup.fitToHeight=0
+
+        if result.get("weekday_remedials") and remedial_display == "combined":
+            sheet.cell(row_index + 1,1,"WEEKDAY REMEDIAL & STUDY SESSIONS").font = Font(bold=True,size=12,color="17633B")
+            remedial_headers = ["Date / Day","Start","End","Programme / Subject","Class / Group","Teacher(s)","Venue"]
+            for col,value in enumerate(remedial_headers,1):
+                cell=sheet.cell(row_index+2,col,value); cell.font=Font(bold=True,color="FFFFFF"); cell.fill=PatternFill("solid",fgColor="17633B")
+            for offset,item in enumerate(result["weekday_remedials"],row_index+3):
+                for col,value in enumerate([item.get("session_date") or item.get("day_name") or "Weekly",item["start_time"],item["end_time"],item.get("subject_name") or item.get("programme_name") or item.get("session_type"),item.get("class_names") or "—",item.get("teacher_names") or "—",item.get("room_name") or "—"],1):
+                    sheet.cell(offset,col,value).alignment=Alignment(wrap_text=True,vertical="top")
+        if result.get("weekend_sessions"):
+            weekend = workbook.create_sheet("Weekend Lessons")
+            weekend_headers = ["Weekend rotation","Date","Day","Start","End","Programme / Subject","Class / Group","Teacher(s)","Venue","Layer"]
+            weekend.append(weekend_headers)
+            for cell in weekend[1]:
+                cell.font=Font(bold=True,color="FFFFFF"); cell.fill=PatternFill("solid",fgColor="17633B")
+            for item in result["weekend_sessions"]:
+                weekend.append([item.get("rotation_label") or "Weekend rotation",item.get("session_date") or "",item.get("day_name") or "",item["start_time"],item["end_time"],item.get("subject_name") or item.get("programme_name") or item.get("session_type"),item.get("class_names") or "—",item.get("teacher_names") or "—",item.get("room_name") or "—",item.get("schedule_layer")])
+            weekend.freeze_panes="A2"; weekend.auto_filter.ref=weekend.dimensions
+            for col in range(1,len(weekend_headers)+1):
+                weekend.column_dimensions[get_column_letter(col)].width=20
+            weekend.sheet_properties.pageSetUpPr.fitToPage=True
+            weekend.page_setup.orientation="landscape"; weekend.page_setup.paperSize=weekend.PAPERSIZE_A4
+            weekend.page_setup.fitToWidth=1; weekend.page_setup.fitToHeight=1
+            weekend.print_area="A1:J" + str(weekend.max_row)
+            weekend.sheet_properties.pageSetUpPr.autoPageBreaks=False
+        if result.get("weekday_remedials") and remedial_display == "separate":
+            remedial = workbook.create_sheet("Weekday Remedials")
+            remedial_headers=["Date / Day","Start","End","Programme / Subject","Class / Group","Teacher(s)","Venue"]
+            remedial.append(remedial_headers)
+            for cell in remedial[1]:
+                cell.font=Font(bold=True,color="FFFFFF"); cell.fill=PatternFill("solid",fgColor="17633B")
+            for item in result["weekday_remedials"]:
+                remedial.append([item.get("session_date") or item.get("day_name") or "Weekly",item["start_time"],item["end_time"],item.get("subject_name") or item.get("programme_name") or item.get("session_type"),item.get("class_names") or "—",item.get("teacher_names") or "—",item.get("room_name") or "—"])
+            remedial.freeze_panes="A2"; remedial.auto_filter.ref=remedial.dimensions
+            for col in range(1,len(remedial_headers)+1):
+                remedial.column_dimensions[get_column_letter(col)].width=22
 
         details = workbook.create_sheet("Lesson Details")
         detail_headers = ["Day","Period","Start","End","Class","Stream","Subject","Teacher","Room","Duration"]
@@ -221,6 +394,21 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
             for row in ws.iter_rows():
                 for cell in row:
                     cell.border = Border(bottom=thin)
+        # Keep every worksheet printable on standard A4 paper. Wide timetables
+        # and details scale to one page wide; weekend rotations remain a single
+        # consolidated A4 page as explicitly requested.
+        for ws in workbook.worksheets:
+            ws.sheet_properties.pageSetUpPr.fitToPage = True
+            ws.page_setup.orientation = "landscape"
+            ws.page_setup.paperSize = ws.PAPERSIZE_A4
+            ws.page_setup.fitToWidth = 1
+            if ws.title == "Weekend Lessons":
+                ws.page_setup.fitToHeight = 1
+                ws.sheet_properties.pageSetUpPr.autoPageBreaks = False
+                ws.print_area = "A1:J" + str(ws.max_row)
+            else:
+                ws.page_setup.fitToHeight = 0
+
         workbook.save(buffer)
         buffer.seek(0)
         filename = filename_prefix(school,result) + ".xlsx"

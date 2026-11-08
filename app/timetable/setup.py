@@ -281,6 +281,46 @@ def save_teacher_availability(connection: Any, school_id: int, profile_id: int, 
     connection.commit()
 
 
+def save_class_limits(connection: Any, school_id: int, profile_id: int,
+                     class_id: int, max_lessons_per_week: int | None,
+                     max_periods_per_day: int | None, notes: str = "") -> None:
+    cur = connection.cursor()
+    _profile(cur, school_id, profile_id)
+    target = cur.execute(
+        "SELECT id FROM classes WHERE id=? AND school_id=?",
+        (int(class_id), int(school_id)),
+    ).fetchone()
+    if not target:
+        raise TimetableSetupError("Select a class or stream belonging to this school.")
+    if max_lessons_per_week is not None and not 1 <= int(max_lessons_per_week) <= 100:
+        raise TimetableSetupError("Maximum lessons per week must be between 1 and 100.")
+    if max_periods_per_day is not None and not 1 <= int(max_periods_per_day) <= 30:
+        raise TimetableSetupError("Maximum periods per day must be between 1 and 30.")
+    if max_lessons_per_week is None and max_periods_per_day is None:
+        raise TimetableSetupError("Set at least one class workload limit.")
+    existing = cur.execute(
+        """SELECT id FROM ds_timetable_class_limits
+           WHERE school_id=? AND profile_id=? AND class_id=?""",
+        (school_id, profile_id, class_id),
+    ).fetchone()
+    values = (max_lessons_per_week, max_periods_per_day, (notes or "").strip())
+    if existing:
+        cur.execute(
+            """UPDATE ds_timetable_class_limits
+               SET max_lessons_per_week=?,max_periods_per_day=?,notes=?,updated_at=CURRENT_TIMESTAMP
+               WHERE id=? AND school_id=?""",
+            values + (existing["id"], school_id),
+        )
+    else:
+        cur.execute(
+            """INSERT INTO ds_timetable_class_limits
+               (school_id,profile_id,class_id,max_lessons_per_week,max_periods_per_day,notes)
+               VALUES(?,?,?,?,?,?)""",
+            (school_id, profile_id, class_id) + values,
+        )
+    connection.commit()
+
+
 def save_class_requirement(connection: Any, school_id: int, profile_id: int, class_id: int, subject_id: int, teacher_id: int, lessons_per_week: int, duration_periods: int = 1, max_lessons_per_day: int | None = None, allow_double: bool = False) -> None:
     cur = connection.cursor()
     _profile(cur, school_id, profile_id)

@@ -3,7 +3,7 @@ import sqlite3
 import unittest
 
 from app.timetable.schema import ensure_timetable_schema
-from app.timetable.setup import create_profile, save_day, save_period, save_room, save_class_requirement
+from app.timetable.setup import create_profile, save_day, save_period, save_room, save_class_requirement, save_break
 from app.timetable.builder import place_lesson
 from app.timetable.views import get_timetable_view
 
@@ -34,6 +34,7 @@ class TimetableViewTests(unittest.TestCase):
         save_day(self.db, 1, self.profile_id, "MON", "Monday", 1)
         save_period(self.db, 1, self.profile_id, 1, "Period 1", "08:00", "08:40")
         save_period(self.db, 1, self.profile_id, 2, "Period 2", "08:40", "09:20")
+        save_break(self.db, 1, self.profile_id, 1, "Morning Tea", "09:20", "09:40")
         save_room(self.db, 1, "R1", "Classroom 1", "classroom", 40)
         save_class_requirement(self.db, 1, self.profile_id, 20, 30, 10, 1, 1, 1, False)
         save_class_requirement(self.db, 1, self.profile_id, 21, 31, 11, 1, 1, 1, False)
@@ -54,6 +55,13 @@ class TimetableViewTests(unittest.TestCase):
         self.assertEqual(len(result["lessons"]), 2)
         self.assertEqual(result["title"], "School-wide timetable")
 
+    def test_all_timetable_view_data_includes_named_breaks_and_times(self):
+        result = get_timetable_view(self.db, 1, self.profile_id, "school")
+        self.assertEqual(len(result["breaks"]), 1)
+        self.assertEqual(result["breaks"][0]["label"], "Morning Tea")
+        self.assertEqual(result["breaks"][0]["start_time"], "09:20")
+        self.assertEqual(result["breaks"][0]["end_time"], "09:40")
+
     def test_class_view_filters_class_stream(self):
         result = get_timetable_view(self.db, 1, self.profile_id, "class", 20)
         self.assertEqual(len(result["lessons"]), 1)
@@ -69,6 +77,71 @@ class TimetableViewTests(unittest.TestCase):
         result = get_timetable_view(self.db, 1, self.profile_id, "room", self.room_id)
         self.assertEqual(len(result["lessons"]), 2)
         self.assertIn("Classroom 1", result["title"])
+
+
+    def test_weekend_sessions_are_grouped_by_configured_rotation_on_one_view_sheet(self):
+        from app.timetable.advanced_setup import create_rotation_cycle, save_rotation_week
+        save_day(self.db, 1, self.profile_id, "SAT", "Saturday", 6, False)
+        saturday_id = self.db.execute(
+            "SELECT id FROM ds_timetable_days WHERE day_code='SAT'"
+        ).fetchone()[0]
+        self.db.execute(
+            "UPDATE ds_timetable_profiles SET academic_start_date=?,academic_end_date=? WHERE id=?",
+            ("2027-01-01", "2027-12-31", self.profile_id),
+        )
+        cycle = create_rotation_cycle(
+            self.db, 1, self.profile_id, "Weekend departments", 2, "2027-01-02"
+        )
+        save_rotation_week(self.db, 1, self.profile_id, cycle, 1, "Weekend 1", "SCIENCE")
+        save_rotation_week(self.db, 1, self.profile_id, cycle, 2, "Weekend 2", "LANGUAGES")
+        for session_date, label, teacher_id in [
+            ("2027-01-02", "Science clinic", 10),
+            ("2027-01-09", "Language clinic", 11),
+        ]:
+            cur = self.db.cursor()
+            cur.execute(
+                """INSERT INTO ds_timetable_sessions
+                   (school_id,profile_id,schedule_layer,session_type,day_id,session_date,
+                    start_time,end_time,duration_periods,status,created_at,updated_at)
+                   VALUES(?,?,?,?,?,?,?,?,?,?,?,?)""",
+                (1,self.profile_id,"additional_learning","remedial",saturday_id,
+                 session_date,"09:00","10:00",0,"scheduled","2027-01-01","2027-01-01"),
+            )
+            sid = cur.lastrowid
+            cur.execute(
+                "INSERT INTO ds_timetable_session_teachers(school_id,profile_id,session_id,teacher_id) VALUES(?,?,?,?)",
+                (1,self.profile_id,sid,teacher_id),
+            )
+            self.db.commit()
+        result = get_timetable_view(self.db, 1, self.profile_id, "school")
+        self.assertEqual(len(result["weekend_sessions"]), 2)
+        self.assertEqual(set(result["weekend_groups"]), {"Weekend 1", "Weekend 2"})
+        self.assertEqual(len(result["remedial_sessions"]), 2)
+
+    def test_calendar_dated_instructional_sessions_are_exposed(self):
+        cur = self.db.cursor()
+        cur.execute(
+            """INSERT INTO ds_timetable_sessions
+               (school_id,profile_id,schedule_layer,session_type,day_id,session_date,
+                subject_id,start_time,end_time,duration_periods,status,created_at,updated_at)
+               VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+            (1,self.profile_id,"instructional","lesson",self.day_id,"2027-01-04",
+             30,"08:00","08:40",1,"scheduled","2027-01-01","2027-01-01"),
+        )
+        session_id = cur.lastrowid
+        cur.execute(
+            "INSERT INTO ds_timetable_session_classes(school_id,profile_id,session_id,class_id) VALUES(?,?,?,?)",
+            (1,self.profile_id,session_id,20),
+        )
+        cur.execute(
+            "INSERT INTO ds_timetable_session_teachers(school_id,profile_id,session_id,teacher_id) VALUES(?,?,?,?)",
+            (1,self.profile_id,session_id,10),
+        )
+        self.db.commit()
+        result = get_timetable_view(self.db, 1, self.profile_id, "school")
+        self.assertEqual(len(result["dated_instructional_sessions"]), 1)
+        self.assertEqual(result["dated_instructional_sessions"][0]["session_date"], "2027-01-04")
+        self.assertEqual(result["dated_instructional_sessions"][0]["class_names"], "Grade 7 Blue")
 
     def test_views_reject_cross_school_targets(self):
         with self.assertRaises(Exception):

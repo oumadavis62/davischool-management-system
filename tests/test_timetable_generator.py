@@ -10,6 +10,7 @@ from app.timetable.setup import (
     save_period,
     save_room,
     save_class_requirement,
+    save_class_limits,
 )
 from app.timetable.builder import place_lesson
 from app.timetable.generator import generate_timetable
@@ -55,6 +56,37 @@ class TimetableGeneratorTests(unittest.TestCase):
         self.assertEqual(len(rows), 2)
         self.assertTrue(all(row["room_id"] is not None for row in rows))
         self.assertTrue(all(row["generation_run_id"] == result["run_id"] for row in rows))
+
+    def test_generator_respects_class_weekly_lesson_ceiling(self):
+        save_class_limits(self.db, 1, self.profile_id, 20, 1, None)
+        result = generate_timetable(self.db, 1, self.profile_id, "admin@test")
+        self.assertEqual(result["status"], "failed")
+        self.assertEqual(
+            self.db.execute(
+                "SELECT COUNT(*) FROM ds_timetable_lessons WHERE school_id=1 AND profile_id=?",
+                (self.profile_id,),
+            ).fetchone()[0], 0)
+
+    def test_generator_rejects_fixed_lessons_above_class_weekly_ceiling(self):
+        monday = self.db.execute("SELECT id FROM ds_timetable_days WHERE day_code='MON'").fetchone()[0]
+        tuesday = self.db.execute("SELECT id FROM ds_timetable_days WHERE day_code='TUE'").fetchone()[0]
+        first_period = self.db.execute("SELECT id FROM ds_timetable_periods WHERE period_no=1").fetchone()[0]
+        place_lesson(self.db, 1, self.profile_id, 20, 30, 10, monday, first_period)
+        place_lesson(self.db, 1, self.profile_id, 20, 30, 10, tuesday, first_period)
+        save_class_limits(self.db, 1, self.profile_id, 20, 1, None)
+        with self.assertRaisesRegex(TimetableSetupError, "weekly lesson ceiling"):
+            generate_timetable(self.db, 1, self.profile_id, "admin@test")
+
+    def test_generator_counts_double_periods_toward_daily_class_ceiling(self):
+        save_class_requirement(self.db, 1, self.profile_id, 20, 30, 10, 1, 2, None, True)
+        save_class_limits(self.db, 1, self.profile_id, 20, None, 1)
+        result = generate_timetable(self.db, 1, self.profile_id, "admin@test")
+        self.assertEqual(result["status"], "failed")
+        self.assertEqual(
+            self.db.execute(
+                "SELECT COUNT(*) FROM ds_timetable_lessons WHERE school_id=1 AND profile_id=?",
+                (self.profile_id,),
+            ).fetchone()[0], 0)
 
     def test_manual_lessons_are_preserved_and_generator_fills_remainder(self):
         day_id = self.db.execute(

@@ -117,7 +117,7 @@ def register_timetable_publishing_routes(app, get_db, get_school_obj, module_pag
         if len(versions) >= 2:
             compare_error_html = f"<div class='pub-alert error'>{esc(compare_error)}</div>" if compare_error else ""
             comparison_html = (
-                f"<div class='pub-compare-result'><b>{len(comparison['added'])} lessons added</b><b>{len(comparison['removed'])} lessons removed</b><b>{comparison['unchanged']} unchanged</b></div>"
+                f"<div class='pub-compare-result'><b>{len(comparison['added']) + len(comparison.get('advanced_added', []))} sessions added</b><b>{len(comparison['removed']) + len(comparison.get('advanced_removed', []))} sessions removed</b><b>{comparison['unchanged'] + comparison.get('advanced_unchanged', 0)} unchanged</b></div>"
                 if comparison else ""
             )
             compare_html = f"""<section class='pub-card'><span class='pub-kicker'>VERSION COMPARISON</span><h3>Compare published versions</h3><form method='get' action='/app/timetable/publishing' class='pub-compare'><input type='hidden' name='profile_id' value='{pid}'><label>First version<select name='compare_first'>{version_options}</select></label><label>Second version<select name='compare_second'>{version_options}</select></label><button class='pub-btn secondary'>Compare</button></form>{compare_error_html}{comparison_html}</section>"""

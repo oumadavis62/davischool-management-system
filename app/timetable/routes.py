@@ -17,8 +17,10 @@ from app.timetable.setup import (
     save_room,
     save_teacher_availability,
     save_class_requirement,
+    save_class_limits,
     _profile,
 )
+from app.timetable.advanced_setup import save_timetable_constraint
 
 
 def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
@@ -98,6 +100,7 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
                 <section class='tt-home-panel tt-home-actions'><span class='tt-home-eyebrow'>QUICK ACCESS</span><h3>What would you like to do?</h3>
                   <a class='tt-home-action tt-home-action-primary' href='{builder_href}'><span class='tt-home-action-icon'>▦</span><span><b>Open timetable builder</b><small>Create, adjust and arrange lessons</small></span><em>→</em></a>
                   <a class='tt-home-action' href='{auto_href}'><span class='tt-home-action-icon'>✳</span><span><b>Generate automatically</b><small>Build a schedule using your constraints</small></span><em>→</em></a>
+                  <a class='tt-home-action' href='/app/timetable/constraints?profile_id={pid}'><span class='tt-home-action-icon'>⌁</span><span><b>Scheduling constraints</b><small>Set subject, teacher, class and time restrictions</small></span><em>→</em></a>
                   <a class='tt-home-action' href='{views_href}'><span class='tt-home-action-icon'>▤</span><span><b>View timetables</b><small>School, class, teacher and room views</small></span><em>→</em></a>
                   <a class='tt-home-action' href='{publish_href}'><span class='tt-home-action-icon'>⇧</span><span><b>Review and publish</b><small>Manage timetable release and revisions</small></span><em>→</em></a>
                 </section>
@@ -162,15 +165,29 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
             selected = profiles[0]
         selected_status = str(selected["status"] or "draft").strip().lower() if selected else ""
         has_draft_profile = any(str(p["status"] or "draft").strip().lower() == "draft" for p in profiles)
-        days = periods = breaks = calendar_events = rooms = teachers = allocations = availability = requirements = []
+        days = periods = breaks = calendar_events = rooms = teachers = allocations = availability = requirements = class_limits = class_records = []
         if selected:
             pid = int(selected["id"])
             days = cur.execute("SELECT * FROM ds_timetable_days WHERE school_id=? AND profile_id=? ORDER BY day_order,id", (school_id,pid)).fetchall()
             periods = cur.execute("SELECT * FROM ds_timetable_periods WHERE school_id=? AND profile_id=? ORDER BY period_no,id", (school_id,pid)).fetchall()
             breaks = cur.execute("SELECT * FROM ds_timetable_breaks WHERE school_id=? AND profile_id=? ORDER BY break_no,id", (school_id,pid)).fetchall()
+            # Every positive gap between consecutive configured periods is a break candidate.
+            ordered_periods = sorted(periods, key=lambda p: (str(p["start_time"]), int(p["period_no"])))
+            selected_gap_keys = {(str(b["start_time"]), str(b["end_time"])) for b in breaks}
+            break_candidates = []
+            for previous, following in zip(ordered_periods, ordered_periods[1:]):
+                gap_start, gap_end = str(previous["end_time"]), str(following["start_time"])
+                if gap_start < gap_end:
+                    break_candidates.append({
+                        "start_time": gap_start, "end_time": gap_end,
+                        "label": f"Gap after {previous['label']}",
+                        "selected": (gap_start, gap_end) in selected_gap_keys,
+                    })
+
             calendar_events = cur.execute("SELECT * FROM ds_timetable_calendar_exceptions WHERE school_id=? AND profile_id=? ORDER BY exception_date,label", (school_id,pid)).fetchall()
             rooms = cur.execute("SELECT * FROM ds_timetable_rooms WHERE school_id=? AND is_active=1 ORDER BY name", (school_id,)).fetchall()
             teachers = cur.execute("SELECT id,name FROM teachers WHERE school_id=? ORDER BY name", (school_id,)).fetchall()
+            class_records = cur.execute("SELECT id,name,stream FROM classes WHERE school_id=? ORDER BY name,stream", (school_id,)).fetchall()
             allocations = cur.execute(
                 """SELECT DISTINCT ta.class_id,ta.subject_id,ta.teacher_id,c.name class_name,c.stream,
                           s.name subject_name,t.name teacher_name
@@ -199,6 +216,13 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
                    WHERE r.school_id=? AND r.profile_id=? ORDER BY c.name,c.stream,s.name""",
                 (school_id,pid),
             ).fetchall()
+            class_limits = cur.execute(
+                """SELECT l.*,c.name class_name,c.stream
+                   FROM ds_timetable_class_limits l
+                   JOIN classes c ON c.id=l.class_id AND c.school_id=l.school_id
+                   WHERE l.school_id=? AND l.profile_id=? ORDER BY c.name,c.stream""",
+                (school_id,pid),
+            ).fetchall()
         con.close()
 
         esc = lambda value: escape(str(value if value is not None else ""))
@@ -217,6 +241,20 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
         day_rows = "".join(f"<tr><td>{esc(d['day_order'])}</td><td><b>{esc(d['day_name'])}</b></td><td>{esc(d['day_code'])}</td><td>{'Instructional' if d['is_instructional'] else 'Non-instructional'}</td></tr>" for d in days) or "<tr><td colspan='4' class='tt-muted'>No school days configured.</td></tr>"
         period_rows = "".join(f"<tr><td>{esc(p['period_no'])}</td><td><b>{esc(p['label'])}</b></td><td>{esc(p['start_time'])}–{esc(p['end_time'])}</td><td>{esc(p['duration_minutes'])} min</td><td>{esc(p['period_type'])}</td></tr>" for p in periods) or "<tr><td colspan='5' class='tt-muted'>No periods configured.</td></tr>"
         break_rows = "".join(f"<tr><td>{esc(b['break_no'])}</td><td><b>{esc(b['label'])}</b></td><td>{esc(b['start_time'])}–{esc(b['end_time'])}</td><td>{esc(b['applies_to'])}</td></tr>" for b in breaks) or "<tr><td colspan='4' class='tt-muted'>No breaks configured.</td></tr>"
+        break_candidate_rows = "".join(
+            f"<tr><td><b>{esc(g['label'])}</b></td><td>{esc(g['start_time'])}–{esc(g['end_time'])}</td><td>{'Selected' if g['selected'] else 'Available'}</td><td>"
+            + ("" if g["selected"] else (
+                "<form method='post' action='/app/timetable/setup/break-gap' class='tt-form compact'>"
+                + hidden
+                + "<input type='hidden' name='start_time' value='" + esc(g["start_time"]) + "'>"
+                + "<input type='hidden' name='end_time' value='" + esc(g["end_time"]) + "'>"
+                + "<label>Break name<input name='label' required placeholder='e.g. Tea break'></label>"
+                + "<button class='tt-btn'>Select this gap</button></form>"
+            ))
+            + "</td></tr>"
+            for g in break_candidates
+        ) or "<tr><td colspan='4' class='tt-muted'>No gaps detected. Adjust period times to create a gap.</td></tr>"
+
         calendar_rows = "".join(f"<tr><td>{esc(e['exception_date'])}</td><td><b>{esc(e['label'])}</b></td><td>{esc(e['exception_type'])}</td><td>{'Instructional' if e['is_instructional'] else 'Non-instructional'}</td><td>{esc(e['notes'] or '—')}</td></tr>" for e in calendar_events) or "<tr><td colspan='5' class='tt-muted'>No calendar exceptions configured.</td></tr>"
         room_rows = "".join(f"<tr><td><b>{esc(r['room_code'])}</b></td><td>{esc(r['name'])}</td><td>{esc(r['room_type'])}</td><td>{esc(r['capacity'] or '—')}</td></tr>" for r in rooms) or "<tr><td colspan='4' class='tt-muted'>No rooms configured.</td></tr>"
         day_opts = "".join(f"<option value='{int(d['id'])}'>{esc(d['day_name'])}</option>" for d in days)
@@ -225,6 +263,15 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
         allocation_opts = "".join(f"<option value='{int(a['class_id'])}|{int(a['subject_id'])}|{int(a['teacher_id'])}'>{esc(a['class_name'])} {esc(a['stream'] or '')} · {esc(a['subject_name'])} · {esc(a['teacher_name'])}</option>" for a in allocations)
         availability_rows = "".join(f"<tr><td>{esc(a['teacher_name'])}</td><td>{esc(a['day_name'])}</td><td>{esc(a['period_label'])}</td><td><span class='tt-pill'>{esc(a['availability'])}</span></td><td>{esc(a['reason'] or '—')}</td></tr>" for a in availability) or "<tr><td colspan='5' class='tt-muted'>No teacher availability rules yet.</td></tr>"
         requirement_rows = "".join(f"<tr><td>{esc(r['class_name'])} {esc(r['stream'] or '')}</td><td>{esc(r['subject_name'])}</td><td>{esc(r['teacher_name'])}</td><td>{esc(r['lessons_per_week'])}</td><td>{esc(r['duration_periods'])}</td><td>{'Yes' if r['allow_double'] else 'No'}</td></tr>" for r in requirements) or "<tr><td colspan='6' class='tt-muted'>No weekly lesson requirements configured.</td></tr>"
+        class_limit_rows = "".join(
+            f"<tr><td><b>{esc(x['class_name'])} {esc(x['stream'] or '')}</b></td><td>{esc(x['max_lessons_per_week'] if x['max_lessons_per_week'] is not None else 'No limit')}</td><td>{esc(x['max_periods_per_day'] if x['max_periods_per_day'] is not None else 'No limit')}</td><td>{esc(x['notes'] or '—')}</td></tr>"
+            for x in class_limits
+        ) or "<tr><td colspan='4' class='tt-muted'>No class workload limits configured.</td></tr>"
+        class_limit_class_opts = "".join(
+            f"<option value='{int(x['id'])}'>{esc(x['name'])} {esc(x['stream'] or '')}{' · existing limit will be updated' if int(x['id']) in {int(y['class_id']) for y in class_limits} else ''}</option>"
+            for x in class_records
+        )
+        class_limit_form = f"""<section class='tt-section'><div class='tt-section-title'><div><span class='tt-kicker'>08 · CLASS WORKLOAD LIMITS</span><h3>Maximum weekly lessons and daily periods</h3><p>Set a ceiling independently for each class or stream. Double and triple lessons count by their actual period duration toward the daily period ceiling.</p></div></div><div class='tt-split'><form method='post' data-native-post='true' action='/app/timetable/setup/class-limits' class='tt-form compact'>{hidden}<label class='wide'>Class / stream<select name='class_id' required><option value=''>Select class or stream</option>{class_limit_class_opts}</select></label><label>Maximum lessons per week<input name='max_lessons_per_week' type='number' min='1' max='100' placeholder='No limit'></label><label>Maximum periods per day<input name='max_periods_per_day' type='number' min='1' max='30' placeholder='No limit'></label><label class='wide'>Notes<input name='notes' maxlength='180' placeholder='Optional workload guidance'></label><button class='tt-btn'>Save class workload limits</button></form><div class='tt-table'><table><tr><th>Class / stream</th><th>Max lessons / week</th><th>Max periods / day</th><th>Notes</th></tr>{class_limit_rows}</table></div></div></section>"""
         bulk_requirement_form = (
             "<form method='post' data-native-post='true' action='/app/timetable/setup/requirements/bulk' class='tt-bulk-requirements'>"
             + hidden
@@ -247,10 +294,11 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
             sections = f"""
             <section class='tt-section'><div class='tt-section-title'><div><span class='tt-kicker'>01 · SCHOOL WEEK</span><h3>School days</h3><p>Set instructional days and their order.</p></div><form method='post' data-native-post='true' action='/app/timetable/setup/standard-week'>{hidden}<button class='tt-btn secondary'>Add Monday–Friday</button></form></div><div class='tt-split'><form method='post' data-native-post='true' action='/app/timetable/setup/day' class='tt-form compact'>{hidden}<label>Day name<input name='day_name' required placeholder='Saturday'></label><label>Day code<input name='day_code' required maxlength='8' placeholder='SAT'></label><label>Display order<input name='day_order' required type='number' min='1' max='7' value='6'></label><label class='tt-check'><input type='checkbox' name='instructional' value='1' checked> Instructional day</label><button class='tt-btn'>Save day</button></form><div class='tt-table'><table><tr><th>Order</th><th>Day</th><th>Code</th><th>Type</th></tr>{day_rows}</table></div></div></section>
             <section class='tt-section'><div class='tt-section-title'><div><span class='tt-kicker'>02 · DAILY STRUCTURE</span><h3>Teaching periods</h3><p>Define period numbering and exact time boundaries.</p></div></div><div class='tt-split'><form method='post' data-native-post='true' action='/app/timetable/setup/period' class='tt-form compact'>{hidden}<label>Period number<input name='period_no' type='number' min='1' max='30' required></label><label>Period label<input name='label' required placeholder='Period 1'></label><label>Start time<input name='start_time' type='time' required value='08:00'></label><label>End time<input name='end_time' type='time' required value='08:40'></label><label>Period type<select name='period_type'><option value='lesson'>Lesson</option><option value='study'>Study</option><option value='assembly'>Assembly</option></select></label><button class='tt-btn'>Save period</button></form><div class='tt-table'><table><tr><th>#</th><th>Period</th><th>Time</th><th>Duration</th><th>Type</th></tr>{period_rows}</table></div></div></section>
-            <section class='tt-section'><div class='tt-section-title'><div><span class='tt-kicker'>03 · NON-TEACHING TIME</span><h3>Breaks and lunch</h3><p>Prevent lesson allocation during configured breaks.</p></div></div><div class='tt-split'><form method='post' data-native-post='true' action='/app/timetable/setup/break' class='tt-form compact'>{hidden}<label>Break number<input name='break_no' type='number' min='1' max='20' required></label><label>Break name<input name='label' required placeholder='Tea break'></label><label>Start time<input name='start_time' type='time' required value='10:00'></label><label>End time<input name='end_time' type='time' required value='10:20'></label><label>Applies to<select name='applies_to'><option value='all'>All classes</option><option value='selected'>Selected groups (configure later)</option></select></label><button class='tt-btn'>Save break</button></form><div class='tt-table'><table><tr><th>#</th><th>Break</th><th>Time</th><th>Scope</th></tr>{break_rows}</table></div></div></section>
+            <section class='tt-section'><div class='tt-section-title'><div><span class='tt-kicker'>03 · AUTOMATIC BREAK DETECTION</span><h3>Break gaps between periods</h3><p>Every positive time gap between consecutive periods is detected automatically. Select a gap, give it a name, and it becomes a break column. Unselected gaps remain available.</p></div></div><div class='tt-split'><div class='tt-table'><table><tr><th>Detected gap</th><th>Time</th><th>Status</th><th>Action</th></tr>{break_candidate_rows}</table></div><div class='tt-table'><h4>Selected breaks</h4><table><tr><th>#</th><th>Break</th><th>Time</th><th>Scope</th></tr>{break_rows}</table></div></div></section>
             <section class='tt-section'><div class='tt-section-title'><div><span class='tt-kicker'>04 · ACADEMIC CALENDAR</span><h3>Holidays and special dates</h3><p>Mark closures, holidays and exceptional instructional days inside this term.</p></div></div><div class='tt-split'><form method='post' data-native-post='true' action='/app/timetable/setup/calendar-event' class='tt-form compact'>{hidden}<label>Date<input name='exception_date' type='date' required></label><label>Event name<input name='label' required placeholder='National holiday'></label><label>Event type<select name='exception_type'><option value='holiday'>Public / school holiday</option><option value='school_closure'>School closure</option><option value='special_instructional_day'>Special instructional day</option><option value='event'>School event</option></select></label><label>Notes<input name='notes' maxlength='180' placeholder='Optional details'></label><label class='tt-check'><input type='checkbox' name='instructional' value='1'> Instructional day</label><button class='tt-btn'>Save calendar date</button></form><div class='tt-table'><table><tr><th>Date</th><th>Event</th><th>Type</th><th>Day type</th><th>Notes</th></tr>{calendar_rows}</table></div></div></section>
             <section class='tt-section'><div class='tt-section-title'><div><span class='tt-kicker'>05 · LEARNING SPACES</span><h3>Rooms and facilities</h3><p>Register classrooms, laboratories, halls and specialist spaces.</p></div></div><div class='tt-split'><form method='post' data-native-post='true' action='/app/timetable/setup/room' class='tt-form compact'>{hidden}<label>Room code<input name='room_code' required placeholder='LAB-01'></label><label>Room name<input name='name' required placeholder='Science Laboratory'></label><label>Room type<select name='room_type'><option value='classroom'>Classroom</option><option value='laboratory'>Laboratory</option><option value='library'>Library</option><option value='hall'>Hall</option><option value='workshop'>Workshop</option><option value='sports'>Sports facility</option><option value='other'>Other</option></select></label><label>Capacity<input name='capacity' type='number' min='1' placeholder='40'></label><button class='tt-btn'>Save room</button></form><div class='tt-table'><table><tr><th>Code</th><th>Room</th><th>Type</th><th>Capacity</th></tr>{room_rows}</table></div></div></section>
             <section class='tt-section'><div class='tt-section-title'><div><span class='tt-kicker'>06 · STAFF AVAILABILITY</span><h3>Teacher availability</h3><p>Mark unavailable or preferred teacher periods.</p></div></div><div class='tt-split'><form method='post' data-native-post='true' action='/app/timetable/setup/availability' class='tt-form compact'>{hidden}<label>Teacher<select name='teacher_id' required><option value=''>Select teacher</option>{teacher_opts}</select></label><label>Day<select name='day_id' required><option value=''>Select day</option>{day_opts}</select></label><label>Period<select name='period_id' required><option value=''>Select period</option>{period_opts}</select></label><label>Availability<select name='availability'><option value='unavailable'>Unavailable</option><option value='preferred'>Preferred</option><option value='available'>Available</option></select></label><label>Reason<input name='reason' maxlength='160' placeholder='e.g. Part-time availability'></label><button class='tt-btn'>Save availability</button></form><div class='tt-table'><table><tr><th>Teacher</th><th>Day</th><th>Period</th><th>Status</th><th>Reason</th></tr>{availability_rows}</table></div></div></section>
+            {class_limit_form}
             <section class='tt-section'><div class='tt-section-title'><div><span class='tt-kicker'>07 · WEEKLY LESSON LOAD</span><h3>Class subject requirements</h3><p>Set weekly lesson frequency using existing teacher allocations.</p></div></div><div class='tt-split'><div><form method='post' data-native-post='true' action='/app/timetable/setup/requirement' class='tt-form compact'>{hidden}<label class='wide'>Allocated class · subject · teacher<select name='allocation' required><option value=''>Select existing allocation</option>{allocation_opts}</select></label><label>Lessons per week<input name='lessons_per_week' type='number' min='1' max='30' required value='5'></label><label>Duration<select name='duration_periods'><option value='1'>Single period</option><option value='2'>Double period</option><option value='3'>Triple period</option></select></label><label>Maximum per day<input name='max_lessons_per_day' type='number' min='1' max='10' placeholder='No limit'></label><label class='tt-check'><input type='checkbox' name='allow_double' value='1'> Allow double lessons</label><button class='tt-btn'>Save one requirement</button></form>{bulk_requirement_form}</div><div class='tt-table'><table><tr><th>Class / Stream</th><th>Subject</th><th>Teacher</th><th>Weekly</th><th>Duration</th><th>Double</th></tr>{requirement_rows}</table></div></div></section>
             """
         body = f"""
@@ -383,6 +431,124 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
         """
         return module_page(request, "Timetable Setup", "timetable", body)
 
+
+    @app.get("/app/timetable/constraints", response_class=HTMLResponse)
+    def timetable_constraints_page(request: Request, profile_id: int = 0, message: str = "", error: int = 0):
+        school = school_for(request)
+        if not school:
+            return RedirectResponse("/", 303)
+        school_id = int(school["id"])
+        con = get_db()
+        cur = con.cursor()
+        profiles = cur.execute(
+            "SELECT * FROM ds_timetable_profiles WHERE school_id=? ORDER BY academic_year DESC,term,id DESC",
+            (school_id,),
+        ).fetchall()
+        selected = next((p for p in profiles if int(p["id"]) == int(profile_id)), None) or next(
+            (p for p in profiles if str(p["status"] or "draft").lower() == "draft"), None
+        ) or (profiles[0] if profiles else None)
+        if not selected:
+            con.close()
+            return module_page(request, "Timetable Constraints", "timetable",
+                "<div class='tt-empty'><h2>Create a timetable profile first</h2><a href='/app/timetable/setup'>Open timetable setup</a></div>")
+        pid = int(selected["id"])
+        days = cur.execute("SELECT id,day_name FROM ds_timetable_days WHERE school_id=? AND profile_id=? ORDER BY day_order", (school_id,pid)).fetchall()
+        periods = cur.execute("SELECT id,label FROM ds_timetable_periods WHERE school_id=? AND profile_id=? ORDER BY period_no", (school_id,pid)).fetchall()
+        classes = cur.execute("SELECT id,name,stream FROM classes WHERE school_id=? ORDER BY name,stream", (school_id,)).fetchall()
+        teachers = cur.execute("SELECT id,name FROM teachers WHERE school_id=? ORDER BY name", (school_id,)).fetchall()
+        subjects = cur.execute("SELECT id,name FROM subjects WHERE school_id=? ORDER BY name", (school_id,)).fetchall()
+        rooms = cur.execute("SELECT id,name FROM ds_timetable_rooms WHERE school_id=? AND is_active=1 ORDER BY name", (school_id,)).fetchall()
+        rules = cur.execute(
+            """SELECT r.*,s.name subject_name,t.name teacher_name,c.name class_name,d.day_name,p.label period_label,rm.name room_name
+               FROM ds_timetable_constraints r
+               LEFT JOIN subjects s ON s.id=r.subject_id AND s.school_id=r.school_id
+               LEFT JOIN teachers t ON t.id=r.teacher_id AND t.school_id=r.school_id
+               LEFT JOIN classes c ON c.id=r.class_id AND c.school_id=r.school_id
+               LEFT JOIN ds_timetable_days d ON d.id=r.day_id AND d.profile_id=r.profile_id
+               LEFT JOIN ds_timetable_periods p ON p.id=r.period_id AND p.profile_id=r.profile_id
+               LEFT JOIN ds_timetable_rooms rm ON rm.id=r.room_id AND rm.school_id=r.school_id
+               WHERE r.school_id=? AND r.profile_id=? ORDER BY r.is_active DESC,r.name""",
+            (school_id,pid),
+        ).fetchall()
+        con.close()
+        esc = lambda v: escape(str(v if v is not None else ""))
+        option = lambda rows, label: "<option value=''>Any " + label + "</option>" + "".join(
+            f"<option value='{int(row['id'])}'>{esc(row['name'] if 'name' in row.keys() else row[label])}</option>" for row in rows
+        )
+        class_opts = "<option value=''>Any class</option>" + "".join(f"<option value='{int(x['id'])}'>{esc(x['name'])} {esc(x['stream'] or '')}</option>" for x in classes)
+        day_opts = "<option value=''>Any day</option>" + "".join(f"<option value='{int(x['id'])}'>{esc(x['day_name'])}</option>" for x in days)
+        period_opts = "<option value=''>Any period</option>" + "".join(f"<option value='{int(x['id'])}'>{esc(x['label'])}</option>" for x in periods)
+        teacher_opts = option(teachers, "teacher")
+        subject_opts = option(subjects, "subject")
+        room_opts = option(rooms, "room")
+        notice = f"<div class='tt-alert {'error' if error else 'success'}'>{esc(message)}</div>" if message else ""
+        rule_rows = "".join(
+            f"<tr><td><b>{esc(r['name'])}</b><small>{esc(r['reason'] or '')}</small></td><td>{esc(r['subject_name'] or 'Any subject')} · {esc(r['teacher_name'] or 'Any teacher')} · {esc(r['class_name'] or 'Any class')}</td><td>{esc(r['day_name'] or 'Any day')} · {esc(r['period_label'] or 'Any period')}</td><td>{esc(r['start_time'] or 'Any start')}–{esc(r['end_time'] or 'Any end')}</td><td>{'Active' if int(r['is_active'] or 0) else 'Inactive'}</td></tr>"
+            for r in rules
+        ) or "<tr><td colspan='5'>No constraints have been configured for this profile yet.</td></tr>"
+        body = f"""
+        <style>
+          .tt-constraints{{max-width:1400px;margin:auto;color:#23443a}}.tt-constraints .panel{{background:#fff;border:1px solid #e1ebe4;border-radius:18px;padding:22px;margin:16px 0;box-shadow:0 8px 24px #244d3510}}
+          .tt-constraints h2{{margin:0 0 8px}}.tt-constraints p{{color:#667b70}}.tt-constraints .fields{{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px}}
+          .tt-constraints label{{display:block;font-size:12px;font-weight:700;margin:0 0 6px}}.tt-constraints input,.tt-constraints select{{width:100%;padding:11px;border:1px solid #d9e5dc;border-radius:10px;background:#fbfdfb;color:#244338}}
+          .tt-constraints button{{border:0;border-radius:10px;background:#527d66;color:white;padding:12px 20px;font-weight:700;cursor:pointer;margin-top:14px}}
+          .tt-constraints table{{width:100%;border-collapse:collapse;font-size:13px}}.tt-constraints td,.tt-constraints th{{padding:12px;border-bottom:1px solid #e9eee9;text-align:left}}.tt-constraints small{{display:block;color:#728478}}
+          .tt-constraints .notice{{padding:12px;border-radius:10px;background:#eff6ef;margin:12px 0}}@media(max-width:650px){{.tt-constraints .table-wrap{{overflow:auto}}}}
+        </style>
+        <div class='tt-constraints'><h2>Scheduling constraints</h2>
+        <p>Define hard rules that the automatic generator must obey and the manual builder must reject. Leave a target blank to apply the rule more broadly.</p>
+        {notice}
+        <form class='panel' method='post' action='/app/timetable/constraints'>
+          <input type='hidden' name='profile_id' value='{pid}'>
+          <div class='fields'>
+            <div><label>Constraint name</label><input name='name' required maxlength='120' placeholder='e.g. No Mathematics after lunch'></div>
+            <div><label>Rule behavior</label><select name='constraint_type'><option value='prohibit'>Prohibit this time</option><option value='require'>Require this time</option><option value='prefer'>Prefer this time (soft rule)</option></select></div>
+            <div><label>Applies to</label><select name='applies_to'><option value='all'>All sessions</option><option value='lesson'>Ordinary lessons</option><option value='remedial'>Remedial lessons</option><option value='activity'>Activities</option></select></div>
+            <div><label>Timetable layer</label><select name='schedule_layer'><option value='all'>All layers</option><option value='instructional'>Instructional</option><option value='additional_learning'>Additional learning</option><option value='school_activity'>School activities</option></select></div>
+            <div><label>Subject</label><select name='subject_id'>{subject_opts}</select></div>
+            <div><label>Teacher</label><select name='teacher_id'>{teacher_opts}</select></div>
+            <div><label>Class / stream</label><select name='class_id'>{class_opts}</select></div>
+            <div><label>Room / facility</label><select name='room_id'>{room_opts}</select></div>
+            <div><label>Day</label><select name='day_id'>{day_opts}</select></div>
+            <div><label>Period</label><select name='period_id'>{period_opts}</select></div>
+            <div><label>Not before (optional)</label><input type='time' name='start_time'></div>
+            <div><label>Not after (optional)</label><input type='time' name='end_time'></div>
+            <div><label>Effective from</label><input type='date' name='effective_from'></div>
+            <div><label>Effective until</label><input type='date' name='effective_to'></div>
+            <div style='grid-column:1/-1'><label>Reason / instruction</label><input name='reason' placeholder='Explain why this time is blocked'></div>
+          </div><button type='submit'>Save constraint</button>
+        </form>
+        <section class='panel'><h2>Configured rules</h2><div class='table-wrap'><table><thead><tr><th>Rule</th><th>Target</th><th>Day / period</th><th>Time window</th><th>Status</th></tr></thead><tbody>{rule_rows}</tbody></table></div></section>
+        <p><a href='/app/timetable/setup?profile_id={pid}'>← Back to timetable setup</a></p></div>
+        """
+        return module_page(request, "Timetable Constraints", "timetable", body)
+
+    @app.post("/app/timetable/constraints")
+    def create_timetable_constraint(request: Request, profile_id: int = Form(...),
+        name: str = Form(...), constraint_type: str = Form("prohibit"),
+        applies_to: str = Form("all"), schedule_layer: str = Form("all"),
+        subject_id: str = Form(""), teacher_id: str = Form(""), class_id: str = Form(""),
+        room_id: str = Form(""), day_id: str = Form(""), period_id: str = Form(""),
+        start_time: str = Form(""), end_time: str = Form(""), effective_from: str = Form(""),
+        effective_to: str = Form(""), reason: str = Form("")):
+        school = school_for(request)
+        if not school:
+            return RedirectResponse("/", 303)
+        con = get_db()
+        try:
+            save_timetable_constraint(
+                con, int(school["id"]), profile_id, name, constraint_type, applies_to, schedule_layer,
+                int(subject_id) if subject_id else None, int(teacher_id) if teacher_id else None,
+                int(class_id) if class_id else None, int(room_id) if room_id else None,
+                int(day_id) if day_id else None, int(period_id) if period_id else None,
+                start_time or None, end_time or None, effective_from or None, effective_to or None, reason,
+            )
+            return RedirectResponse(f"/app/timetable/constraints?profile_id={profile_id}&message=Constraint%20saved", 303)
+        except (TimetableSetupError, ValueError) as exc:
+            return RedirectResponse(f"/app/timetable/constraints?profile_id={profile_id}&error=1&message={quote(str(exc))}", 303)
+        finally:
+            con.close()
+
     # Compatibility endpoint: older cached setup pages submitted to the page URL.
     # Keep this alias so profile creation cannot fail with 405 on stale markup.
     @app.post("/app/timetable/setup")
@@ -435,6 +601,40 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
         except (TimetableSetupError, ValueError) as exc:
             return redirect_setup(profile_id, str(exc), True)
         finally: con.close()
+
+    @app.post("/app/timetable/setup/break-gap")
+    def select_timetable_break_gap(request: Request, profile_id: int = Form(...),
+        label: str = Form(...), start_time: str = Form(...), end_time: str = Form(...)):
+        school = school_for(request)
+        if not school:
+            return RedirectResponse("/", 303)
+        con = get_db()
+        try:
+            cur = con.cursor()
+            _profile(cur, int(school["id"]), profile_id)
+            periods = cur.execute(
+                "SELECT * FROM ds_timetable_periods WHERE school_id=? AND profile_id=? ORDER BY start_time,period_no",
+                (int(school["id"]), profile_id),
+            ).fetchall()
+            valid_gaps = {(str(a["end_time"]), str(b["start_time"])) for a,b in zip(periods, periods[1:]) if str(a["end_time"]) < str(b["start_time"])}
+            if (start_time, end_time) not in valid_gaps:
+                raise TimetableSetupError("That gap is no longer available. Refresh and select a current detected gap.")
+            exists = cur.execute(
+                "SELECT id FROM ds_timetable_breaks WHERE school_id=? AND profile_id=? AND start_time=? AND end_time=?",
+                (int(school["id"]), profile_id, start_time, end_time),
+            ).fetchone()
+            if exists:
+                raise TimetableSetupError("That break gap has already been selected.")
+            next_no = int(cur.execute(
+                "SELECT COALESCE(MAX(break_no),0)+1 FROM ds_timetable_breaks WHERE school_id=? AND profile_id=?",
+                (int(school["id"]), profile_id),
+            ).fetchone()[0])
+            save_break(con, int(school["id"]), profile_id, next_no, label, start_time, end_time, "all")
+            return redirect_setup(profile_id, "Detected break gap selected. Other gaps remain available.")
+        except (TimetableSetupError, ValueError) as exc:
+            return redirect_setup(profile_id, str(exc), True)
+        finally:
+            con.close()
 
     @app.post("/app/timetable/setup/break")
     def create_timetable_break(request: Request, profile_id: int = Form(...), break_no: int = Form(...), label: str = Form(...), start_time: str = Form(...), end_time: str = Form(...), applies_to: str = Form("all")):
@@ -517,6 +717,26 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
                 save_class_requirement(con, school_id, profile_id, int(row["class_id"]), int(row["subject_id"]), int(row["teacher_id"]), lessons_per_week, duration_periods)
                 created += 1
             return redirect_setup(profile_id, f"Bulk setup complete: {created} requirements added; {skipped} existing requirements preserved.")
+        except (TimetableSetupError, ValueError) as exc:
+            return redirect_setup(profile_id, str(exc), True)
+        finally:
+            con.close()
+
+    @app.post("/app/timetable/setup/class-limits")
+    def create_class_timetable_limits(request: Request, profile_id: int = Form(...),
+        class_id: int = Form(...), max_lessons_per_week: str = Form(""),
+        max_periods_per_day: str = Form(""), notes: str = Form("")):
+        school = school_for(request)
+        if not school: return RedirectResponse("/", 303)
+        con = get_db()
+        try:
+            save_class_limits(
+                con, int(school["id"]), profile_id, class_id,
+                int(max_lessons_per_week) if max_lessons_per_week.strip() else None,
+                int(max_periods_per_day) if max_periods_per_day.strip() else None,
+                notes,
+            )
+            return redirect_setup(profile_id, "Class workload limits saved.")
         except (TimetableSetupError, ValueError) as exc:
             return redirect_setup(profile_id, str(exc), True)
         finally:

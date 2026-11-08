@@ -6,6 +6,7 @@ import json
 from typing import Any
 
 from app.timetable.setup import TimetableSetupError, _profile
+from app.timetable.session_engine import _validate_constraints
 
 
 def _period_span(cursor: Any, school_id: int, profile_id: int, period_id: int, duration: int):
@@ -63,6 +64,11 @@ def _placement_context(cursor: Any, school_id: int, profile_id: int, class_id: i
     duration = int(requirement["duration_periods"] or 1)
     span = _period_span(cursor, school_id, profile_id, period_id, duration)
     first, last = span[0], span[-1]
+    _validate_constraints(
+        cursor, school_id, profile_id, "instructional", "lesson",
+        subject_id, [class_id], [teacher_id], room_id, day_id, period_id,
+        str(first["start_time"]), str(last["end_time"]), None,
+    )
     if room_id:
         room = cursor.execute(
             "SELECT id FROM ds_timetable_rooms WHERE id=? AND school_id=? AND is_active=1",
@@ -93,6 +99,23 @@ def _placement_context(cursor: Any, school_id: int, profile_id: int, class_id: i
              AND l.id<>?""",
         (school_id, profile_id, day_id, exclude_lesson_id),
     ).fetchall()
+    class_limit = cursor.execute(
+        """SELECT max_lessons_per_week,max_periods_per_day FROM ds_timetable_class_limits
+           WHERE school_id=? AND profile_id=? AND class_id=?""",
+        (school_id, profile_id, class_id),
+    ).fetchone()
+    class_lessons = cursor.execute(
+        """SELECT COUNT(*) total FROM ds_timetable_lessons
+           WHERE school_id=? AND profile_id=? AND class_id=? AND status='scheduled' AND id<>?""",
+        (school_id, profile_id, class_id, exclude_lesson_id),
+    ).fetchone()["total"]
+    if class_limit and class_limit["max_lessons_per_week"] is not None and int(class_lessons) >= int(class_limit["max_lessons_per_week"]):
+        raise TimetableSetupError("The class has reached its maximum number of lessons per week.")
+    if class_limit and class_limit["max_periods_per_day"] is not None:
+        daily = [x for x in existing if int(x["class_id"]) == int(class_id)]
+        used = sum(int(x["duration_periods"] or 1) for x in daily)
+        if used + len(span) > int(class_limit["max_periods_per_day"]):
+            raise TimetableSetupError("This placement would exceed the class maximum periods per day.")
     max_per_day = int(requirement["max_lessons_per_day"]) if requirement["max_lessons_per_day"] is not None else 0
     if max_per_day:
         same_subject_day = sum(
@@ -210,3 +233,118 @@ def delete_lesson(connection: Any, school_id: int, profile_id: int, lesson_id: i
         (lesson_id, school_id, profile_id),
     )
     connection.commit()
+
+
+
+def place_advanced_requirement_session(connection: Any, school_id: int, profile_id: int,
+                                       requirement_id: int, session_no: int,
+                                       day_id: int, period_id: int,
+                                       room_id: int | None = None,
+                                       created_by: str = "") -> int:
+    """Manually place one normalized requirement pattern through the shared validator."""
+    from app.timetable.session_engine import create_scheduled_session
+    cur = connection.cursor()
+    _profile(cur, school_id, profile_id)
+    requirement = cur.execute(
+        """SELECT * FROM ds_timetable_scheduling_requirements
+           WHERE id=? AND school_id=? AND profile_id=? AND is_active=1""",
+        (requirement_id, school_id, profile_id),
+    ).fetchone()
+    if not requirement:
+        raise TimetableSetupError("Select an active scheduling requirement from this timetable profile.")
+    pattern = cur.execute(
+        """SELECT * FROM ds_timetable_scheduling_patterns
+           WHERE school_id=? AND profile_id=? AND requirement_id=? AND session_no=?""",
+        (school_id, profile_id, requirement_id, session_no),
+    ).fetchone()
+    if not pattern:
+        raise TimetableSetupError("Select a configured session number from this requirement's weekly pattern.")
+    if requirement["schedule_layer"] != "instructional":
+        raise TimetableSetupError("This manual period-grid action supports instructional sessions; use the programme scheduler for additional learning and activities.")
+    span = _period_span(cur, school_id, profile_id, period_id, int(pattern["duration_periods"] or 1))
+    return create_scheduled_session(
+        connection, school_id, profile_id,
+        str(span[0]["start_time"]), str(span[-1]["end_time"]),
+        schedule_layer="instructional", session_type=str(requirement["session_type"]),
+        room_id=room_id, day_id=day_id, period_id=period_id,
+        subject_id=int(requirement["subject_id"]) if requirement["subject_id"] is not None else None,
+        programme_id=int(requirement["programme_id"]) if requirement["programme_id"] is not None else None,
+        teaching_group_id=int(requirement["teaching_group_id"]) if requirement["teaching_group_id"] is not None else None,
+        duration_periods=len(span), scheduling_requirement_id=requirement_id,
+        pattern_session_no=session_no, created_by=created_by,
+    )
+
+
+def place_dated_advanced_requirement_session(connection: Any, school_id: int, profile_id: int,
+                                            requirement_id: int, session_no: int,
+                                            session_date: str, slot_no: int,
+                                            room_id: int | None = None,
+                                            created_by: str = "") -> int:
+    """Place a normalized requirement into a date's resolved day-template slot."""
+    from app.timetable.advanced_setup import resolve_calendar_occurrence
+    from app.timetable.session_engine import create_scheduled_session
+
+    cur = connection.cursor()
+    _profile(cur, school_id, profile_id)
+    requirement = cur.execute(
+        """SELECT * FROM ds_timetable_scheduling_requirements
+           WHERE id=? AND school_id=? AND profile_id=? AND is_active=1""",
+        (requirement_id, school_id, profile_id),
+    ).fetchone()
+    if not requirement:
+        raise TimetableSetupError("Select an active scheduling requirement from this timetable profile.")
+    pattern = cur.execute(
+        """SELECT * FROM ds_timetable_scheduling_patterns
+           WHERE school_id=? AND profile_id=? AND requirement_id=? AND session_no=?""",
+        (school_id, profile_id, requirement_id, session_no),
+    ).fetchone()
+    if not pattern:
+        raise TimetableSetupError("Select a configured session number from this requirement's pattern.")
+
+    occurrence = resolve_calendar_occurrence(connection, school_id, profile_id, session_date)
+    if occurrence["day_id"] is None:
+        raise TimetableSetupError("This date has no configured weekday in the timetable profile.")
+    duration = int(pattern["duration_periods"] or 1)
+    if duration < 1 or duration > 4:
+        raise TimetableSetupError("Advanced sessions must span one to four consecutive periods.")
+
+    allowed = {
+        "instructional": {"instructional"},
+        "additional_learning": {"remedial", "study"},
+        "school_activity": {"activity", "assembly", "other"},
+    }.get(str(requirement["schedule_layer"]), set())
+    slots = occurrence["schedule_slots"]
+    start_index = next((i for i, slot in enumerate(slots)
+                        if int(slot["slot_no"]) == int(slot_no)), None)
+    if start_index is None:
+        raise TimetableSetupError("That slot is not part of the selected date's schedule template.")
+    selected = slots[start_index:start_index + duration]
+    if len(selected) != duration or any(str(slot["slot_type"]).lower() not in allowed for slot in selected):
+        raise TimetableSetupError("The selected date does not have enough consecutive slots for this session type.")
+    for previous, current in zip(selected, selected[1:]):
+        if (int(current["slot_no"]) != int(previous["slot_no"]) + 1
+                or str(previous["end_time"]) != str(current["start_time"])):
+            raise TimetableSetupError("A session cannot span a break or a non-teaching slot.")
+    period_no = selected[0]["period_no"]
+    period_id = None
+    if period_no is not None:
+        period = cur.execute(
+            """SELECT id FROM ds_timetable_periods
+               WHERE school_id=? AND profile_id=? AND period_no=?""",
+            (school_id, profile_id, int(period_no)),
+        ).fetchone()
+        period_id = int(period["id"]) if period else None
+
+    return create_scheduled_session(
+        connection, school_id, profile_id,
+        str(selected[0]["start_time"]), str(selected[-1]["end_time"]),
+        schedule_layer=str(requirement["schedule_layer"]),
+        session_type=str(requirement["session_type"]),
+        room_id=room_id, day_id=int(occurrence["day_id"]),
+        session_date=session_date, period_id=period_id,
+        subject_id=int(requirement["subject_id"]) if requirement["subject_id"] is not None else None,
+        programme_id=int(requirement["programme_id"]) if requirement["programme_id"] is not None else None,
+        teaching_group_id=int(requirement["teaching_group_id"]) if requirement["teaching_group_id"] is not None else None,
+        duration_periods=duration, scheduling_requirement_id=requirement_id,
+        pattern_session_no=session_no, created_by=created_by,
+    )

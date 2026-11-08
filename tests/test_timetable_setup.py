@@ -13,6 +13,7 @@ from app.timetable.setup import (
     save_room,
     save_teacher_availability,
     save_class_requirement,
+    save_class_limits,
 )
 
 
@@ -113,6 +114,20 @@ class TimetableSetupTests(unittest.TestCase):
         save_teacher_availability(self.db, 1, self.profile_id, 10, day_id, period_id, "unavailable", "Staff meeting")
         with self.assertRaises(TimetableSetupError):
             save_teacher_availability(self.db, 2, self.profile_id, 10, day_id, period_id, "available")
+
+    def test_class_workload_limits_are_saved_and_updated(self):
+        save_class_limits(self.db, 1, self.profile_id, 20, 28, 7, "Grade 7 weekly ceiling")
+        save_class_limits(self.db, 1, self.profile_id, 20, 25, 6, "Updated limits")
+        row = self.db.execute(
+            """SELECT max_lessons_per_week,max_periods_per_day,notes
+               FROM ds_timetable_class_limits WHERE school_id=1 AND profile_id=? AND class_id=20""",
+            (self.profile_id,),
+        ).fetchone()
+        self.assertEqual(tuple(row), (25, 6, "Updated limits"))
+        with self.assertRaises(TimetableSetupError):
+            save_class_limits(self.db, 1, self.profile_id, 999, 20, 6)
+        with self.assertRaises(TimetableSetupError):
+            save_class_limits(self.db, 1, self.profile_id, 20, 101, 6)
 
     def test_weekly_requirements_must_match_existing_allocation(self):
         save_class_requirement(self.db, 1, self.profile_id, 20, 30, 10, 5, 1, 2, True)

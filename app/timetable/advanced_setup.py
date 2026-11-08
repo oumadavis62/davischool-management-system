@@ -741,6 +741,19 @@ def resolve_calendar_occurrence(connection: Any, school_id: int, profile_id: int
         if template:
             template_id = int(template["template_id"])
 
+    schedule_slots = []
+    if template_id is not None:
+        schedule_slots = [
+            dict(slot) for slot in cur.execute(
+                """SELECT id,slot_no,label,slot_type,start_time,end_time,
+                          instructional_period_no AS period_no
+                   FROM ds_timetable_schedule_slots
+                   WHERE school_id=? AND profile_id=? AND template_id=?
+                   ORDER BY slot_no,id""",
+                (school_id, profile_id, template_id),
+            ).fetchall()
+        ]
+
     rotations = []
     for cycle in cur.execute(
         """SELECT id,name,cycle_length_weeks,anchor_date
@@ -764,6 +777,7 @@ def resolve_calendar_occurrence(connection: Any, school_id: int, profile_id: int
             "cycle_name": str(cycle["name"]),
             "week_number": week_number,
             "week": dict(rotation) if rotation else None,
+            "programme_id": int(rotation["programme_id"]) if rotation and rotation["programme_id"] is not None else None,
         })
 
     return {
@@ -774,6 +788,7 @@ def resolve_calendar_occurrence(connection: Any, school_id: int, profile_id: int
         "is_configured": bool(day),
         "is_instructional": instructional,
         "template_id": template_id,
+        "schedule_slots": schedule_slots,
         "cycle_week": cycle_week,
         "exceptions": [dict(item) for item in exceptions],
         "rotations": rotations,
@@ -783,11 +798,7 @@ def resolve_calendar_occurrence(connection: Any, school_id: int, profile_id: int
 def expand_calendar_occurrences(connection: Any, school_id: int, profile_id: int,
                                 start_date: str, end_date: str,
                                 include_closed: bool = False) -> list[dict[str, Any]]:
-    """Expand a bounded date range using the same date-aware calendar resolver.
-
-    Closed dates are omitted by default. Set include_closed=True when rendering
-    calendars or auditing holidays and school closures.
-    """
+    """Expand a bounded date range using the profile's date-aware calendar."""
     try:
         start = date.fromisoformat((start_date or "").strip())
         end = date.fromisoformat((end_date or "").strip())
@@ -803,6 +814,7 @@ def expand_calendar_occurrences(connection: Any, school_id: int, profile_id: int
         occurrence = resolve_calendar_occurrence(
             connection, school_id, profile_id, (start + timedelta(days=offset)).isoformat()
         )
-        if include_closed or occurrence["is_instructional"] or occurrence["template_id"] is not None or occurrence["rotations"]:
+        if (include_closed or occurrence["is_instructional"]
+                or occurrence["template_id"] is not None or occurrence["rotations"]):
             occurrences.append(occurrence)
     return occurrences

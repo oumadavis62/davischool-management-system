@@ -33,10 +33,105 @@ def _snapshot(cursor, school_id: int, profile_id: int) -> dict:
         "requirements": "SELECT * FROM ds_timetable_class_requirements WHERE school_id=? AND profile_id=? ORDER BY class_id,subject_id,teacher_id",
         "lessons": "SELECT * FROM ds_timetable_lessons WHERE school_id=? AND profile_id=? AND status='scheduled' ORDER BY day_id,period_id,class_id,subject_id",
         "rooms": "SELECT * FROM ds_timetable_rooms WHERE school_id=? ORDER BY name,id",
+        "class_limits": "SELECT * FROM ds_timetable_class_limits WHERE school_id=? AND profile_id=? ORDER BY class_id",
+        "schedule_templates": "SELECT * FROM ds_timetable_schedule_templates WHERE school_id=? AND profile_id=? ORDER BY id",
+        "schedule_slots": "SELECT * FROM ds_timetable_schedule_slots WHERE school_id=? AND profile_id=? ORDER BY template_id,slot_no",
+        "day_templates": "SELECT * FROM ds_timetable_day_templates WHERE school_id=? AND profile_id=? ORDER BY day_id,cycle_week",
+        "rotation_cycles": "SELECT * FROM ds_timetable_rotation_cycles WHERE school_id=? AND profile_id=? ORDER BY id",
+        "rotation_weeks": "SELECT * FROM ds_timetable_rotation_weeks WHERE school_id=? AND profile_id=? ORDER BY cycle_id,week_number",
+        "learning_programmes": "SELECT * FROM ds_timetable_learning_programmes WHERE school_id=? AND profile_id=? ORDER BY id",
+        "teaching_groups": "SELECT * FROM ds_timetable_teaching_groups WHERE school_id=? AND profile_id=? ORDER BY id",
+        "teaching_group_classes": "SELECT * FROM ds_timetable_teaching_group_classes WHERE school_id=? AND profile_id=? ORDER BY teaching_group_id,class_id",
+        "requirement_patterns": "SELECT * FROM ds_timetable_requirement_patterns WHERE school_id=? AND profile_id=? ORDER BY requirement_id,session_no",
+        "programme_sessions": "SELECT * FROM ds_timetable_programme_sessions WHERE school_id=? AND profile_id=? ORDER BY id",
+        "scheduling_requirements": "SELECT * FROM ds_timetable_scheduling_requirements WHERE school_id=? AND profile_id=? ORDER BY id",
+        "scheduling_requirement_classes": "SELECT * FROM ds_timetable_scheduling_requirement_classes WHERE school_id=? AND profile_id=? ORDER BY requirement_id,class_id",
+        "scheduling_requirement_teachers": "SELECT * FROM ds_timetable_scheduling_requirement_teachers WHERE school_id=? AND profile_id=? ORDER BY requirement_id,teacher_id",
+        "scheduling_requirement_learners": "SELECT * FROM ds_timetable_scheduling_requirement_learners WHERE school_id=? AND profile_id=? ORDER BY requirement_id,student_id",
+        "scheduling_patterns": "SELECT * FROM ds_timetable_scheduling_patterns WHERE school_id=? AND profile_id=? ORDER BY requirement_id,session_no",
+        "sessions": "SELECT * FROM ds_timetable_sessions WHERE school_id=? AND profile_id=? AND status='scheduled' ORDER BY session_date,start_time,id",
+        "session_classes": "SELECT * FROM ds_timetable_session_classes WHERE school_id=? AND profile_id=? ORDER BY session_id,class_id",
+        "session_teachers": "SELECT * FROM ds_timetable_session_teachers WHERE school_id=? AND profile_id=? ORDER BY session_id,teacher_id",
+        "session_learners": "SELECT * FROM ds_timetable_session_learners WHERE school_id=? AND profile_id=? ORDER BY session_id,student_id",
+        "constraints": "SELECT * FROM ds_timetable_constraints WHERE school_id=? AND profile_id=? ORDER BY id",
     }
     for key, query in queries.items():
         snapshot[key] = [_row_dict(row) for row in cursor.execute(query, (school_id, profile_id) if key != "rooms" else (school_id,)).fetchall()]
     return snapshot
+
+
+
+def _clone_advanced_profile_data(cur, school_id: int, source_profile_id: int, new_profile_id: int,
+                                 day_map: dict[int, int], period_map: dict[int, int],
+                                 class_requirement_map: dict[int, int]) -> None:
+    """Clone normalized timetable configuration and sessions with all profile-local IDs remapped."""
+    maps: dict[str, dict[int, int]] = {
+        "ds_timetable_days": day_map,
+        "ds_timetable_periods": period_map,
+        "ds_timetable_class_requirements": class_requirement_map,
+    }
+    specs = [
+        ("ds_timetable_class_limits", {}),
+        ("ds_timetable_schedule_templates", {}),
+        ("ds_timetable_schedule_slots", {"template_id": "ds_timetable_schedule_templates"}),
+        ("ds_timetable_day_templates", {"day_id": "ds_timetable_days", "template_id": "ds_timetable_schedule_templates"}),
+        ("ds_timetable_rotation_cycles", {}),
+        ("ds_timetable_learning_programmes", {"rotation_cycle_id": "ds_timetable_rotation_cycles"}),
+        ("ds_timetable_rotation_weeks", {"cycle_id": "ds_timetable_rotation_cycles", "programme_id": "ds_timetable_learning_programmes"}),
+        ("ds_timetable_teaching_groups", {}),
+        ("ds_timetable_teaching_group_classes", {"teaching_group_id": "ds_timetable_teaching_groups"}),
+        ("ds_timetable_requirement_patterns", {"requirement_id": "ds_timetable_class_requirements", "preferred_day_id": "ds_timetable_days", "preferred_slot_id": "ds_timetable_schedule_slots"}),
+        ("ds_timetable_programme_sessions", {"programme_id": "ds_timetable_learning_programmes", "teaching_group_id": "ds_timetable_teaching_groups", "day_id": "ds_timetable_days"}),
+        ("ds_timetable_scheduling_requirements", {"programme_id": "ds_timetable_learning_programmes", "teaching_group_id": "ds_timetable_teaching_groups"}),
+        ("ds_timetable_scheduling_requirement_classes", {"requirement_id": "ds_timetable_scheduling_requirements"}),
+        ("ds_timetable_scheduling_requirement_teachers", {"requirement_id": "ds_timetable_scheduling_requirements"}),
+        ("ds_timetable_scheduling_requirement_learners", {"requirement_id": "ds_timetable_scheduling_requirements"}),
+        ("ds_timetable_scheduling_patterns", {"requirement_id": "ds_timetable_scheduling_requirements", "preferred_day_id": "ds_timetable_days", "preferred_slot_id": "ds_timetable_schedule_slots"}),
+        ("ds_timetable_sessions", {"programme_id": "ds_timetable_learning_programmes", "teaching_group_id": "ds_timetable_teaching_groups", "day_id": "ds_timetable_days", "period_id": "ds_timetable_periods"}),
+        ("ds_timetable_session_classes", {"session_id": "ds_timetable_sessions"}),
+        ("ds_timetable_session_teachers", {"session_id": "ds_timetable_sessions"}),
+        ("ds_timetable_session_learners", {"session_id": "ds_timetable_sessions"}),
+        ("ds_timetable_constraints", {"day_id": "ds_timetable_days", "period_id": "ds_timetable_periods"}),
+    ]
+    for table, references in specs:
+        source_rows = cur.execute(
+            "SELECT * FROM " + table + " WHERE school_id=? AND profile_id=? ORDER BY id",
+            (school_id, source_profile_id),
+        ).fetchall()
+        table_map: dict[int, int] = {}
+        for source_row in source_rows:
+            row = dict(source_row)
+            old_id = int(row.pop("id"))
+            row["profile_id"] = new_profile_id
+            for column, referenced_table in references.items():
+                value = row.get(column)
+                if value is not None:
+                    mapped = maps.get(referenced_table, {}).get(int(value))
+                    if mapped is None:
+                        raise TimetableSetupError(
+                            "Cannot create a revision because a linked advanced timetable record is missing."
+                        )
+                    row[column] = mapped
+            if table == "ds_timetable_sessions":
+                row["generation_run_id"] = None
+            columns = list(row.keys())
+            placeholders = ",".join("?" for _ in columns)
+            cur.execute(
+                "INSERT INTO " + table + " (" + ",".join(columns) + ") VALUES (" + placeholders + ")",
+                tuple(row[column] for column in columns),
+            )
+            new_row_id = int(cur.lastrowid or 0)
+            if not new_row_id:
+                found = cur.execute(
+                    "SELECT MAX(id) AS id FROM " + table + " WHERE school_id=? AND profile_id=?",
+                    (school_id, new_profile_id),
+                ).fetchone()
+                new_row_id = int(found["id"] or 0)
+            if not new_row_id:
+                raise TimetableSetupError("A timetable revision record could not be copied.")
+            table_map[old_id] = new_row_id
+        maps[table] = table_map
+
 
 
 def validate_timetable_for_publication(connection: Any, school_id: int, profile_id: int) -> dict:
@@ -383,6 +478,7 @@ def create_revision(connection: Any, school_id: int, source_profile_id: int, act
                VALUES(?,?,?,?,?,?,?)""",
             (school_id,new_id,row["teacher_id"],day_map[int(row["day_id"])],period_map[int(row["period_id"])],row["availability"],row["reason"]),
         )
+    class_requirement_map = {}
     for row in cur.execute("SELECT * FROM ds_timetable_class_requirements WHERE school_id=? AND profile_id=?",(school_id,source_profile_id)).fetchall():
         cur.execute(
             """INSERT INTO ds_timetable_class_requirements
@@ -390,6 +486,12 @@ def create_revision(connection: Any, school_id: int, source_profile_id: int, act
                VALUES(?,?,?,?,?,?,?,?,?,?,?)""",
             (school_id,new_id,row["class_id"],row["subject_id"],row["teacher_id"],row["lessons_per_week"],row["duration_periods"],row["max_lessons_per_day"],row["min_gap_periods"],row["allow_double"],row["preferred_days_json"]),
         )
+        copied_requirement = cur.execute(
+            "SELECT id FROM ds_timetable_class_requirements WHERE school_id=? AND profile_id=? AND class_id=? AND subject_id=? AND teacher_id=?",
+            (school_id,new_id,row["class_id"],row["subject_id"],row["teacher_id"]),
+        ).fetchone()
+        class_requirement_map[int(row["id"])] = int(copied_requirement["id"])
+    _clone_advanced_profile_data(cur, school_id, source_profile_id, new_id, day_map, period_map, class_requirement_map)
     for row in cur.execute("SELECT * FROM ds_timetable_lessons WHERE school_id=? AND profile_id=? AND status='scheduled'",(school_id,source_profile_id)).fetchall():
         if int(row["day_id"]) not in day_map or int(row["period_id"]) not in period_map:
             continue
@@ -465,10 +567,44 @@ def compare_timetable_versions(connection: Any, school_id: int, first_version_id
     second_lessons = lesson_map(second_snapshot)
     added = [second_lessons[k] for k in second_lessons.keys()-first_lessons.keys()]
     removed = [first_lessons[k] for k in first_lessons.keys()-second_lessons.keys()]
+
+    def advanced_session_map(snapshot):
+        day_codes = {int(d["id"]):str(d["day_code"]) for d in snapshot.get("days", [])}
+        classes, teachers, learners = {}, {}, {}
+        for key, target in (("session_classes", classes), ("session_teachers", teachers), ("session_learners", learners)):
+            for link in snapshot.get(key, []):
+                target.setdefault(int(link["session_id"]), []).append(
+                    int(link.get("class_id", link.get("teacher_id", link.get("student_id"))))
+                )
+        result = {}
+        for session in snapshot.get("sessions", []):
+            sid = int(session["id"])
+            key = (
+                str(session.get("schedule_layer") or ""), str(session.get("session_type") or ""),
+                int(session["subject_id"]) if session.get("subject_id") is not None else None,
+                int(session["programme_id"]) if session.get("programme_id") is not None else None,
+                int(session["teaching_group_id"]) if session.get("teaching_group_id") is not None else None,
+                tuple(sorted(classes.get(sid, []))), tuple(sorted(teachers.get(sid, []))),
+                tuple(sorted(learners.get(sid, []))),
+                day_codes.get(int(session["day_id"]), "") if session.get("day_id") is not None else "",
+                str(session.get("session_date") or ""), str(session.get("start_time") or ""),
+                str(session.get("end_time") or ""),
+                int(session["room_id"]) if session.get("room_id") is not None else None,
+            )
+            result[key] = session
+        return result
+
+    first_advanced = advanced_session_map(first_snapshot)
+    second_advanced = advanced_session_map(second_snapshot)
+    advanced_added = [second_advanced[k] for k in second_advanced.keys()-first_advanced.keys()]
+    advanced_removed = [first_advanced[k] for k in first_advanced.keys()-second_advanced.keys()]
     return {
         "first_version":first,
         "second_version":second,
         "added":added,
         "removed":removed,
         "unchanged":len(first_lessons.keys() & second_lessons.keys()),
+        "advanced_added":advanced_added,
+        "advanced_removed":advanced_removed,
+        "advanced_unchanged":len(first_advanced.keys() & second_advanced.keys()),
     }

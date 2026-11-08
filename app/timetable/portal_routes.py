@@ -67,6 +67,42 @@ def get_portal_timetable_targets(connection, school_id: int, role: str,
     return []
 
 
+
+def build_portal_timetable_rows(view: dict) -> list[dict]:
+    """Merge legacy weekly lessons and normalized sessions for portal display."""
+    rows = []
+    for lesson in view.get("lessons", []):
+        rows.append({
+            "date_day": str(lesson["day_name"]),
+            "time": str(lesson["period_label"]) + " · " + str(lesson["start_time"]) + "–" + str(lesson["end_time"]),
+            "subject": str(lesson["subject_name"]),
+            "class_group": str(lesson["class_name"]) + ((" " + str(lesson["stream"])) if lesson["stream"] else ""),
+            "teachers": str(lesson["teacher_name"]),
+            "venue": str(lesson.get("room_name") or "—"),
+            "layer": "Instructional",
+            "sort_date": "",
+            "sort_time": str(lesson["start_time"]),
+        })
+    for session in view.get("advanced_sessions", []):
+        date_day = str(session.get("session_date") or session.get("day_name") or "Scheduled")
+        if session.get("session_date") and session.get("day_name"):
+            date_day += " · " + str(session["day_name"])
+        layer = str(session.get("schedule_layer") or "instructional").replace("_", " ").title()
+        rows.append({
+            "date_day": date_day,
+            "time": str(session.get("start_time") or "") + "–" + str(session.get("end_time") or ""),
+            "subject": str(session.get("subject_name") or session.get("programme_name") or session.get("session_type") or "Session"),
+            "class_group": str(session.get("class_names") or "—"),
+            "teachers": str(session.get("teacher_names") or "—"),
+            "venue": str(session.get("room_name") or "—"),
+            "layer": layer,
+            "sort_date": str(session.get("session_date") or ""),
+            "sort_time": str(session.get("start_time") or ""),
+        })
+    return sorted(rows, key=lambda row: (row["sort_date"] or "0000-00-00", row["sort_time"], row["date_day"], row["subject"]))
+
+
+
 def register_timetable_portal_routes(app, get_db):
     @app.get("/app/timetable/my", response_class=HTMLResponse)
     def published_portal_timetable(request: Request):
@@ -104,24 +140,22 @@ def register_timetable_portal_routes(app, get_db):
                         # A profile without a usable day/period setup is not
                         # allowed to break access to other published profiles.
                         continue
+                    portal_rows = build_portal_timetable_rows(view)
                     lesson_rows = []
-                    for lesson in view["lessons"]:
+                    for row in portal_rows:
                         lesson_rows.append(
-                            "<tr><td>" + escape(str(lesson["day_name"])) + "</td><td>"
-                            + escape(str(lesson["period_label"])) + "<br><small>"
-                            + escape(str(lesson["start_time"])) + "–" + escape(str(lesson["end_time"]))
-                            + "</small></td><td><b>" + escape(str(lesson["subject_name"]))
-                            + "</b></td><td>" + escape(str(lesson["class_name"]))
-                            + ((" " + escape(str(lesson["stream"]))) if lesson["stream"] else "")
-                            + "</td><td>" + escape(str(lesson["teacher_name"]))
-                            + "</td><td>" + escape(str(lesson["room_name"] or "—")) + "</td></tr>"
+                            "<tr><td>" + escape(row["date_day"]) + "</td><td>"
+                            + escape(row["time"]) + "</td><td><b>" + escape(row["subject"])
+                            + "</b><br><small>" + escape(row["layer"]) + "</small></td><td>"
+                            + escape(row["class_group"]) + "</td><td>" + escape(row["teachers"])
+                            + "</td><td>" + escape(row["venue"]) + "</td></tr>"
                         )
                     sections.append(
                         "<section class='tp-card'><div class='tp-head'><div><h2>"
                         + escape(label) + "</h2><p>" + escape(str(profile["academic_year"]))
                         + " · " + escape(str(profile["term"])) + " · Revision "
                         + escape(str(profile["revision_no"] or 1)) + "</p></div><span>Published</span></div>"
-                        + ("<div class='tp-scroll'><table><thead><tr><th>Day</th><th>Time</th><th>Subject</th><th>Class</th><th>Teacher</th><th>Room</th></tr></thead><tbody>"
+                        + ("<div class='tp-scroll'><table><thead><tr><th>Date / Day</th><th>Time</th><th>Subject / Activity</th><th>Class</th><th>Teacher</th><th>Room</th></tr></thead><tbody>"
                            + "".join(lesson_rows) + "</tbody></table></div>"
                            if lesson_rows else "<p class='tp-empty'>No lessons are scheduled for this timetable.</p>")
                         + "</section>"

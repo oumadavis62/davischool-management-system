@@ -1,14 +1,15 @@
-"""Manual timetable builder UI and actions."""
+"""Manual timetable builder with days as rows and period/break columns."""
 from __future__ import annotations
 
 from html import escape
 from urllib.parse import quote
 
 from fastapi import Form, Request
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 
 from app.timetable.setup import TimetableSetupError
-from app.timetable.builder import place_lesson, move_lesson, delete_lesson
+from app.timetable.builder import place_lesson, move_lesson, delete_lesson, place_advanced_requirement_session, place_dated_advanced_requirement_session
+from app.timetable.advanced_setup import resolve_calendar_occurrence
 
 
 def register_timetable_builder_routes(app, get_db, get_school_obj, module_page):
@@ -40,7 +41,7 @@ def register_timetable_builder_routes(app, get_db, get_school_obj, module_page):
             (school_id,),
         ).fetchall()
         selected = (next((p for p in profiles if int(p["id"]) == int(profile_id)), None) or (profiles[0] if profiles else None))
-        days = periods = rooms = allocations = requirements = lessons = calendar_events = []
+        days = periods = breaks = rooms = allocations = requirements = lessons = calendar_events = advanced_requirements = advanced_sessions = []
         if selected:
             pid = int(selected["id"])
             days = cur.execute(
@@ -51,12 +52,23 @@ def register_timetable_builder_routes(app, get_db, get_school_obj, module_page):
                 "SELECT * FROM ds_timetable_periods WHERE school_id=? AND profile_id=? AND period_type='lesson' ORDER BY period_no,id",
                 (school_id,pid),
             ).fetchall()
+            breaks = cur.execute(
+                "SELECT * FROM ds_timetable_breaks WHERE school_id=? AND profile_id=? ORDER BY start_time,break_no,id",
+                (school_id,pid),
+            ).fetchall()
             rooms = cur.execute(
                 "SELECT * FROM ds_timetable_rooms WHERE school_id=? AND is_active=1 ORDER BY name",
                 (school_id,),
             ).fetchall()
             requirements = cur.execute(
                 "SELECT * FROM ds_timetable_class_requirements WHERE school_id=? AND profile_id=? ORDER BY class_id,subject_id",
+                (school_id,pid),
+            ).fetchall()
+            advanced_requirements = cur.execute(
+                """SELECT r.id,r.name,r.weekly_occurrences,r.weekly_periods,r.schedule_layer
+                   FROM ds_timetable_scheduling_requirements r
+                   WHERE r.school_id=? AND r.profile_id=? AND r.is_active=1
+                   ORDER BY r.schedule_layer,r.name""",
                 (school_id,pid),
             ).fetchall()
             allocations = cur.execute(
@@ -85,6 +97,23 @@ def register_timetable_builder_routes(app, get_db, get_school_obj, module_page):
                    JOIN ds_timetable_days d ON d.id=l.day_id AND d.profile_id=l.profile_id
                    WHERE l.school_id=? AND l.profile_id=? AND l.status='scheduled'
                    ORDER BY d.day_order,p.period_no,c.name,s.name""",
+                (school_id,pid),
+            ).fetchall()
+            advanced_sessions = cur.execute(
+                """SELECT s.*,sub.name subject_name,d.day_name,p.label period_label,
+                          GROUP_CONCAT(DISTINCT c.name || COALESCE(' ' || c.stream,'')) class_names,
+                          GROUP_CONCAT(DISTINCT t.name) teacher_names,rm.name room_name
+                   FROM ds_timetable_sessions s
+                   LEFT JOIN subjects sub ON sub.id=s.subject_id AND sub.school_id=s.school_id
+                   LEFT JOIN ds_timetable_days d ON d.id=s.day_id AND d.profile_id=s.profile_id
+                   LEFT JOIN ds_timetable_periods p ON p.id=s.period_id AND p.profile_id=s.profile_id
+                   LEFT JOIN ds_timetable_rooms rm ON rm.id=s.room_id AND rm.school_id=s.school_id
+                   LEFT JOIN ds_timetable_session_classes sc ON sc.session_id=s.id AND sc.school_id=s.school_id
+                   LEFT JOIN classes c ON c.id=sc.class_id AND c.school_id=sc.school_id
+                   LEFT JOIN ds_timetable_session_teachers st ON st.session_id=s.id AND st.school_id=s.school_id
+                   LEFT JOIN teachers t ON t.id=st.teacher_id AND t.school_id=st.school_id
+                   WHERE s.school_id=? AND s.profile_id=? AND s.status='scheduled'
+                   GROUP BY s.id ORDER BY d.day_order,p.period_no,s.start_time""",
                 (school_id,pid),
             ).fetchall()
             calendar_events = cur.execute(
@@ -131,10 +160,25 @@ def register_timetable_builder_routes(app, get_db, get_school_obj, module_page):
             for offset in range(1,int(lesson["duration_periods"] or 1)):
                 if start + offset < len(periods):
                     occupied[(int(lesson["day_id"]),int(periods[start+offset]["id"]))] = lesson
+        timeline = sorted(
+            [(str(p["start_time"]), "period", p) for p in periods] +
+            [(str(br["start_time"]), "break", br) for br in breaks],
+            key=lambda item: (item[0], 0 if item[1] == "period" else 1),
+        )
+        headers = ["<th class='tb-day-heading'>Day</th>"]
+        for _, item_type, item in timeline:
+            if item_type == "break":
+                headers.append(f"<th class='tb-break-heading'><b>{esc(item['label'])}</b><span>{esc(item['start_time'])}–{esc(item['end_time'])}</span></th>")
+            else:
+                headers.append(f"<th class='tb-period-heading'><b>{esc(item['label'])}</b><span>{esc(item['start_time'])}–{esc(item['end_time'])}</span></th>")
         rows = []
-        for period in periods:
-            cells = []
-            for day in days:
+        for day in days:
+            cells = [f"<th class='tb-day-heading'>{esc(day['day_name'])}</th>"]
+            for _, item_type, item in timeline:
+                if item_type == "break":
+                    cells.append(f"<td class='tb-break-cell'><b>{esc(item['label'])}</b><span>{esc(item['start_time'])}–{esc(item['end_time'])}</span></td>")
+                    continue
+                period = item
                 key = (int(day["id"]),int(period["id"]))
                 lesson = lesson_by_start.get(key)
                 if lesson:
@@ -159,15 +203,83 @@ def register_timetable_builder_routes(app, get_db, get_school_obj, module_page):
                     cells.append(f"<td class='tb-cell tb-continued' data-day-id='{int(day['id'])}' data-period-id='{int(period['id'])}' ondragover='event.preventDefault()' ondrop='dropTimetableLesson(event,this)'>↳ {esc(continued['subject_name'])} continues</td>")
                 else:
                     cells.append(f"<td class='tb-cell tb-free' data-day-id='{int(day['id'])}' data-period-id='{int(period['id'])}' ondragover='event.preventDefault()' ondrop='dropTimetableLesson(event,this)'><span>Free period</span></td>")
-            rows.append(f"<tr><th class='tb-period'><b>{esc(period['label'])}</b><span>{esc(period['start_time'])}–{esc(period['end_time'])}</span></th>{''.join(cells)}</tr>")
-        day_headers = "".join("<th>" + esc(d["day_name"]) + "</th>" for d in days)
-        grid = f"<div class='tb-grid-scroll'><table class='tb-grid'><thead><tr><th>Period</th>{day_headers}</tr></thead><tbody>{''.join(rows)}</tbody></table></div>" if days and periods else "<div class='tb-empty'>Configure at least one instructional day and one teaching period in Timetable Setup.</div>"
+            rows.append(f"<tr>{''.join(cells)}</tr>")
+        grid = f"<div class='tb-grid-scroll'><table class='tb-grid'><thead><tr>{''.join(headers)}</tr></thead><tbody>{''.join(rows)}</tbody></table></div>" if days and periods else "<div class='tb-empty'>Configure at least one instructional day and one teaching period in Timetable Setup.</div>"
         add_form = (
             f"""<section class='tb-panel'><div><span class='tb-kicker'>MANUAL SCHEDULING</span><h3>Add a lesson</h3><p>Choose an existing class, subject and allocated teacher. Lesson duration follows the weekly requirement.</p></div><form method='post' action='/app/timetable/builder/add' class='tb-add-form'><input type='hidden' name='profile_id' value='{pid}'><label class='wide'>Class · subject · teacher<select name='allocation' required><option value=''>Select configured requirement</option>{allocation_options}</select></label><label>Day<select name='day_id' required><option value=''>Select day</option>{day_options}</select></label><label>Start period<select name='period_id' required><option value=''>Select period</option>{period_options}</select></label><label>Room<select name='room_id'>{room_options}</select></label><button class='tb-btn'>＋ Add lesson</button></form></section>"""
             if not read_only and allocations and days and periods else
             (f"<section class='tb-panel'><h3>Published timetable is read-only</h3><p>Create a new draft revision before making changes.</p><a class='tb-btn' href='/app/timetable/publishing?profile_id={pid}'>Create Revision</a></section>" if read_only else
              "<section class='tb-panel'><h3>Complete setup first</h3><p>Configure school days, teaching periods and weekly class-subject requirements before placing lessons.</p><a class='tb-btn' href='/app/timetable/setup'>Open Timetable Setup</a></section>")
         )
+        advanced_options = "".join(
+            f"<option value='{int(r['id'])}'>{esc(r['name'])} · {esc(r['schedule_layer'])} · {int(r['weekly_occurrences'])} sessions / {int(r['weekly_periods'])} periods weekly</option>"
+            for r in advanced_requirements
+        )
+        advanced_form = (
+            f"""<section class='tb-panel'><div><span class='tb-kicker'>ADVANCED MANUAL SCHEDULING</span><h3>Place a combined or team-taught session</h3><p>Uses the normalized requirement, configured session pattern and the same constraint/conflict engine as automatic generation.</p></div>
+            <form method='post' action='/app/timetable/builder/add-advanced' class='tb-add-form'>
+            <input type='hidden' name='profile_id' value='{pid}'>
+            <label class='wide'>Scheduling requirement<select name='requirement_id' required><option value=''>Select advanced requirement</option>{advanced_options}</select></label>
+            <label>Weekly session number<input type='number' name='session_no' min='1' value='1' required></label>
+            <label>Day<select name='day_id' required><option value=''>Select day</option>{day_options}</select></label>
+            <label>Start period<select name='period_id' required><option value=''>Select period</option>{period_options}</select></label>
+            <label>Room<select name='room_id'>{room_options}</select></label><button class='tb-btn'>＋ Place advanced session</button></form></section>"""
+            if not read_only and advanced_requirements and days and periods else ""
+        )
+        dated_form = (
+            f"""<section class='tb-panel tb-dated-panel'><div><span class='tb-kicker'>CALENDAR-DATED MANUAL SCHEDULING</span><h3>Place a session on a specific date</h3><p>Choose an instructional lesson, remedial programme or school activity. Available slots are filtered to the selected session layer and that date's assigned schedule template.</p></div>
+            <form method='post' action='/app/timetable/builder/add-dated' class='tb-add-form' id='tb-dated-session-form'>
+            <input type='hidden' name='profile_id' value='{pid}'>
+            <label class='wide'>Scheduling requirement<select name='requirement_id' required><option value=''>Select scheduling requirement</option>{advanced_options}</select></label>
+            <label>Session number<input type='number' name='session_no' min='1' value='1' required></label>
+            <label>Calendar date<input type='date' name='session_date' id='tb-session-date' min='{esc(selected['academic_start_date'] or '')}' max='{esc(selected['academic_end_date'] or '')}' required></label>
+            <label class='wide'>Available date slots<select name='slot_no' id='tb-date-slot' required disabled><option value=''>Choose a date to load available slots</option></select></label>
+            <label>Room<select name='room_id'>{room_options}</select></label><button class='tb-btn' id='tb-place-dated' disabled>＋ Place dated lesson</button>
+            <p class='tb-date-slot-status wide' id='tb-date-slot-status' aria-live='polite'>Select a date to see its configured schedule.</p></form></section>
+            <script>
+            (function(){{
+              const dateInput=document.getElementById('tb-session-date');
+              const slotSelect=document.getElementById('tb-date-slot');
+              const submitButton=document.getElementById('tb-place-dated');
+              const status=document.getElementById('tb-date-slot-status');
+              const requirementSelect=document.querySelector('#tb-dated-session-form select[name="requirement_id"]');
+              const profileId='{pid}';
+              if(!dateInput||!slotSelect||!requirementSelect)return;
+              async function loadDateSlots(){{
+                slotSelect.disabled=true;submitButton.disabled=true;
+                slotSelect.innerHTML='<option value="">Loading available slots…</option>';
+                if(!dateInput.value||!requirementSelect.value){{slotSelect.innerHTML='<option value="">Choose a requirement and date first</option>';status.textContent='Choose a scheduling requirement and date to load suitable slots.';return;}}
+                status.textContent='Loading the selected date schedule…';
+                try{{
+                  const response=await fetch('/app/timetable/builder/date-slots?profile_id='+encodeURIComponent(profileId)+'&requirement_id='+encodeURIComponent(requirementSelect.value)+'&session_date='+encodeURIComponent(dateInput.value),{{credentials:'same-origin',headers:{{'Accept':'application/json'}}}});
+                  const data=await response.json();
+                  if(!response.ok||!data.ok)throw new Error(data.error||'Could not load this date schedule.');
+                  slotSelect.innerHTML='<option value="">Select a configured slot</option>';
+                  (data.slots||[]).forEach(function(slot){{
+                    const option=document.createElement('option');option.value=slot.slot_no;
+                    option.textContent=slot.label+' · '+slot.start_time+'–'+slot.end_time+' · '+slot.slot_type;
+                    slotSelect.appendChild(option);
+                  }});
+                  slotSelect.disabled=!(data.slots||[]).length;
+                  status.textContent=(data.day_name||'Selected date')+' · '+((data.slots||[]).length)+' configured slots'+(data.rotations&&data.rotations.length?' · '+data.rotations.join(', '):'');
+                  if(!(data.slots||[]).length)slotSelect.innerHTML='<option value="">No configured slots for this date</option>';
+                }}catch(error){{
+                  slotSelect.innerHTML='<option value="">Schedule unavailable</option>';
+                  status.textContent=error.message||'Could not load this date schedule.';
+                }}
+              }}
+              dateInput.addEventListener('change',loadDateSlots);
+              requirementSelect.addEventListener('change',loadDateSlots);
+              slotSelect.addEventListener('change',function(){{submitButton.disabled=!slotSelect.value;}});
+            }})();
+            </script>"""
+            if not read_only and advanced_requirements else ""
+        )
+        advanced_session_rows = "".join(
+            f"<tr><td>{esc(x['day_name'] or x['session_date'] or '—')}</td><td>{esc(x['period_label'] or (str(x['start_time'])+'–'+str(x['end_time'])))}</td><td>{esc(x['subject_name'] or x['session_type'])}</td><td>{esc(x['class_names'] or 'Learner group')}</td><td>{esc(x['teacher_names'] or '—')}</td><td>{esc(x['room_name'] or 'No room')}</td></tr>"
+            for x in advanced_sessions
+        ) or "<tr><td colspan='6'>No advanced sessions placed yet.</td></tr>"
+        advanced_session_table = f"""<section class='tb-panel'><div><span class='tb-kicker'>NORMALIZED SESSIONS</span><h3>Combined classes and team-taught lessons</h3></div><div style='overflow:auto'><table><thead><tr><th>Day</th><th>Time</th><th>Subject / activity</th><th>Classes</th><th>Teaching team</th><th>Room</th></tr></thead><tbody>{advanced_session_rows}</tbody></table></div></section>"""
         body = f"""
         <style>
         .tb-wrap{{max-width:1700px;margin:auto;padding:24px;color:#234638;background:linear-gradient(145deg,#edf6ef 0%,#e3f0e5 45%,#f8fbf8 100%);border-radius:25px}}
@@ -182,8 +294,8 @@ def register_timetable_builder_routes(app, get_db, get_school_obj, module_page):
         .tb-add-form{{display:grid;grid-template-columns:2fr 1fr 1fr 1fr auto;gap:10px;align-items:end}}.tb-add-form label,.tb-actions label{{display:flex;flex-direction:column;gap:5px;font-size:11px;font-weight:800;color:#3b5946}}.tb-add-form label.wide{{grid-column:auto}}
         .tb-add-form select,.tb-actions select{{width:100%;min-width:0;padding:11px;border:1px solid #d5e4d7;border-radius:10px;background:#fbfdfb;font-size:12px;color:#234638}}.tb-add-form select:focus,.tb-actions select:focus{{outline:none;border-color:#78ad85;box-shadow:0 0 0 3px rgba(91,153,107,.12)}}
         .tb-grid-scroll{{overflow:auto;border:1px solid #dce8de;border-radius:15px;background:white;box-shadow:0 6px 20px rgba(36,83,52,.045)}}.tb-grid{{width:100%;border-collapse:separate;border-spacing:0;min-width:850px}}
-        .tb-grid thead th{{background:linear-gradient(110deg,#347b50,#286743);color:white;padding:14px 10px;text-align:center;font-size:12px;position:sticky;top:0}}
-        .tb-grid .tb-period{{min-width:115px;background:#edf5ee;color:#315b3e;text-align:left;position:sticky;left:0;z-index:1}}.tb-period b,.tb-period span{{display:block}}.tb-period span{{font-size:10px;color:#647b6a;font-weight:500;margin-top:4px}}
+        .tb-grid thead th{{background:linear-gradient(110deg,#347b50,#286743);color:white;padding:14px 10px;text-align:center;font-size:12px;position:sticky;top:0;min-width:135px}}
+        .tb-grid .tb-day-heading{{min-width:115px;background:#edf5ee;color:#315b3e;text-align:left;position:sticky;left:0;z-index:2}}.tb-day-heading,.tb-period-heading b,.tb-period-heading span,.tb-break-heading b,.tb-break-heading span{{display:block}}.tb-period-heading span,.tb-break-heading span{{font-size:10px;color:#e4efe5;font-weight:600;margin-top:4px}}.tb-break-heading,.tb-break-cell{{background:#f1ead8!important;color:#75551d;text-align:center;min-width:115px;padding:10px 8px}}.tb-break-heading span{{color:#75551d}}.tb-break-cell span{{display:block;font-size:10px;margin-top:4px}}
         .tb-cell{{height:122px;min-width:150px;vertical-align:top;padding:7px;border-right:1px solid #edf2ed;border-bottom:1px solid #edf2ed;background:#fff}}.tb-free{{background:#fbfdfb;text-align:center;vertical-align:middle;color:#a2b3a5;font-size:10px}}.tb-free:hover{{background:#eff8f0}}.tb-continued{{background:#f6faf6;color:#7b9480;text-align:center;vertical-align:middle;font-size:10px}}
         .tb-lesson{{background:linear-gradient(145deg,#edf7ee,#e3f1e5);border:1px solid #d6e8d9;border-left:4px solid #43845a;border-radius:11px;padding:9px;min-height:102px;color:#234638;cursor:grab;box-shadow:0 2px 7px rgba(35,83,51,.07);transition:box-shadow .16s,transform .16s}}.tb-lesson:hover{{box-shadow:0 6px 14px rgba(35,83,51,.12);transform:translateY(-1px)}}.tb-lesson:active{{cursor:grabbing}}
         .tb-lesson-top{{display:flex;justify-content:space-between;gap:5px;font-size:11px}}.tb-lesson-top span{{font-size:9px;background:#d5e9d9;border-radius:10px;padding:2px 5px;white-space:nowrap}}.tb-class{{font-size:10px;font-weight:800;margin-top:5px}}.tb-meta{{font-size:9px;color:#55705d;margin-top:4px}}
@@ -196,7 +308,7 @@ def register_timetable_builder_routes(app, get_db, get_school_obj, module_page):
         @media(max-width:900px){{.tb-add-form{{grid-template-columns:1fr 1fr}}.tb-add-form label.wide{{grid-column:1/-1}}}}
         @media(max-width:600px){{.tb-wrap{{padding:12px;border-radius:17px}}.tb-hero{{padding:21px 17px}}.tb-hero h2{{font-size:23px}}.tb-add-form,.tb-modal .tb-add-form,.tb-modal .tb-actions form{{grid-template-columns:1fr}}.tb-add-form label.wide,.tb-modal .tb-add-form label.wide,.tb-modal .tb-add-form button,.tb-modal .tb-actions form button{{grid-column:auto}}.tb-modal{{padding:10px}}.tb-modal-dialog{{padding:20px 16px;border-radius:18px}}.tb-hero>div:last-child{{width:100%}}.tb-hero>div:last-child a{{flex:1}}}}
         </style>
-        <div class='tb-wrap'><div class='tb-hero'><div><span class='tb-kicker'>DAVISCHOOL · MANUAL SCHEDULING</span><h2>Master Timetable Builder</h2><p>Place lessons, move them between periods and resolve clashes as you build.</p></div><div style='display:flex;gap:8px;flex-wrap:wrap'><a class='tb-btn' href='/app/timetable/automatic?profile_id={pid}'>⚡ Automatic Generator</a><a class='tb-btn secondary' href='/app/timetable/views?profile_id={pid}'>Timetable Views</a><a class='tb-btn secondary' href='/app/timetable/publishing?profile_id={pid}'>Publishing & Versions</a><a class='tb-btn secondary' href='/app/timetable/setup?profile_id={pid}'>⚙ Setup</a><a class='tb-btn secondary' href='/school/dashboard'>School overview</a></div></div>{notice}{profile_selector}<div class='tb-panel'><b>{esc(selected['name'])}</b><span style='font-size:11px;color:#64748b'> · {esc(selected['academic_year'])} · {esc(selected['term'])}</span><span style='float:right;font-size:11px;color:#17633b;font-weight:800'>{len(lessons)} scheduled lessons · {len(requirements)} requirements · {len(calendar_events)} calendar dates</span></div>{add_form}{grid}</div>
+        <div class='tb-wrap'><div class='tb-hero'><div><span class='tb-kicker'>DAVISCHOOL · MANUAL SCHEDULING</span><h2>Master Timetable Builder</h2><p>Place lessons, move them between periods and resolve clashes as you build.</p></div><div style='display:flex;gap:8px;flex-wrap:wrap'><a class='tb-btn' href='/app/timetable/automatic?profile_id={pid}'>⚡ Automatic Generator</a><a class='tb-btn secondary' href='/app/timetable/views?profile_id={pid}'>Timetable Views</a><a class='tb-btn secondary' href='/app/timetable/publishing?profile_id={pid}'>Publishing & Versions</a><a class='tb-btn secondary' href='/app/timetable/setup?profile_id={pid}'>⚙ Setup</a><a class='tb-btn secondary' href='/school/dashboard'>School overview</a></div></div>{notice}{profile_selector}<div class='tb-panel'><b>{esc(selected['name'])}</b><span style='font-size:11px;color:#64748b'> · {esc(selected['academic_year'])} · {esc(selected['term'])}</span><span style='float:right;font-size:11px;color:#17633b;font-weight:800'>{len(lessons)} scheduled lessons · {len(requirements)} requirements · {len(calendar_events)} calendar dates</span></div>{add_form}{advanced_form}{dated_form}{advanced_session_table}{grid}</div>
         <script>
         (function(){{
           const root=document.querySelector('.tb-wrap');if(!root)return;
@@ -228,6 +340,99 @@ def register_timetable_builder_routes(app, get_db, get_school_obj, module_page):
         </script>
         """
         return module_page(request, "Timetable Builder", "timetable", body)
+
+    @app.get("/app/timetable/builder/date-slots")
+    def timetable_builder_date_slots(request: Request, profile_id: int = 0, requirement_id: int = 0, session_date: str = ""):
+        school = school_for(request)
+        if not school:
+            return JSONResponse({"ok": False, "error": "Your session has expired. Sign in again."}, status_code=401)
+        con = get_db()
+        try:
+            cur = con.cursor()
+            requirement = cur.execute(
+                """SELECT schedule_layer FROM ds_timetable_scheduling_requirements
+                   WHERE id=? AND school_id=? AND profile_id=? AND is_active=1""",
+                (requirement_id, int(school["id"]), profile_id),
+            ).fetchone()
+            if not requirement:
+                raise TimetableSetupError("Select an active scheduling requirement from this timetable profile.")
+            layer = str(requirement["schedule_layer"])
+            allowed_types = {
+                "instructional": {"instructional"},
+                "additional_learning": {"remedial", "study"},
+                "school_activity": {"activity", "assembly", "other"},
+            }.get(layer, set())
+            occurrence = resolve_calendar_occurrence(con, int(school["id"]), profile_id, session_date)
+            slots = [
+                {
+                    "slot_no": int(slot["slot_no"]),
+                    "label": str(slot["label"]),
+                    "slot_type": str(slot["slot_type"]),
+                    "start_time": str(slot["start_time"]),
+                    "end_time": str(slot["end_time"]),
+                }
+                for slot in occurrence["schedule_slots"]
+                if str(slot["slot_type"]).lower() in allowed_types
+                and (layer != "instructional" or occurrence["is_instructional"])
+            ]
+            rotations = [
+                str((item.get("week") or {}).get("label") or item.get("cycle_name") or "Active rotation")
+                for item in occurrence.get("rotations", [])
+            ]
+            return JSONResponse({
+                "ok": True,
+                "date": session_date,
+                "day_code": occurrence.get("day_code"),
+                "day_name": occurrence.get("day_name"),
+                "is_instructional": bool(occurrence.get("is_instructional")),
+                "schedule_layer": layer,
+                "slots": slots,
+                "rotations": rotations,
+            })
+        except (TimetableSetupError, ValueError, TypeError) as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+        finally:
+            con.close()
+
+    @app.post("/app/timetable/builder/add-dated")
+    def add_dated_builder_session(request: Request, profile_id: int = Form(...),
+        requirement_id: int = Form(...), session_no: int = Form(...),
+        session_date: str = Form(...), slot_no: int = Form(...), room_id: str = Form("")):
+        school = school_for(request)
+        if not school:
+            return RedirectResponse("/", 303)
+        con = get_db()
+        try:
+            place_dated_advanced_requirement_session(
+                con, int(school["id"]), profile_id, requirement_id, session_no,
+                session_date, slot_no, int(room_id) if room_id else None,
+                request.session.get("email", ""),
+            )
+            return redirect_builder(profile_id, "Calendar-dated lesson placed successfully.")
+        except (TimetableSetupError, ValueError) as exc:
+            return redirect_builder(profile_id, str(exc), True)
+        finally:
+            con.close()
+
+    @app.post("/app/timetable/builder/add-advanced")
+    def add_advanced_builder_session(request: Request, profile_id: int = Form(...),
+        requirement_id: int = Form(...), session_no: int = Form(...),
+        day_id: int = Form(...), period_id: int = Form(...), room_id: str = Form("")):
+        school = school_for(request)
+        if not school:
+            return RedirectResponse("/", 303)
+        con = get_db()
+        try:
+            place_advanced_requirement_session(
+                con, int(school["id"]), profile_id, requirement_id, session_no,
+                day_id, period_id, int(room_id) if room_id else None,
+                request.session.get("email", ""),
+            )
+            return redirect_builder(profile_id, "Advanced session placed successfully.")
+        except (TimetableSetupError, ValueError) as exc:
+            return redirect_builder(profile_id, str(exc), True)
+        finally:
+            con.close()
 
     @app.post("/app/timetable/builder/add")
     def timetable_builder_add(request: Request, profile_id: int = Form(...), allocation: str = Form(...), day_id: int = Form(...), period_id: int = Form(...), room_id: str = Form("")):

@@ -6,7 +6,7 @@ session can serve combined classes and be delivered by a teaching team.
 """
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import date, timedelta, datetime
 import re
 from typing import Any, Iterable
 
@@ -30,7 +30,7 @@ def _validate_calendar_session(cur: Any, school_id: int, profile_id: int,
                                 session_date: str | None, day_id: int | None,
                                 start: str, end: str, schedule_layer: str,
                                 programme_id: int | None = None) -> None:
-    """Ensure dated instructional sessions obey the resolved school calendar."""
+    """Ensure every dated session fits its calendar day, rotation and layer slots."""
     if not session_date:
         return
     occurrence = resolve_calendar_occurrence(
@@ -38,18 +38,18 @@ def _validate_calendar_session(cur: Any, school_id: int, profile_id: int,
     )
     if day_id is not None and occurrence["day_id"] != int(day_id):
         raise TimetableSetupError("The selected timetable day does not match the session date.")
-    layer_slot_types = {
-        "instructional": {"instructional"},
+
+    allowed_types = {
+        "instructional": {"instructional", "lesson", "teaching"},
         "additional_learning": {"remedial", "study"},
         "school_activity": {"activity", "assembly", "other"},
-    }
-    allowed_types = layer_slot_types.get(schedule_layer, set())
+    }.get(schedule_layer, set())
     if schedule_layer == "instructional" and not occurrence["is_instructional"]:
         raise TimetableSetupError("The selected date is closed for instructional lessons.")
     if schedule_layer == "additional_learning" and not (
         occurrence["is_instructional"] or occurrence["template_id"] is not None
     ):
-        raise TimetableSetupError("The selected date has no configured learning programme.")
+        raise TimetableSetupError("Additional learning requires an instructional day or a configured day template.")
     if programme_id is not None:
         active_programmes = {
             int(item["programme_id"]) for item in occurrence["rotations"]
@@ -59,16 +59,25 @@ def _validate_calendar_session(cur: Any, school_id: int, profile_id: int,
             raise TimetableSetupError("This learning programme is not active in the selected rotation week.")
     slots = occurrence["schedule_slots"]
     if not slots:
-        return
+        raise TimetableSetupError("The selected date has no configured day template; dated sessions cannot be placed.")
     matching = [
         slot for slot in slots
         if str(slot["slot_type"]).lower() in allowed_types
         and str(slot["start_time"]) >= start and str(slot["end_time"]) <= end
     ]
     if not matching or str(matching[0]["start_time"]) != start or str(matching[-1]["end_time"]) != end:
-        raise TimetableSetupError("The session time does not match the selected date's configured schedule template.")
+        if schedule_layer == "instructional":
+            raise TimetableSetupError("The session time does not match the selected date's instructional template.")
+        layer_name = {
+            "additional_learning": "remedial or study",
+            "school_activity": "activity",
+        }.get(schedule_layer, "configured")
+        raise TimetableSetupError(
+            f"The session time does not match the selected date's {layer_name} slots."
+        )
     for previous, current in zip(matching, matching[1:]):
-        if str(previous["end_time"]) != str(current["start_time"]):
+        if (str(previous["end_time"]) != str(current["start_time"])
+                or int(current["slot_no"]) != int(previous["slot_no"]) + 1):
             raise TimetableSetupError("A session cannot span a break or non-teaching slot.")
 
 
@@ -491,13 +500,27 @@ def create_scheduled_session(connection: Any, school_id: int, profile_id: int,
                    WHERE school_id=? AND profile_id=? AND class_id=? AND status='scheduled'""",
                 (school_id, profile_id, class_id),
             ).fetchone()[0] or 0)
-            normalized_week = int(cur.execute(
-                """SELECT COUNT(DISTINCT s.id) FROM ds_timetable_sessions s
-                   JOIN ds_timetable_session_classes sc ON sc.session_id=s.id AND sc.school_id=s.school_id
-                   WHERE s.school_id=? AND s.profile_id=? AND sc.class_id=?
-                     AND s.schedule_layer='instructional' AND s.status='scheduled'""",
-                (school_id, profile_id, class_id),
-            ).fetchone()[0] or 0)
+            if session_date:
+                dated = date.fromisoformat(session_date)
+                week_start = (dated - timedelta(days=dated.weekday())).isoformat()
+                week_end = (date.fromisoformat(week_start) + timedelta(days=6)).isoformat()
+                normalized_week = int(cur.execute(
+                    """SELECT COUNT(DISTINCT s.id) FROM ds_timetable_sessions s
+                       JOIN ds_timetable_session_classes sc ON sc.session_id=s.id AND sc.school_id=s.school_id
+                       WHERE s.school_id=? AND s.profile_id=? AND sc.class_id=?
+                         AND s.schedule_layer='instructional' AND s.status='scheduled'
+                         AND (s.session_date BETWEEN ? AND ? OR s.session_date IS NULL)""",
+                    (school_id, profile_id, class_id, week_start, week_end),
+                ).fetchone()[0] or 0)
+            else:
+                normalized_week = int(cur.execute(
+                    """SELECT COUNT(DISTINCT s.id) FROM ds_timetable_sessions s
+                       JOIN ds_timetable_session_classes sc ON sc.session_id=s.id AND sc.school_id=s.school_id
+                       WHERE s.school_id=? AND s.profile_id=? AND sc.class_id=?
+                         AND s.schedule_layer='instructional' AND s.status='scheduled'
+                         AND s.session_date IS NULL""",
+                    (school_id, profile_id, class_id),
+                ).fetchone()[0] or 0)
             if limit["max_lessons_per_week"] is not None and legacy_week + normalized_week >= int(limit["max_lessons_per_week"]):
                 raise TimetableSetupError("The class has reached its maximum number of lessons per week.")
             if day_id is not None and limit["max_periods_per_day"] is not None:
@@ -506,13 +529,24 @@ def create_scheduled_session(connection: Any, school_id: int, profile_id: int,
                        WHERE school_id=? AND profile_id=? AND class_id=? AND day_id=? AND status='scheduled'""",
                     (school_id, profile_id, class_id, day_id),
                 ).fetchone()[0] or 0)
-                normalized_daily = int(cur.execute(
-                    """SELECT COALESCE(SUM(s.duration_periods),0) FROM ds_timetable_sessions s
-                       JOIN ds_timetable_session_classes sc ON sc.session_id=s.id AND sc.school_id=s.school_id
-                       WHERE s.school_id=? AND s.profile_id=? AND sc.class_id=? AND s.day_id=?
-                         AND s.schedule_layer='instructional' AND s.status='scheduled'""",
-                    (school_id, profile_id, class_id, day_id),
-                ).fetchone()[0] or 0)
+                if session_date:
+                    normalized_daily = int(cur.execute(
+                        """SELECT COALESCE(SUM(s.duration_periods),0) FROM ds_timetable_sessions s
+                           JOIN ds_timetable_session_classes sc ON sc.session_id=s.id AND sc.school_id=s.school_id
+                           WHERE s.school_id=? AND s.profile_id=? AND sc.class_id=? AND s.day_id=?
+                             AND s.schedule_layer='instructional' AND s.status='scheduled'
+                             AND (s.session_date=? OR s.session_date IS NULL)""",
+                        (school_id, profile_id, class_id, day_id, session_date),
+                    ).fetchone()[0] or 0)
+                else:
+                    normalized_daily = int(cur.execute(
+                        """SELECT COALESCE(SUM(s.duration_periods),0) FROM ds_timetable_sessions s
+                           JOIN ds_timetable_session_classes sc ON sc.session_id=s.id AND sc.school_id=s.school_id
+                           WHERE s.school_id=? AND s.profile_id=? AND sc.class_id=? AND s.day_id=?
+                             AND s.schedule_layer='instructional' AND s.status='scheduled'
+                             AND s.session_date IS NULL""",
+                        (school_id, profile_id, class_id, day_id),
+                    ).fetchone()[0] or 0)
                 if legacy_daily + normalized_daily + max(1, int(duration_periods or 1)) > int(limit["max_periods_per_day"]):
                     raise TimetableSetupError("This session would exceed the class maximum periods per day.")
 
