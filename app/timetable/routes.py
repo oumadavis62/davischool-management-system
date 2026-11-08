@@ -171,6 +171,19 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
             days = cur.execute("SELECT * FROM ds_timetable_days WHERE school_id=? AND profile_id=? ORDER BY day_order,id", (school_id,pid)).fetchall()
             periods = cur.execute("SELECT * FROM ds_timetable_periods WHERE school_id=? AND profile_id=? ORDER BY period_no,id", (school_id,pid)).fetchall()
             breaks = cur.execute("SELECT * FROM ds_timetable_breaks WHERE school_id=? AND profile_id=? ORDER BY break_no,id", (school_id,pid)).fetchall()
+            # Every positive gap between consecutive configured periods is a break candidate.
+            ordered_periods = sorted(periods, key=lambda p: (str(p["start_time"]), int(p["period_no"])))
+            selected_gap_keys = {(str(b["start_time"]), str(b["end_time"])) for b in breaks}
+            break_candidates = []
+            for previous, following in zip(ordered_periods, ordered_periods[1:]):
+                gap_start, gap_end = str(previous["end_time"]), str(following["start_time"])
+                if gap_start < gap_end:
+                    break_candidates.append({
+                        "start_time": gap_start, "end_time": gap_end,
+                        "label": f"Gap after {previous['label']}",
+                        "selected": (gap_start, gap_end) in selected_gap_keys,
+                    })
+
             calendar_events = cur.execute("SELECT * FROM ds_timetable_calendar_exceptions WHERE school_id=? AND profile_id=? ORDER BY exception_date,label", (school_id,pid)).fetchall()
             rooms = cur.execute("SELECT * FROM ds_timetable_rooms WHERE school_id=? AND is_active=1 ORDER BY name", (school_id,)).fetchall()
             teachers = cur.execute("SELECT id,name FROM teachers WHERE school_id=? ORDER BY name", (school_id,)).fetchall()
@@ -267,7 +280,7 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
             sections = f"""
             <section class='tt-section'><div class='tt-section-title'><div><span class='tt-kicker'>01 · SCHOOL WEEK</span><h3>School days</h3><p>Set instructional days and their order.</p></div><form method='post' data-native-post='true' action='/app/timetable/setup/standard-week'>{hidden}<button class='tt-btn secondary'>Add Monday–Friday</button></form></div><div class='tt-split'><form method='post' data-native-post='true' action='/app/timetable/setup/day' class='tt-form compact'>{hidden}<label>Day name<input name='day_name' required placeholder='Saturday'></label><label>Day code<input name='day_code' required maxlength='8' placeholder='SAT'></label><label>Display order<input name='day_order' required type='number' min='1' max='7' value='6'></label><label class='tt-check'><input type='checkbox' name='instructional' value='1' checked> Instructional day</label><button class='tt-btn'>Save day</button></form><div class='tt-table'><table><tr><th>Order</th><th>Day</th><th>Code</th><th>Type</th></tr>{day_rows}</table></div></div></section>
             <section class='tt-section'><div class='tt-section-title'><div><span class='tt-kicker'>02 · DAILY STRUCTURE</span><h3>Teaching periods</h3><p>Define period numbering and exact time boundaries.</p></div></div><div class='tt-split'><form method='post' data-native-post='true' action='/app/timetable/setup/period' class='tt-form compact'>{hidden}<label>Period number<input name='period_no' type='number' min='1' max='30' required></label><label>Period label<input name='label' required placeholder='Period 1'></label><label>Start time<input name='start_time' type='time' required value='08:00'></label><label>End time<input name='end_time' type='time' required value='08:40'></label><label>Period type<select name='period_type'><option value='lesson'>Lesson</option><option value='study'>Study</option><option value='assembly'>Assembly</option></select></label><button class='tt-btn'>Save period</button></form><div class='tt-table'><table><tr><th>#</th><th>Period</th><th>Time</th><th>Duration</th><th>Type</th></tr>{period_rows}</table></div></div></section>
-            <section class='tt-section'><div class='tt-section-title'><div><span class='tt-kicker'>03 · NON-TEACHING TIME</span><h3>Breaks and lunch</h3><p>Prevent lesson allocation during configured breaks.</p></div></div><div class='tt-split'><form method='post' data-native-post='true' action='/app/timetable/setup/break' class='tt-form compact'>{hidden}<label>Break number<input name='break_no' type='number' min='1' max='20' required></label><label>Break name<input name='label' required placeholder='Tea break'></label><label>Start time<input name='start_time' type='time' required value='10:00'></label><label>End time<input name='end_time' type='time' required value='10:20'></label><label>Applies to<select name='applies_to'><option value='all'>All classes</option><option value='selected'>Selected groups (configure later)</option></select></label><button class='tt-btn'>Save break</button></form><div class='tt-table'><table><tr><th>#</th><th>Break</th><th>Time</th><th>Scope</th></tr>{break_rows}</table></div></div></section>
+            <section class='tt-section'><div class='tt-section-title'><div><span class='tt-kicker'>03 · AUTOMATIC BREAK DETECTION</span><h3>Break gaps between periods</h3><p>Every positive time gap between consecutive periods is detected automatically. Select a gap, give it a name, and it becomes a break column. Unselected gaps remain available below.</p></div></div><div class='tt-split'><div class='tt-table'><table><tr><th>Detected gap</th><th>Time</th><th>Status</th><th>Action</th></tr>{''.join(f"<tr><td><b>{esc(g['label'])}</b></td><td>{esc(g['start_time'])}–{esc(g['end_time'])}</td><td>{'Selected' if g['selected'] else 'Available'}</td><td>{'' if g['selected'] else f"<form method='post' action='/app/timetable/setup/break-gap' class='tt-form compact'>{hidden}<input type='hidden' name='start_time' value='{esc(g['start_time'])}'><input type='hidden' name='end_time' value='{esc(g['end_time'])}'><label>Break name<input name='label' required placeholder='e.g. Tea break'></label><button class='tt-btn'>Select this gap</button></form>"}</td></tr>" for g in break_candidates) or "<tr><td colspan='4'>No gaps detected. Adjust period times to create a gap.</td></tr>"}</table></div><div class='tt-table'><h4>Selected breaks</h4><table><tr><th>#</th><th>Break</th><th>Time</th><th>Scope</th></tr>{break_rows}</table></div></div></section>
             <section class='tt-section'><div class='tt-section-title'><div><span class='tt-kicker'>04 · ACADEMIC CALENDAR</span><h3>Holidays and special dates</h3><p>Mark closures, holidays and exceptional instructional days inside this term.</p></div></div><div class='tt-split'><form method='post' data-native-post='true' action='/app/timetable/setup/calendar-event' class='tt-form compact'>{hidden}<label>Date<input name='exception_date' type='date' required></label><label>Event name<input name='label' required placeholder='National holiday'></label><label>Event type<select name='exception_type'><option value='holiday'>Public / school holiday</option><option value='school_closure'>School closure</option><option value='special_instructional_day'>Special instructional day</option><option value='event'>School event</option></select></label><label>Notes<input name='notes' maxlength='180' placeholder='Optional details'></label><label class='tt-check'><input type='checkbox' name='instructional' value='1'> Instructional day</label><button class='tt-btn'>Save calendar date</button></form><div class='tt-table'><table><tr><th>Date</th><th>Event</th><th>Type</th><th>Day type</th><th>Notes</th></tr>{calendar_rows}</table></div></div></section>
             <section class='tt-section'><div class='tt-section-title'><div><span class='tt-kicker'>05 · LEARNING SPACES</span><h3>Rooms and facilities</h3><p>Register classrooms, laboratories, halls and specialist spaces.</p></div></div><div class='tt-split'><form method='post' data-native-post='true' action='/app/timetable/setup/room' class='tt-form compact'>{hidden}<label>Room code<input name='room_code' required placeholder='LAB-01'></label><label>Room name<input name='name' required placeholder='Science Laboratory'></label><label>Room type<select name='room_type'><option value='classroom'>Classroom</option><option value='laboratory'>Laboratory</option><option value='library'>Library</option><option value='hall'>Hall</option><option value='workshop'>Workshop</option><option value='sports'>Sports facility</option><option value='other'>Other</option></select></label><label>Capacity<input name='capacity' type='number' min='1' placeholder='40'></label><button class='tt-btn'>Save room</button></form><div class='tt-table'><table><tr><th>Code</th><th>Room</th><th>Type</th><th>Capacity</th></tr>{room_rows}</table></div></div></section>
             <section class='tt-section'><div class='tt-section-title'><div><span class='tt-kicker'>06 · STAFF AVAILABILITY</span><h3>Teacher availability</h3><p>Mark unavailable or preferred teacher periods.</p></div></div><div class='tt-split'><form method='post' data-native-post='true' action='/app/timetable/setup/availability' class='tt-form compact'>{hidden}<label>Teacher<select name='teacher_id' required><option value=''>Select teacher</option>{teacher_opts}</select></label><label>Day<select name='day_id' required><option value=''>Select day</option>{day_opts}</select></label><label>Period<select name='period_id' required><option value=''>Select period</option>{period_opts}</select></label><label>Availability<select name='availability'><option value='unavailable'>Unavailable</option><option value='preferred'>Preferred</option><option value='available'>Available</option></select></label><label>Reason<input name='reason' maxlength='160' placeholder='e.g. Part-time availability'></label><button class='tt-btn'>Save availability</button></form><div class='tt-table'><table><tr><th>Teacher</th><th>Day</th><th>Period</th><th>Status</th><th>Reason</th></tr>{availability_rows}</table></div></div></section>
@@ -574,6 +587,40 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
         except (TimetableSetupError, ValueError) as exc:
             return redirect_setup(profile_id, str(exc), True)
         finally: con.close()
+
+    @app.post("/app/timetable/setup/break-gap")
+    def select_timetable_break_gap(request: Request, profile_id: int = Form(...),
+        label: str = Form(...), start_time: str = Form(...), end_time: str = Form(...)):
+        school = school_for(request)
+        if not school:
+            return RedirectResponse("/", 303)
+        con = get_db()
+        try:
+            cur = con.cursor()
+            _profile(cur, int(school["id"]), profile_id)
+            periods = cur.execute(
+                "SELECT * FROM ds_timetable_periods WHERE school_id=? AND profile_id=? ORDER BY start_time,period_no",
+                (int(school["id"]), profile_id),
+            ).fetchall()
+            valid_gaps = {(str(a["end_time"]), str(b["start_time"])) for a,b in zip(periods, periods[1:]) if str(a["end_time"]) < str(b["start_time"])}
+            if (start_time, end_time) not in valid_gaps:
+                raise TimetableSetupError("That gap is no longer available. Refresh and select a current detected gap.")
+            exists = cur.execute(
+                "SELECT id FROM ds_timetable_breaks WHERE school_id=? AND profile_id=? AND start_time=? AND end_time=?",
+                (int(school["id"]), profile_id, start_time, end_time),
+            ).fetchone()
+            if exists:
+                raise TimetableSetupError("That break gap has already been selected.")
+            next_no = int(cur.execute(
+                "SELECT COALESCE(MAX(break_no),0)+1 FROM ds_timetable_breaks WHERE school_id=? AND profile_id=?",
+                (int(school["id"]), profile_id),
+            ).fetchone()[0])
+            save_break(con, int(school["id"]), profile_id, next_no, label, start_time, end_time, "all")
+            return redirect_setup(profile_id, "Detected break gap selected. Other gaps remain available.")
+        except (TimetableSetupError, ValueError) as exc:
+            return redirect_setup(profile_id, str(exc), True)
+        finally:
+            con.close()
 
     @app.post("/app/timetable/setup/break")
     def create_timetable_break(request: Request, profile_id: int = Form(...), break_no: int = Form(...), label: str = Form(...), start_time: str = Form(...), end_time: str = Form(...), applies_to: str = Form("all")):
