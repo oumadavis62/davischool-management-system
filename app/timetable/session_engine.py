@@ -58,8 +58,9 @@ def _validate_calendar_session(cur: Any, school_id: int, profile_id: int,
         and str(slot["start_time"]) >= start and str(slot["end_time"]) <= end
     ]
     if not matching or str(matching[0]["start_time"]) != start or str(matching[-1]["end_time"]) != end:
+        if schedule_layer == "instructional":
+            raise TimetableSetupError("The session time does not match the selected date's instructional template.")
         layer_name = {
-            "instructional": "instructional",
             "additional_learning": "remedial or study",
             "school_activity": "activity",
         }.get(schedule_layer, "configured")
