@@ -93,7 +93,7 @@ def get_timetable_view(connection: Any, school_id: int, profile_id: int, view_ty
     weekday_remedials = [row for row in remedial_sessions if not row["is_weekend"]]
     weekend_groups = {}
     for row in weekend_sessions:
-        label = row["rotation_label"] or ("Weekend " + ("1" if row.get("session_date") and __import__("datetime").date.fromisoformat(str(row["session_date"])).isocalendar().week % 2 else "2"))
+        label = row["rotation_label"] or "Weekend schedule"
         weekend_groups.setdefault(label, []).append(row)
 
     return {
@@ -163,8 +163,21 @@ def _load_advanced_sessions(cur, school_id: int, profile_id: int, view_type: str
                 if label not in labels:
                     labels.append(label)
             rotation_labels[occurrence["date"]] = " / ".join(labels) if labels else ""
+    profile_dates = cur.execute(
+        "SELECT academic_start_date FROM ds_timetable_profiles WHERE id=? AND school_id=?",
+        (profile_id, school_id),
+    ).fetchone()
+    from datetime import date, timedelta
+    academic_start = date.fromisoformat(str(profile_dates["academic_start_date"])) if profile_dates and profile_dates["academic_start_date"] else None
+    first_saturday = academic_start + timedelta(days=(5 - academic_start.weekday()) % 7) if academic_start else None
     for row in sessions:
         row["rotation_label"] = rotation_labels.get(str(row["session_date"]), "") if row["session_date"] else ""
         row["is_weekend"] = str(row.get("day_code") or "").upper() in {"SAT", "SUN"}
         row["is_remedial"] = str(row.get("schedule_layer") or "") == "additional_learning"
+        if row["is_weekend"] and not row["rotation_label"] and row.get("session_date") and first_saturday:
+            target = date.fromisoformat(str(row["session_date"]))
+            weekend_number = max(0, (target - first_saturday).days // 7) % 2 + 1
+            row["rotation_label"] = "Weekend " + str(weekend_number)
+        elif row["is_weekend"] and not row["rotation_label"]:
+            row["rotation_label"] = "Weekend schedule"
     return sessions
