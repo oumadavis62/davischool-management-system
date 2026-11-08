@@ -24,7 +24,8 @@ from app.timetable.setup import (
     save_class_limits,
     _profile,
 )
-from app.timetable.advanced_setup import save_timetable_constraint, save_requirement_session_pattern
+from app.timetable.advanced_setup import save_timetable_constraint, save_requirement_session_pattern, create_scheduling_requirement, save_scheduling_pattern
+from app.timetable.session_engine import create_teaching_group
 
 
 def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
@@ -244,6 +245,10 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
         con.close()
 
         esc = lambda value: escape(str(value if value is not None else ""))
+        class_group_options = "".join(f"<option value='{int(row['id'])}'>{esc(row['name'])} {esc(row['stream'] or '')}</option>" for row in class_records)
+        teacher_group_options = "".join(f"<option value='{int(row['id'])}'>{esc(row['name'])}</option>" for row in teachers)
+        subject_group_options = "".join(f"<option value='{int(row['id'])}'>{esc(row['name'])}</option>" for row in subjects) if selected else ""
+        room_options = "<option value=''>No room preference</option>" + "".join(f"<option value='{int(row['id'])}'>{esc(row['name'])} ({esc(row['room_type'])})</option>" for row in rooms)
         profile_options = "".join(
             f"<option value='{int(p['id'])}' {'selected' if selected and int(p['id'])==int(selected['id']) else ''}>{esc(p['academic_year'])} · {esc(p['term'])} — {esc(p['name'])} ({esc(p['status'])})</option>"
             for p in profiles
@@ -441,6 +446,21 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
             <section class='tt-section'><div class='tt-section-title'><div><span class='tt-kicker'>06 · STAFF AVAILABILITY</span><h3>Teacher availability</h3><p>All teachers are available by default. Add a teacher only when you need to set fallback periods or block specific periods.</p></div></div><div class='tt-availability-editor'><form method='post' data-native-post='true' action='/app/timetable/setup/availability-matrix' class='tt-form compact'>{hidden}<label>Teacher<select name='teacher_id' id='tt-availability-teacher' required>{teacher_opts}</select></label><div class='tt-availability-legend'><span><b>✓</b> Available first</span><span><b>Blank</b> Fallback only</span><span><b>X</b> Never place</span></div><div class='tt-table tt-availability-grid'><table><thead><tr><th>Day / Period</th>{matrix_period_headers}</tr></thead><tbody>{matrix_day_rows}</tbody></table></div><p class='tt-muted'>Every cell starts ticked (available). Tap to cycle: ✓ available → blank (fallback only) → X (never place). The generator tries all ticked periods first and uses blank periods only when needed to complete the timetable.</p><button class='tt-btn'>Save teacher availability</button></form><div class='tt-availability-summary'><label class='tt-summary-search'>Search teachers<input type='search' data-availability-search='teacher' placeholder='Find teacher…'></label><div class='tt-table'><h4>Teacher restrictions</h4><table><thead><tr><th>Teacher</th><th title='Total restricted cells'>#</th><th title='Available'>✓</th><th title='Fallback only'>—</th><th title='Unavailable'>X</th><th>Actions</th></tr></thead><tbody>{availability_rows}</tbody></table></div></div></div></section>
             {class_limit_form}
             <section class='tt-section'><div class='tt-section-title'><div><span class='tt-kicker'>07 · SUBJECT AVAILABILITY</span><h3>Subject availability</h3><p>All subjects are available in every configured lesson period by default. Add a subject only when you need to make certain periods fallback-only or completely unavailable.</p></div></div><div class='tt-availability-editor'><form method='post' data-native-post='true' action='/app/timetable/setup/subject-availability-matrix' class='tt-form compact'>{hidden}<label>Subject<select name='subject_id' id='tt-subject-availability' required>{''.join(f"<option value='{int(x['id'])}'>{esc(x['name'])}</option>" for x in subjects)}</select></label><div class='tt-availability-legend'><span><b>✓</b> Available first</span><span><b>Blank</b> Fallback only</span><span><b>X</b> Never schedule</span></div><div class='tt-table tt-availability-grid'><table><thead><tr><th>Day / Period</th>{subject_matrix_period_headers}</tr></thead><tbody>{subject_matrix_day_rows}</tbody></table></div><p class='tt-muted'>Every cell starts ticked. Tap to cycle: ✓ available → blank (fallback only) → X (never schedule). The generator tries ticked periods first and uses blank periods only when needed to complete the timetable.</p><button class='tt-btn'>Save subject availability</button></form><div class='tt-availability-summary'><label class='tt-summary-search'>Search subjects<input type='search' data-availability-search='subject' placeholder='Find subject…'></label><div class='tt-table'><h4>Subject restrictions</h4><table><thead><tr><th>Subject</th><th title='Total restricted cells'>#</th><th title='Available'>✓</th><th title='Fallback only'>—</th><th title='Unavailable'>X</th><th>Actions</th></tr></thead><tbody>{subject_availability_rows}</tbody></table></div></div></div></section>
+            <section class='tt-section'>
+              <div class='tt-section-title'><div><span class='tt-kicker'>08 · SHARED TEACHING</span><h3>Combined classes & co-teaching</h3><p>Set up shared lessons here before automatic generation. The automatic timetable generator will schedule these together with ordinary class lessons — Manual Builder is not required.</p></div></div>
+              <form method='post' data-native-post='true' action='/app/timetable/setup/combined-classes' class='tt-form'>
+                ${hidden}
+                <label class='wide'>Shared lesson name<input name='name' required maxlength='120' placeholder='e.g. Grade 7 combined Mathematics'></label>
+                <label>Classes / streams<select name='class_ids' multiple required size='5'>${class_group_options}</select><small>Select at least two classes.</small></label>
+                <label>Teaching team<select name='teacher_ids' multiple required size='5'>${teacher_group_options}</select><small>Select one or more teachers for co-teaching.</small></label>
+                <label>Subject<select name='subject_id' required><option value=''>Choose subject</option>${subject_group_options}</select></label>
+                <label>Session duration<select name='duration_periods'><option value='1'>1 period</option><option value='2'>2 consecutive periods</option><option value='3'>3 consecutive periods</option><option value='4'>4 consecutive periods</option></select></label>
+                <label>Room type<select name='room_type'><option value='classroom'>Classroom</option><option value='laboratory'>Laboratory</option><option value='library'>Library</option><option value='hall'>Hall</option><option value='workshop'>Workshop</option><option value='sports'>Sports facility</option><option value='other'>Other</option></select></label>
+                <label>Room allocation<select name='room_assignment_mode'><option value='automatic'>Automatic</option><option value='preferred'>Preferred</option><option value='fixed'>Fixed</option></select></label>
+                <label>Preferred / fixed room<select name='preferred_room_id'>${room_options}</select></label>
+                <div class='wide'><button class='tt-btn'>＋ Save shared lesson for automatic generation</button></div>
+              </form>
+            </section>
             <section class='tt-section'><div class='tt-section-title'><div><span class='tt-kicker'>08 · WEEKLY LESSON LOAD</span><h3>Subject requirements</h3><p>Set each subject's weekly lesson load once and apply it across all classes and streams where it is taught. Teacher allocations are matched automatically.</p></div></div><div class='tt-split'><div>{bulk_requirement_form}</div><div class='tt-req-workspace'><div class='tt-req-toolbar'><label class='tt-req-search'><span>Search requirements</span><input type='search' id='tt-req-search' placeholder='Search class, subject or teacher…'></label><details class='tt-req-filter'><summary>⚙ Filters <span id='tt-req-filter-count'>All</span></summary><div class='tt-req-filter-panel'><div class='tt-req-filter-head'><strong>Filter requirements</strong><button type='button' class='tt-req-filter-close' aria-label='Close filters' title='Close filters'>×</button></div><label>Class / stream<select id='tt-req-class'><option value=''>All classes</option>{requirement_class_filters}</select></label><label>Subject<select id='tt-req-subject'><option value=''>All subjects</option>{requirement_subject_filters}</select></label><label>Teacher<select id='tt-req-teacher'><option value=''>All teachers</option>{requirement_teacher_filters}</select></label><button type='button' class='tt-btn secondary' id='tt-req-reset'>Clear filters</button></div></details><span class='tt-req-count' id='tt-req-count'></span></div><div class='tt-table tt-req-table'><table><thead><tr><th>Class / stream</th><th>Subject</th><th>Weekly requirement</th><th>Teacher</th><th>Manage</th></tr></thead><tbody>{requirement_rows}</tbody></table></div><div class='tt-req-pagination'><span id='tt-req-page-info'></span><div><button type='button' class='tt-btn secondary' id='tt-req-prev'>← Previous</button><button type='button' class='tt-btn secondary' id='tt-req-next'>Next →</button></div></div></div></div></section>
             """
         body = f"""
@@ -1376,3 +1396,72 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
             con.rollback()
             return redirect_setup(profile_id, str(exc), True)
         finally: con.close()
+
+
+    @app.post("/app/timetable/setup/combined-classes")
+    def create_setup_combined_requirement(
+        request: Request, profile_id: int = Form(...), name: str = Form(...),
+        class_ids: list[int] = Form(...), teacher_ids: list[int] = Form(...),
+        subject_id: int = Form(...), duration_periods: int = Form(1),
+        room_type: str = Form("classroom"), room_assignment_mode: str = Form("automatic"),
+        preferred_room_id: str = Form(""),
+    ):
+        school = school_for(request)
+        if not school:
+            return RedirectResponse("/", 303)
+        con = get_db()
+        try:
+            school_id = int(school["id"])
+            classes = list(dict.fromkeys(int(value) for value in class_ids))
+            teachers_selected = list(dict.fromkeys(int(value) for value in teacher_ids))
+            label = (name or "").strip()
+            if len(classes) < 2:
+                raise TimetableSetupError("Select at least two classes or streams for a shared lesson.")
+            if not teachers_selected:
+                raise TimetableSetupError("Select at least one teacher for the shared teaching team.")
+            if not label:
+                raise TimetableSetupError("Enter a name for this shared lesson.")
+            if not 1 <= int(duration_periods) <= 4:
+                raise TimetableSetupError("A shared lesson must occupy 1–4 consecutive periods.")
+            mode = (room_assignment_mode or "automatic").strip().lower()
+            room_id = int(preferred_room_id) if preferred_room_id.strip() else None
+            if mode not in {"automatic", "preferred", "fixed"}:
+                raise TimetableSetupError("Choose Automatic, Preferred or Fixed room allocation.")
+            if mode in {"preferred", "fixed"} and room_id is None:
+                raise TimetableSetupError("Choose a room for Preferred or Fixed allocation.")
+            if con.execute(
+                "SELECT id FROM ds_timetable_teaching_groups WHERE school_id=? AND profile_id=? AND name=? AND is_active=1",
+                (school_id, profile_id, label),
+            ).fetchone():
+                raise TimetableSetupError("A shared teaching group with that name already exists in this timetable.")
+            if not con.execute("SELECT id FROM subjects WHERE id=? AND school_id=?", (subject_id, school_id)).fetchone():
+                raise TimetableSetupError("Choose a subject belonging to this school.")
+            if room_id is not None:
+                room = con.execute("SELECT room_type,is_active FROM ds_timetable_rooms WHERE id=? AND school_id=?", (room_id, school_id)).fetchone()
+                if not room or not int(room["is_active"] or 0):
+                    raise TimetableSetupError("Choose an active room belonging to this school.")
+                if room_type and str(room["room_type"]) != room_type:
+                    raise TimetableSetupError("The preferred or fixed room must match the selected room type.")
+            group_id = create_teaching_group(
+                con, school_id, profile_id, label, classes,
+                group_type="combined_class", subject_id=subject_id,
+                notes="Shared class session configured from Timetable Setup.",
+            )
+            requirement_id = create_scheduling_requirement(
+                con, school_id, profile_id, label + " — combined session",
+                class_ids=classes, teacher_ids=teachers_selected, schedule_layer="instructional",
+                session_type="lesson", subject_id=subject_id, teaching_group_id=group_id,
+                weekly_occurrences=1, weekly_periods=int(duration_periods),
+                counts_toward_curriculum=True, min_teacher_count=1,
+                room_type=room_type, room_assignment_mode=mode, preferred_room_id=room_id,
+            )
+            save_scheduling_pattern(
+                con, school_id, profile_id, requirement_id,
+                [{"duration_periods": int(duration_periods), "session_label": "Combined lesson"}],
+            )
+            return redirect_setup(profile_id, "Shared lesson saved. It is ready for automatic timetable generation.")
+        except (TimetableSetupError, ValueError) as exc:
+            con.rollback()
+            return redirect_setup(profile_id, str(exc), True)
+        finally:
+            con.close()
