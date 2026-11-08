@@ -686,6 +686,21 @@ class TimetableSessionEngineTests(unittest.TestCase):
         ).fetchone()[0]
         self.assertEqual(count, 2)
 
+    def test_normalized_session_cannot_clash_with_legacy_weekly_lesson(self):
+        self.db.execute(
+            """INSERT INTO ds_timetable_lessons
+               (school_id,profile_id,class_id,subject_id,teacher_id,room_id,
+                day_id,period_id,duration_periods,status,created_by,created_at,updated_at)
+               VALUES(8,?,?,1,11,NULL,?,?,1,'scheduled','admin','2027-01-01','2027-01-01')""",
+            (self.profile_id, 1, self.day_id, self.period_id),
+        )
+        with self.assertRaisesRegex(TimetableSetupError, "conflicts with"):
+            create_scheduled_session(
+                self.db, 8, self.profile_id, "08:00", "08:40",
+                class_ids=[1], teacher_ids=[11], day_id=self.day_id,
+                period_id=self.period_id,
+            )
+
     def test_activity_type_can_require_teacher_and_venue(self):
         self.db.execute(
             """INSERT INTO ds_timetable_activity_types
