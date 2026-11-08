@@ -718,8 +718,23 @@ def _shell(title, name, role, body, school_id=None, request=None):
         links = "".join(f"<a href='{u}' class='nav{(' active' if (l == 'Overview' and title == 'DaviSchool') or (l == 'Record Marks' and title == 'Record Marks') else '')}' data-teacher-nav='1'><span>{i}</span>{escape(l)}</a>" for u,i,l,_permission in teacher_nav)
     else:
         def _nav_sub(url, label):
-            route = url.split("?", 1)[0]
-            active = request_path == route or (route != "/app/academics" and request_path.startswith(route + "/"))
+            route, _sep, target_query = url.partition("?")
+            # A sidebar destination is active only when its exact path and
+            # functional query parameters match. Ignore ds_tab because it is
+            # session continuity metadata, not a page/tab selector.
+            target_params = {}
+            for part in target_query.split("&") if target_query else ():
+                if not part:
+                    continue
+                key, _equals, value = part.partition("=")
+                if key != "ds_tab":
+                    target_params[key] = value
+            current_params = {
+                key: str(value)
+                for key, value in request.query_params.items()
+                if key != "ds_tab"
+            }
+            active = request_path == route and current_params == target_params
             if label == "Students List":
                 active = request_path == route and not request.query_params.get("status")
             elif label == "Transferred/Inactive List":
