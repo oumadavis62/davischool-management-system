@@ -751,7 +751,7 @@ def _shell(title, name, role, body, school_id=None, request=None):
                 "Parent & Guardian Register":"users", "Parent–Learner Linking":"allocation", "Parent Portal Access":"key",
                 "School Notices":"announcement", "Parent Meetings":"calendar", "Service Requests":"clipboard-check",
                 "Parent & Student Reports":"chart", "Announcements":"announcement", "Users":"users",
-                "Roles & Permissions":"shield", "School Settings":"settings", "Smart Timetable":"calendar", "Audit Trail":"audit"
+                "Roles & Permissions":"shield", "School Settings":"settings", "Smart Timetable":"calendar", "Timetable Overview":"calendar", "Timetable Setup":"settings", "Teaching Requirements":"book-open", "Subject Allocations":"allocation", "Staff Availability":"calendar", "Timetable Constraints":"shield", "Smart Timetable Generator":"wand-sparkles", "Manual Timetable Builder":"pencil-ruler", "Generated Timetables &amp; Printing":"printer", "Validation, Review &amp; Publish":"clipboard-check", "Audit Trail":"audit"
             }
             icon = _modern_icon(icons.get(label, "circle"))
             return f"<a href='{url}' class='nav-sub{' active' if active else ''}'><span class='nav-sub-icon'>{icon}</span><span>{escape(label)}</span></a>"
@@ -798,6 +798,29 @@ def _shell(title, name, role, body, school_id=None, request=None):
             + _nav_sub("/app/staff/appraisals", "Staff Appraisals")
             + _nav_sub("/app/staff/hr-reports", "HR Reports")
             + _nav_sub("/app/staff/former", "Former Staff")
+            + "</div></details>"
+        )
+        timetable_group = (
+            "<details class='nav-group' id='timetableManagerNav' "
+            + ("open" if request_path.startswith("/app/timetable/") or request_path == "/app/timetable" or request_path == "/app/academics/subject-allocation" else "") + ">"
+            + f"<summary class='nav staff-manager-summary'><span>{_modern_icon('calendar')}</span><b>Timetable Management</b><span class='nav-chevron'>▾</span></summary>"
+            + "<div class='nav-submenu'>"
+            + _nav_sub("/app/timetable", "Timetable Overview")
+            + "<details class='nav-group nav-subgroup' " + ("open" if request_path.startswith("/app/timetable/setup") or request_path.startswith("/app/timetable/constraints") else "") + "><summary class='nav-sub nav-subgroup-summary' onclick='event.preventDefault();event.stopPropagation();this.parentElement.open=!this.parentElement.open'><span class='nav-sub-icon'>" + _modern_icon("settings") + "</span><b>Configuration &amp; Requirements</b><span class='nav-chevron'>▾</span></summary><div class='nav-submenu nav-nested-submenu'>"
+            + _nav_sub("/app/timetable/setup", "Timetable Setup")
+            + _nav_sub("/app/timetable/setup?tab=requirements", "Teaching Requirements")
+            + _nav_sub("/app/academics/subject-allocation", "Subject Allocations")
+            + _nav_sub("/app/timetable/setup?tab=availability", "Staff Availability")
+            + _nav_sub("/app/timetable/constraints", "Timetable Constraints")
+            + "</div></details>"
+            + "<details class='nav-group nav-subgroup' " + ("open" if request_path.startswith("/app/timetable/automatic") else "") + "><summary class='nav-sub nav-subgroup-summary' onclick='event.preventDefault();event.stopPropagation();this.parentElement.open=!this.parentElement.open'><span class='nav-sub-icon'>" + _modern_icon("calendar") + "</span><b>Generation</b><span class='nav-chevron'>▾</span></summary><div class='nav-submenu nav-nested-submenu'>"
+            + _nav_sub("/app/timetable/automatic", "Smart Timetable Generator")
+            + "</div></details>"
+            + "<details class='nav-group nav-subgroup' " + ("open" if request_path.startswith("/app/timetable/builder") or request_path.startswith("/app/timetable/views") else "") + "><summary class='nav-sub nav-subgroup-summary' onclick='event.preventDefault();event.stopPropagation();this.parentElement.open=!this.parentElement.open'><span class='nav-sub-icon'>" + _modern_icon("school") + "</span><b>Timetable Workspace</b><span class='nav-chevron'>▾</span></summary><div class='nav-submenu nav-nested-submenu'>"
+            + _nav_sub("/app/timetable/builder", "Manual Timetable Builder")
+            + _nav_sub("/app/timetable/views", "Generated Timetables &amp; Printing")
+            + "</div></details>"
+            + _nav_sub("/app/timetable/publishing", "Validation, Review &amp; Publish")
             + "</div></details>"
         )
         def _academic_dropdown(label, items, active=False, group_id=""):
@@ -979,7 +1002,7 @@ def _shell(title, name, role, body, school_id=None, request=None):
             elif u == "/app/finance":
                 if role in ("school_admin", "registrar"):
                     nav_markup.append("<div class='nav-section-label'>ACADEMIC OPERATIONS</div>")
-                    nav_markup.append(_nav_sub("/app/timetable", "Smart Timetable"))
+                    nav_markup.append(timetable_group)
                 nav_markup.append("<div class='nav-section-label'>FINANCE &amp; RESOURCES</div>")
             item_html = (
                 admissions_group if u == "/app/admissions" and role in ("school_admin", "registrar")
