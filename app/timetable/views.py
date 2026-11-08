@@ -87,6 +87,15 @@ def get_timetable_view(connection: Any, school_id: int, profile_id: int, view_ty
         " ORDER BY d.day_order,p.period_no,c.name,s.name",
         tuple(params),
     ).fetchall()
+    advanced_sessions = _load_advanced_sessions(cur, school_id, profile_id, view_type, target_id)
+    weekend_sessions = [row for row in advanced_sessions if row["is_weekend"]]
+    remedial_sessions = [row for row in advanced_sessions if row["is_remedial"]]
+    weekday_remedials = [row for row in remedial_sessions if not row["is_weekend"]]
+    weekend_groups = {}
+    for row in weekend_sessions:
+        label = row["rotation_label"] or ("Weekend " + ("1" if row.get("session_date") and __import__("datetime").date.fromisoformat(str(row["session_date"])).isocalendar().week % 2 else "2"))
+        weekend_groups.setdefault(label, []).append(row)
+
     return {
         "title": title,
         "profile": profile,
@@ -96,4 +105,65 @@ def get_timetable_view(connection: Any, school_id: int, profile_id: int, view_ty
         "periods": periods,
         "breaks": breaks,
         "lessons": lessons,
+        "advanced_sessions": advanced_sessions,
+        "weekend_sessions": weekend_sessions,
+        "weekend_groups": weekend_groups,
+        "remedial_sessions": remedial_sessions,
+        "weekday_remedials": weekday_remedials,
     }
+
+
+def _load_advanced_sessions(cur, school_id: int, profile_id: int, view_type: str, target_id: int):
+    """Load normalized dated/weekly sessions for consolidated remedial/weekend sheets."""
+    from app.timetable.advanced_setup import expand_calendar_occurrences
+
+    conditions = []
+    params = [school_id, profile_id]
+    if view_type == "class":
+        conditions.append("EXISTS(SELECT 1 FROM ds_timetable_session_classes sc WHERE sc.session_id=s.id AND sc.school_id=s.school_id AND sc.class_id=?)")
+        params.append(target_id)
+    elif view_type == "teacher":
+        conditions.append("EXISTS(SELECT 1 FROM ds_timetable_session_teachers st WHERE st.session_id=s.id AND st.school_id=s.school_id AND st.teacher_id=?)")
+        params.append(target_id)
+    elif view_type == "room":
+        conditions.append("s.room_id=?")
+        params.append(target_id)
+    where = (" AND " + " AND ".join(conditions)) if conditions else ""
+    rows = cur.execute(
+        """SELECT s.*,d.day_code,d.day_name,sub.name subject_name,rm.name room_name,
+                  p.name programme_name,
+                  (SELECT group_concat(c.name || CASE WHEN COALESCE(c.stream,'')='' THEN '' ELSE ' ' || c.stream END, ', ')
+                   FROM ds_timetable_session_classes sc JOIN classes c ON c.id=sc.class_id AND c.school_id=sc.school_id
+                   WHERE sc.session_id=s.id AND sc.school_id=s.school_id) class_names,
+                  (SELECT group_concat(t.name, ', ')
+                   FROM ds_timetable_session_teachers st JOIN teachers t ON t.id=st.teacher_id AND t.school_id=st.school_id
+                   WHERE st.session_id=s.id AND st.school_id=s.school_id) teacher_names
+           FROM ds_timetable_sessions s
+           LEFT JOIN ds_timetable_days d ON d.id=s.day_id AND d.profile_id=s.profile_id
+           LEFT JOIN subjects sub ON sub.id=s.subject_id AND sub.school_id=s.school_id
+           LEFT JOIN ds_timetable_rooms rm ON rm.id=s.room_id AND rm.school_id=s.school_id
+           LEFT JOIN ds_timetable_learning_programmes p ON p.id=s.programme_id AND p.profile_id=s.profile_id
+           WHERE s.school_id=? AND s.profile_id=? AND s.status='scheduled'""" + where +
+        " ORDER BY COALESCE(s.session_date,'9999-12-31'),s.start_time,s.id",
+        tuple(params),
+    ).fetchall()
+    sessions = [dict(row) for row in rows]
+    dated = [str(row["session_date"]) for row in sessions if row["session_date"]]
+    rotation_labels = {}
+    if dated:
+        occurrences = expand_calendar_occurrences(
+            cur.connection, school_id, profile_id, min(dated), max(dated), include_closed=True
+        )
+        for occurrence in occurrences:
+            rotations = occurrence.get("rotations", [])
+            labels = []
+            for rotation in rotations:
+                label = str(rotation.get("label") or ("Weekend " + str(rotation.get("week_number"))))
+                if label not in labels:
+                    labels.append(label)
+            rotation_labels[occurrence["date"]] = " / ".join(labels) if labels else ""
+    for row in sessions:
+        row["rotation_label"] = rotation_labels.get(str(row["session_date"]), "") if row["session_date"] else ""
+        row["is_weekend"] = str(row.get("day_code") or "").upper() in {"SAT", "SUN"}
+        row["is_remedial"] = str(row.get("schedule_layer") or "") == "additional_learning"
+    return sessions
