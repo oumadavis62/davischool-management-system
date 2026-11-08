@@ -109,7 +109,7 @@ def _placement_context(cursor: Any, school_id: int, profile_id: int, class_id: i
            WHERE school_id=? AND profile_id=? AND class_id=? AND status='scheduled' AND id<>?""",
         (school_id, profile_id, class_id, exclude_lesson_id),
     ).fetchone()["total"]
-    if class_limit and class_limit["max_lessons_per_week"] is not None and int(class_lessons) >= int(class_limit["max_lessons_per_week"]) and not exclude_lesson_id:
+    if class_limit and class_limit["max_lessons_per_week"] is not None and int(class_lessons) >= int(class_limit["max_lessons_per_week"]):
         raise TimetableSetupError("The class has reached its maximum number of lessons per week.")
     if class_limit and class_limit["max_periods_per_day"] is not None:
         daily = [x for x in existing if int(x["class_id"]) == int(class_id)]
