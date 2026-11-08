@@ -320,7 +320,7 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
             # retain the remaining occurrences as ordinary single-period lessons.
             planned_sessions.extend(
                 {"duration": 1, "preferred_period_id": None}
-                for _ in range(max(0, remaining - len(planned_sessions)))
+                for _ in range(max(0, weekly - len(planned_sessions)))
             )
         else:
             planned_sessions = [
