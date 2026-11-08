@@ -460,6 +460,14 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
         <script>
         (function(){{
           const root=document.querySelector('.tt-wrap'); if(!root) return;
+          let ttPreviousBodyOverflow=null;
+          function releaseTimetableScrollLock(){{
+            if(ttPreviousBodyOverflow!==null){{
+              document.body.style.overflow=ttPreviousBodyOverflow;
+              ttPreviousBodyOverflow=null;
+            }}
+            document.querySelectorAll('.tt-modal.is-open').forEach(modal=>modal.classList.remove('is-open'));
+          }}
           // Make every setup POST form carry the active tab session explicitly.
           // These forms are moved into modal containers below; this local guard
           // keeps their session identity even if the shared tab-session script
@@ -580,6 +588,9 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
                 if(!nextRoot) throw new Error('The server response did not contain the timetable setup page. The server may have redirected your session.');
                 const currentRoot=document.querySelector('.tt-wrap');
                 if(!currentRoot) throw new Error('The timetable setup page is no longer available.');
+                // Replacing the setup workspace also removes its modal. Always
+                // release the body scroll lock before removing that modal host.
+                releaseTimetableScrollLock();
                 currentRoot.replaceWith(nextRoot);
                 const initializer=Array.from(parsed.scripts).find(script=>script.textContent.includes('Keep every setup panel collapsed'));
                 if(initializer&&initializer.textContent){{
@@ -614,10 +625,11 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
             const openModal=(form,mode)=>{{
               formSlot.replaceChildren(form);
               copy.querySelector('h3').textContent=(mode==='edit'?'Edit ':'Add ')+title;
+              if(ttPreviousBodyOverflow===null) ttPreviousBodyOverflow=document.body.style.overflow;
               host.classList.add('is-open'); document.body.style.overflow='hidden'; close.focus();
             }};
             const closeModal=()=>{{
-              host.classList.remove('is-open'); document.body.style.overflow='';
+              host.classList.remove('is-open'); releaseTimetableScrollLock();
               formSlot.replaceChildren(...(addForm?[addForm]:[]));
               copy.querySelector('h3').textContent='Add '+title;
               if(open) open.focus();
