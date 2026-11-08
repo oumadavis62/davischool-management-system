@@ -9,7 +9,7 @@ from app.timetable.setup import TimetableSetupError, _profile
 from app.timetable.session_engine import _validate_constraints
 
 
-ENGINE_VERSION = "1.3"
+ENGINE_VERSION = "1.4"
 DEFAULT_NODE_LIMIT = 100000
 
 
@@ -531,6 +531,27 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
         )
         for i, candidates in candidates_by_task
     }
+    # Identical weekly occurrences are interchangeable. Without symmetry
+    # breaking, backtracking explores every permutation of the same subject's
+    # repeated lessons (up to N! equivalent branches). Give each identical
+    # occurrence a stable candidate order and require later occurrences to use
+    # a strictly later slot. This removes equivalent permutations without
+    # removing any distinct timetable solution.
+    symmetry_groups = {}
+    next_symmetry_group = 0
+    symmetry_group_by_task = {}
+    for task_index, task in enumerate(tasks):
+        signature = (
+            int(task["class_id"]), int(task["subject_id"]), int(task["teacher_id"]),
+            int(task["duration"]), task.get("preferred_period_id"),
+            task.get("max_lessons_per_day"), task.get("max_lessons_per_week"),
+            task.get("max_periods_per_day"),
+        )
+        if signature not in symmetry_groups:
+            symmetry_groups[signature] = next_symmetry_group
+            next_symmetry_group += 1
+        symmetry_group_by_task[task_index] = symmetry_groups[signature]
+
     placements = list(fixed)
     nodes = 0
     exhausted = False
@@ -601,14 +622,22 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
             return False
         task_index = order[position]
         task = tasks[task_index]
+        symmetry_group = symmetry_group_by_task[task_index]
+        prior_ranks = [
+            int(placed["_candidate_rank"])
+            for placed in placements
+            if placed.get("_symmetry_group") == symmetry_group
+        ]
+        minimum_rank = max(prior_ranks, default=-1)
         eligible_candidates = [
-            candidate for candidate in candidate_lookup[task_index]
-            if fallback or candidate.get("explicitly_available")
+            (rank, candidate)
+            for rank, candidate in enumerate(candidate_lookup[task_index])
+            if rank > minimum_rank
+            and (fallback or candidate.get("explicitly_available"))
         ]
         # Preserve the precomputed candidate order during recursion. Dynamic
         # scoring here was the dominant cost for large school workloads.
-        candidates = eligible_candidates
-        for candidate in candidates:
+        for candidate_rank, candidate in eligible_candidates:
             room_order = sorted(
                 _rooms_for_task(task),
                 key=lambda room: sum(
@@ -637,6 +666,8 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
                     "subject_id": task["subject_id"],
                     "teacher_id": task["teacher_id"],
                     "fixed": False,
+                    "_symmetry_group": symmetry_group,
+                    "_candidate_rank": candidate_rank,
                 })
                 placements.append(placement)
                 if search(position + 1, fallback):
