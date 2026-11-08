@@ -451,6 +451,33 @@ class TimetableSessionEngineTests(unittest.TestCase):
         self.assertIn("class:1", conflicts[0]["reasons"])
         self.assertIn("teacher:11", conflicts[0]["reasons"])
 
+    def test_dated_cross_layer_conflicts_cover_classes_teachers_learners_and_rooms(self):
+        self.db.execute(
+            "UPDATE ds_timetable_profiles SET academic_start_date=?,academic_end_date=? WHERE id=?",
+            ("2027-03-01", "2027-12-31", self.profile_id),
+        )
+        create_scheduled_session(
+            self.db, 8, self.profile_id, "08:00", "09:00",
+            schedule_layer="additional_learning", session_type="remedial",
+            class_ids=[1], teacher_ids=[11], learner_ids=[101], room_id=self.room_id,
+            day_id=self.day_id, session_date="2027-03-01",
+        )
+        conflicts = find_session_conflicts(
+            self.db, 8, self.profile_id, "08:30", "09:10",
+            class_ids=[1], teacher_ids=[11], learner_ids=[101], room_id=self.room_id,
+            day_id=self.day_id, session_date="2027-03-01",
+        )
+        self.assertEqual(len(conflicts), 1)
+        self.assertEqual(
+            set(conflicts[0]["reasons"]),
+            {"class:1", "teacher:11", "learner:101", f"room:{self.room_id}"},
+        )
+        other_date = find_session_conflicts(
+            self.db, 8, self.profile_id, "08:30", "09:10",
+            class_ids=[1], teacher_ids=[11], learner_ids=[101], room_id=self.room_id,
+            day_id=self.day_id, session_date="2027-03-08",
+        )
+        self.assertEqual(other_date, [])
     def test_room_capacity_and_school_tenant_boundaries_are_enforced(self):
         with self.assertRaises(TimetableSetupError):
             create_scheduled_session(
