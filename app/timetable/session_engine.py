@@ -374,7 +374,7 @@ def find_session_conflicts(connection: Any, school_id: int, profile_id: int,
                            ON e.school_id=l.school_id AND e.profile_id=l.profile_id
                           AND e.period_no=p.period_no+COALESCE(l.duration_periods,1)-1
                          WHERE l.school_id=? AND l.profile_id=? AND l.day_id=?
-                           AND l.status='scheduled'
+                           AND l.status='scheduled' AND l.generation_run_id IS NULL
                            AND p.start_time < ? AND e.end_time > ?"""
         legacy_params = (school_id, profile_id, day_id, end_time, start_time)
         def collect_legacy(sql: str, values: tuple[Any, ...], reason: str) -> None:
