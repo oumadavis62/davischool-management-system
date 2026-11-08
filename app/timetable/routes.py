@@ -475,7 +475,7 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
             }},false);
           }}
           let serial=0;
-          root.querySelectorAll('.tt-section').forEach(section=>{
+          root.querySelectorAll('.tt-section').forEach(section=>{{
             const addForm=Array.from(section.querySelectorAll('.tt-form.compact')).find(form=>!form.closest('.tt-table')&&!form.closest('details'))||null;
             const title=section.querySelector('h3')?.textContent?.trim()||'Configuration';
             const modalId='tt-setup-modal-'+(++serial);
@@ -487,34 +487,34 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
             head.append(copy,close);
             const formSlot=document.createElement('div'); formSlot.className='tt-modal-form-slot';
             let open=null;
-            if(addForm){const addParent=addForm.parentNode; const card=document.createElement('div'); card.className='tt-add-card'; open=document.createElement('button'); open.type='button'; open.className='tt-btn secondary'; open.innerHTML='<span aria-hidden="true">＋</span> Add '+title.toLowerCase(); card.append(open); addParent.replaceChild(card,addForm); formSlot.append(addForm);}
+            if(addForm){{const addParent=addForm.parentNode; const card=document.createElement('div'); card.className='tt-add-card'; open=document.createElement('button'); open.type='button'; open.className='tt-btn secondary'; open.innerHTML='<span aria-hidden="true">＋</span> Add '+title.toLowerCase(); card.append(open); addParent.replaceChild(card,addForm); formSlot.append(addForm);}}
             dialog.append(head,formSlot); host.append(dialog); root.append(host);
-            const openModal=(form,mode)=>{
+            const openModal=(form,mode)=>{{
               formSlot.replaceChildren(form);
               copy.querySelector('h3').textContent=(mode==='edit'?'Edit ':'Add ')+title;
               host.classList.add('is-open'); document.body.style.overflow='hidden'; close.focus();
-            };
-            const closeModal=()=>{
+            }};
+            const closeModal=()=>{{
               host.classList.remove('is-open'); document.body.style.overflow='';
               formSlot.replaceChildren(...(addForm?[addForm]:[]));
               copy.querySelector('h3').textContent='Add '+title;
               if(open) open.focus();
-            };
+            }};
             if(open) open.addEventListener('click',()=>openModal(addForm,'add'));
             close.addEventListener('click',closeModal);
-            host.addEventListener('click',e=>{if(e.target===host)closeModal();});
-            host.addEventListener('keydown',e=>{if(e.key==='Escape')closeModal();});
-            section.querySelectorAll('.tt-table details').forEach(details=>{
+            host.addEventListener('click',e=>{{if(e.target===host)closeModal();}});
+            host.addEventListener('keydown',e=>{{if(e.key==='Escape')closeModal();}});
+            section.querySelectorAll('.tt-table details').forEach(details=>{{
               const summary=details.querySelector('summary');
               const editForm=details.querySelector('form[method="post" i]');
               if(!summary||!editForm) return;
-              summary.addEventListener('click',event=>{
+              summary.addEventListener('click',event=>{{
                 event.preventDefault();
                 event.stopPropagation();
                 openModal(editForm,'edit');
-              });
-            });
-          });
+              }});
+            }});
+          }});
           // Keep every setup panel collapsed on initial page load.
           // A panel opens only after its own Open section control is activated.
           root.querySelectorAll('.tt-section').forEach(section=>{{
