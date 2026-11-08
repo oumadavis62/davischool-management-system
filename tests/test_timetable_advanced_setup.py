@@ -9,7 +9,8 @@ from app.timetable.advanced_setup import (
     create_rotation_cycle,
     create_schedule_template,
     save_rotation_week,
-    resolve_calendar_occurrence,\n    expand_calendar_occurrences,
+    resolve_calendar_occurrence,
+    expand_calendar_occurrences,
     save_schedule_slot,
     save_requirement_session_pattern,
 )
