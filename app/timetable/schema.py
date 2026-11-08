@@ -492,6 +492,8 @@ def ensure_timetable_schema(connection: Any) -> None:
     The schema deliberately uses only CREATE IF NOT EXISTS statements. There
     is no destructive migration and no startup-time rewrite of existing data.
     """
+    from app.db import acquire_schema_migration_lock
+    acquire_schema_migration_lock(connection)
     cursor = connection.cursor()
     for statement in _TABLES:
         cursor.execute(statement)
