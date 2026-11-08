@@ -46,15 +46,27 @@ class DaviSchoolTabSessionMiddleware:
         value = values[0] if values else ""
         if not _TAB_RE.fullmatch(value or ""):
             value = ""
-            if scope.get("type") == "http" and scope.get("method", "GET").upper() == "POST":
+            if scope.get("type") == "http":
                 headers = {k.lower(): v for k, v in scope.get("headers", [])}
                 referer = headers.get(b"referer", b"").decode("utf-8", "ignore")
-                if referer:
-                    referer_query = urlsplit(referer).query
-                    referer_values = parse_qs(referer_query, keep_blank_values=True).get(_TAB_PARAM, [])
-                    candidate = referer_values[0] if referer_values else ""
-                    if _TAB_RE.fullmatch(candidate or ""):
-                        value = candidate
+                request_host = headers.get(b"host", b"").decode("latin-1", "ignore").lower()
+                if referer and request_host:
+                    referer_parts = urlsplit(referer)
+                    # A same-origin navigation may omit ds_tab when a browser
+                    # extension, cached page, or delayed tab-session script
+                    # bypasses the click handler. Reuse the tab identity from
+                    # that page rather than selecting the empty legacy session
+                    # cookie and redirecting an authenticated user to login.
+                    if (
+                        referer_parts.scheme in ("http", "https")
+                        and referer_parts.netloc.lower() == request_host
+                    ):
+                        referer_values = parse_qs(
+                            referer_parts.query, keep_blank_values=True
+                        ).get(_TAB_PARAM, [])
+                        candidate = referer_values[0] if referer_values else ""
+                        if _TAB_RE.fullmatch(candidate or ""):
+                            value = candidate
         return value
 
     @staticmethod
