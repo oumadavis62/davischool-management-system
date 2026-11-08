@@ -255,7 +255,8 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
             )
             if selected_break:
                 actions = (
-                    "<details><summary>Edit</summary><form method='post' data-native-post='true' action='/app/timetable/setup/break' class='tt-form compact'>"
+                    "<div class='tt-break-actions' style='display:flex;align-items:center;justify-content:flex-start;gap:8px;flex-wrap:wrap;min-width:180px'>"
+                    + "<details class='tt-break-edit'><summary class='tt-btn' style='cursor:pointer;list-style:none;white-space:nowrap'>Edit</summary><form method='post' data-native-post='true' action='/app/timetable/setup/break' class='tt-form compact' style='min-width:230px;margin-top:8px'>"
                     + hidden
                     + f"<input type='hidden' name='break_no' value='{int(selected_break['break_no'])}'>"
                     + f"<label>Name<input name='label' value='{esc(selected_break['label'])}' required></label>"
@@ -263,24 +264,24 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
                     + f"<label>End<input type='time' name='end_time' value='{esc(selected_break['end_time'])}' required></label>"
                     + f"<label>Scope<select name='applies_to'><option value='all' {'selected' if selected_break['applies_to']=='all' else ''}>All</option><option value='selected' {'selected' if selected_break['applies_to']=='selected' else ''}>Selected</option></select></label>"
                     + "<button class='tt-btn'>Save changes</button></form></details>"
-                    + "<form method='post' data-native-post='true' action='/app/timetable/setup/row-delete' onsubmit='return confirm(&quot;Delete this selected break?&quot;)'>"
+                    + "<form method='post' data-native-post='true' action='/app/timetable/setup/row-delete' style='margin:0' onsubmit='return confirm(&quot;Delete this selected break?&quot;)'>"
                     + hidden
                     + f"<input type='hidden' name='kind' value='break'><input type='hidden' name='row_id' value='{int(selected_break['id'])}'>"
-                    + "<button class='tt-btn danger'>Delete</button></form>"
+                    + "<button class='tt-btn danger' style='white-space:nowrap'>Delete</button></form></div>"
                 )
             else:
                 actions = (
-                    "<form method='post' data-native-post='true' action='/app/timetable/setup/break-gap' class='tt-form compact'>"
+                    "<form method='post' data-native-post='true' action='/app/timetable/setup/break-gap' style='display:flex;align-items:flex-end;gap:8px;flex-wrap:wrap;margin:0;min-width:220px'>"
                     + hidden
                     + "<input type='hidden' name='start_time' value='" + esc(g["start_time"]) + "'>"
                     + "<input type='hidden' name='end_time' value='" + esc(g["end_time"]) + "'>"
-                    + "<label>Break name<input name='label' required placeholder='e.g. Tea break'></label>"
-                    + "<button class='tt-btn'>Select this gap</button></form>"
+                    + "<label style='margin:0;min-width:130px;flex:1'>Break name<input name='label' required placeholder='e.g. Tea break'></label>"
+                    + "<button class='tt-btn' style='white-space:nowrap'>Select gap</button></form>"
                 )
             display_label = selected_break["label"] if selected_break else g["label"]
             return (
                 f"<tr><td><b>{esc(display_label)}</b></td><td>{esc(g['start_time'])}–{esc(g['end_time'])}</td>"
-                + f"<td>{'Selected' if selected_break else 'Available'}</td><td>{actions}</td></tr>"
+                + f"<td>{'Selected' if selected_break else 'Available'}</td><td style='min-width:220px;vertical-align:middle'>{actions}</td></tr>"
             )
         break_candidate_rows = "".join(render_break_candidate_row(g) for g in break_candidates) or "<tr><td colspan='4' class='tt-muted'>No gaps detected. Adjust period times to create a gap.</td></tr>"
 
