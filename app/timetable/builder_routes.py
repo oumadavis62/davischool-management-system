@@ -501,6 +501,19 @@ def register_timetable_builder_routes(app, get_db, get_school_obj, module_page):
             room_id = int(preferred_room_id) if preferred_room_id.strip() else None
             if mode not in {"automatic", "preferred", "fixed"}: raise TimetableSetupError("Choose Automatic, Preferred or Fixed room allocation.")
             if mode in {"preferred", "fixed"} and room_id is None: raise TimetableSetupError("Choose a room for Preferred or Fixed allocation.")
+            school_id = int(school["id"])
+            if con.execute("SELECT id FROM ds_timetable_teaching_groups WHERE school_id=? AND profile_id=? AND name=? AND is_active=1", (school_id, profile_id, name.strip())).fetchone():
+                raise TimetableSetupError("A combined teaching group with that name already exists in this timetable.")
+            if con.execute("SELECT id FROM ds_timetable_scheduling_requirements WHERE school_id=? AND profile_id=? AND name=? AND is_active=1", (school_id, profile_id, name.strip() + " — combined session")).fetchone():
+                raise TimetableSetupError("A combined scheduling requirement with that name already exists.")
+            if not con.execute("SELECT id FROM subjects WHERE id=? AND school_id=?", (subject_id, school_id)).fetchone():
+                raise TimetableSetupError("Choose a subject belonging to this school.")
+            if room_id is not None:
+                room = con.execute("SELECT room_type,is_active FROM ds_timetable_rooms WHERE id=? AND school_id=?", (room_id, school_id)).fetchone()
+                if not room or not int(room["is_active"] or 0):
+                    raise TimetableSetupError("Choose an active room belonging to this school.")
+                if room_type and str(room["room_type"]) != room_type:
+                    raise TimetableSetupError("The preferred or fixed room must match the selected room type.")
             group_id = create_teaching_group(con, int(school["id"]), profile_id, name, classes,
                 group_type="combined_class", subject_id=subject_id,
                 notes="Combined class session with a shared teaching team.")
