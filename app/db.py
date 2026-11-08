@@ -336,14 +336,16 @@ def _get_pool(database_url: str, connect_timeout: int = 10) -> ConnectionPool:
             # a large per-process default can exhaust that shared limit when
             # the host runs multiple workers or instances.
             min_size = _pool_size("DAVISCHOOL_DB_POOL_MIN", 1, 1, 1)
-            # Supabase shared session-mode poolers have a small per-project
-            # client limit (15 in the affected deployment). This pool is
-            # process-local, so each worker/replica multiplies the limit.
-            # Keep the process-local pool deliberately small because each worker
-            # or replica owns a separate pool. Three connections allow normal
-            # page navigation plus a concurrent timetable edit without creating
-            # a large burst against the shared Supavisor pooler.
-            max_size = _pool_size("DAVISCHOOL_DB_POOL_MAX", 3, min_size, 3)
+            # Supabase transaction poolers expose a shared client budget.
+            # The previous hard cap of three connections per process caused
+            # ordinary dashboard navigation to queue behind unrelated requests
+            # (observed with seven requests waiting and every slot occupied).
+            # Five connections let a single Render worker serve normal concurrent
+            # page loads while keeping two overlapping deploy instances at about
+            # ten clients, below the affected project's 15-client pooler limit.
+            # Keep this configurable so deployments with a different DB quota
+            # can lower it without another code change.
+            max_size = _pool_size("DAVISCHOOL_DB_POOL_MAX", 5, min_size, 5)
             pool_conninfo = _supabase_transaction_pooler_conninfo(key)
             pool = ConnectionPool(
                 conninfo=pool_conninfo,
