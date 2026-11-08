@@ -11,6 +11,7 @@ import re
 from typing import Any, Iterable
 
 from app.timetable.setup import TimetableSetupError, _profile
+from app.timetable.advanced_setup import resolve_calendar_occurrence
 
 _TIME_RE = re.compile(r"^(?:[01]\d|2[0-3]):[0-5]\d$")
 
@@ -23,6 +24,36 @@ def _unique_ids(values: Iterable[Any], field: str) -> list[int]:
     if any(value <= 0 for value in result):
         raise TimetableSetupError(f"Invalid {field} selection.")
     return result
+
+
+def _validate_calendar_session(cur: Any, school_id: int, profile_id: int,
+                                session_date: str | None, day_id: int | None,
+                                start: str, end: str, schedule_layer: str) -> None:
+    """Ensure dated instructional sessions obey the resolved school calendar."""
+    if not session_date:
+        return
+    occurrence = resolve_calendar_occurrence(
+        cur.connection, school_id, profile_id, session_date
+    )
+    if day_id is not None and occurrence["day_id"] != int(day_id):
+        raise TimetableSetupError("The selected timetable day does not match the session date.")
+    if schedule_layer != "instructional":
+        return
+    if not occurrence["is_instructional"]:
+        raise TimetableSetupError("The selected date is closed for instructional lessons.")
+    slots = occurrence["schedule_slots"]
+    if not slots:
+        return
+    matching = [
+        slot for slot in slots
+        if str(slot["slot_type"]).lower() in {"lesson", "instructional", "teaching"}
+        and str(slot["start_time"]) >= start and str(slot["end_time"]) <= end
+    ]
+    if not matching or str(matching[0]["start_time"]) != start or str(matching[-1]["end_time"]) != end:
+        raise TimetableSetupError("The session time does not match the selected date's instructional template.")
+    for previous, current in zip(matching, matching[1:]):
+        if str(previous["end_time"]) != str(current["start_time"]):
+            raise TimetableSetupError("An instructional session cannot span a break or non-teaching slot.")
 
 
 def _validate_resources(cur: Any, school_id: int, profile_id: int,
@@ -473,6 +504,10 @@ def create_scheduled_session(connection: Any, school_id: int, profile_id: int,
         cur, school_id, profile_id, classes, teachers, learners, room_id,
         start_time, end_time, day_id, session_date, period_id,
         schedule_layer, session_type, duration_periods,
+    )
+    _validate_calendar_session(
+        cur, school_id, profile_id, session_date, day_id,
+        start_time, end_time, schedule_layer,
     )
     _validate_constraints(
         cur, school_id, profile_id, schedule_layer, session_type, subject_id,
