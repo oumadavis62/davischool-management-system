@@ -597,8 +597,16 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
           root.querySelectorAll('.tt-edit-availability').forEach(button=>button.addEventListener('click',()=>{{
             const picker=button.dataset.kind==='teacher'?teacherPicker:subjectPicker;
             if(!picker) return;
+            // The shared setup initializer moves each editor form into its
+            // section modal. Open that modal before selecting and displaying
+            // the requested teacher/subject; otherwise the control targets a
+            // detached-from-layout form and appears not to respond.
+            const section=button.closest('.tt-section');
+            const modalOpener=section?.querySelector('.tt-add-card button');
+            if(modalOpener) modalOpener.click();
             picker.value=button.dataset.id;
             picker.dispatchEvent(new Event('change',{{bubbles:true}}));
+            picker.focus({{preventScroll:true}});
             picker.scrollIntoView({{behavior:'smooth',block:'center'}});
           }}));
           // Keep one document-level handler so it survives replacing .tt-wrap.
