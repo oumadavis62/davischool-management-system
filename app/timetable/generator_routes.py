@@ -219,6 +219,9 @@ def register_timetable_generator_routes(app, get_db, get_school_obj, module_page
                         con.execute(f"DELETE FROM ds_timetable_session_learners WHERE session_id IN ({marks})", tuple(created_advanced_ids))
                         con.execute(f"DELETE FROM ds_timetable_sessions WHERE school_id=? AND profile_id=? AND id IN ({marks})",
                                     (int(school["id"]), profile_id, *created_advanced_ids))
+                        if advanced_result and advanced_result.get("run_id"):
+                            con.execute("UPDATE ds_timetable_generation_runs SET status='failed',finished_at=CURRENT_TIMESTAMP WHERE id=? AND school_id=?",
+                                        (int(advanced_result["run_id"]), int(school["id"])))
                         con.commit()
                     return redirect_generator(profile_id, int(result.get("run_id") or 0),
                                               result.get("message", "Generation failed."), True)
@@ -248,6 +251,9 @@ def register_timetable_generator_routes(app, get_db, get_school_obj, module_page
                     con.execute(f"DELETE FROM ds_timetable_session_learners WHERE session_id IN ({marks})", tuple(created_advanced_ids))
                     con.execute(f"DELETE FROM ds_timetable_sessions WHERE school_id=? AND profile_id=? AND id IN ({marks})",
                                 (int(school["id"]), profile_id, *created_advanced_ids))
+                    if advanced_result and advanced_result.get("run_id"):
+                        con.execute("UPDATE ds_timetable_generation_runs SET status='failed',finished_at=CURRENT_TIMESTAMP WHERE id=? AND school_id=?",
+                                    (int(advanced_result["run_id"]), int(school["id"])))
                     con.commit()
                 raise
         except TimetableSetupError as exc:
