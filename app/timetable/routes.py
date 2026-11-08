@@ -277,7 +277,7 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
             "<form method='post' data-native-post='true' action='/app/timetable/setup/requirements/bulk' class='tt-form compact'>"
             + hidden
             + "<p class='wide'>Choose each subject once. DaviSchool applies the weekly requirement to every class or stream where that subject is allocated, and links the existing teacher allocation automatically. Existing customized requirements are preserved.</p>"
-            + "<label class='wide'>Subjects to include<select name='subject_ids' multiple size='6' required>{subject_opts}</select></label>"
+            + "<label class='wide'>Subjects to include<select name='subject_ids' multiple size='6' required>" + subject_opts + "</select></label>"
             + "<label>Lessons per week<input name='lessons_per_week' type='number' min='1' max='30' value='5' required></label>"
             + "<label>Lesson duration<select name='duration_periods'><option value='1'>Single period</option><option value='2'>Double period</option><option value='3'>Triple period</option><option value='4'>Four periods</option></select></label>"
             + "<label>Maximum lessons per day<input name='max_lessons_per_day' type='number' min='1' max='10' placeholder='No limit'></label>"
