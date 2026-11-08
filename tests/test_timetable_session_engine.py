@@ -3,7 +3,7 @@ import sqlite3
 import unittest
 
 from app.timetable.schema import ensure_timetable_schema
-from app.timetable.setup import create_profile, save_day, save_period, save_room, TimetableSetupError
+from app.timetable.setup import create_profile, save_day, save_period, save_room, save_class_limits, TimetableSetupError
 from app.timetable.advanced_setup import create_learning_programme, save_programme_session, save_activity_type, create_scheduling_requirement, save_scheduling_pattern, save_timetable_constraint
 from app.timetable.session_engine import (
     create_scheduled_session,
@@ -185,6 +185,23 @@ class TimetableSessionEngineTests(unittest.TestCase):
         self.assertEqual(
             self.db.execute("SELECT COUNT(*) FROM ds_timetable_session_teachers WHERE session_id=?",
                             (session_id,)).fetchone()[0], 2)
+
+    def test_normalized_sessions_enforce_class_daily_period_ceiling(self):
+        save_class_limits(self.db, 8, self.profile_id, 1, None, 1)
+        create_scheduled_session(
+            self.db, 8, self.profile_id, "08:00", "08:40",
+            class_ids=[1], teacher_ids=[11], subject_id=5,
+            day_id=self.day_id, period_id=self.period_id, duration_periods=1,
+        )
+        second_period = save_period(
+            self.db, 8, self.profile_id, 2, "Period 2", "08:40", "09:20"
+        )
+        with self.assertRaisesRegex(TimetableSetupError, "maximum periods per day"):
+            create_scheduled_session(
+                self.db, 8, self.profile_id, "08:40", "09:20",
+                class_ids=[1], teacher_ids=[11], subject_id=5,
+                day_id=self.day_id, period_id=second_period, duration_periods=1,
+            )
 
     def test_required_period_constraint_rejects_other_period(self):
         second = save_period(self.db, 8, self.profile_id, 2, "Period 2", "08:40", "09:20")
