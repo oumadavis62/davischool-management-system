@@ -91,6 +91,10 @@ def get_timetable_view(connection: Any, school_id: int, profile_id: int, view_ty
     weekend_sessions = [row for row in advanced_sessions if row["is_weekend"]]
     remedial_sessions = [row for row in advanced_sessions if row["is_remedial"]]
     weekday_remedials = [row for row in remedial_sessions if not row["is_weekend"]]
+    dated_instructional_sessions = [
+        row for row in advanced_sessions
+        if row.get("session_date") and row.get("schedule_layer") == "instructional" and not row["is_weekend"]
+    ]
     weekend_groups = {}
     for row in weekend_sessions:
         label = row["rotation_label"] or "Weekend schedule"
@@ -110,6 +114,7 @@ def get_timetable_view(connection: Any, school_id: int, profile_id: int, view_ty
         "weekend_groups": weekend_groups,
         "remedial_sessions": remedial_sessions,
         "weekday_remedials": weekday_remedials,
+        "dated_instructional_sessions": dated_instructional_sessions,
     }
 
 
