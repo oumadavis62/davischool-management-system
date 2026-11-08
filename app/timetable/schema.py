@@ -390,6 +390,16 @@ _TABLES = (
         updated_at TEXT NOT NULL,
         UNIQUE (school_id, profile_id, name)
     )""",
+    """CREATE TABLE IF NOT EXISTS ds_timetable_subject_availability (
+        id INTEGER PRIMARY KEY,
+        school_id INTEGER NOT NULL,
+        profile_id INTEGER NOT NULL,
+        subject_id INTEGER NOT NULL,
+        day_id INTEGER NOT NULL,
+        period_id INTEGER NOT NULL,
+        availability TEXT NOT NULL DEFAULT 'unavailable',
+        UNIQUE (school_id, profile_id, subject_id, day_id, period_id)
+    )""",
     """CREATE TABLE IF NOT EXISTS ds_timetable_activity_types (
         id INTEGER PRIMARY KEY,
         school_id INTEGER NOT NULL,
@@ -446,6 +456,7 @@ _INDEXES = (
     "CREATE INDEX IF NOT EXISTS idx_ds_tt_periods_profile_order ON ds_timetable_periods(school_id, profile_id, period_no)",
     "CREATE INDEX IF NOT EXISTS idx_ds_tt_constraints_lookup ON ds_timetable_constraints(school_id, profile_id, is_active, constraint_type)",
     "CREATE INDEX IF NOT EXISTS idx_ds_tt_availability_lookup ON ds_timetable_teacher_availability(school_id, profile_id, teacher_id, day_id, period_id)",
+    "CREATE INDEX IF NOT EXISTS idx_ds_tt_subject_availability_lookup ON ds_timetable_subject_availability(school_id, profile_id, subject_id, day_id, period_id)",
     "CREATE INDEX IF NOT EXISTS idx_ds_tt_requirements_class ON ds_timetable_class_requirements(school_id, profile_id, class_id, subject_id)",
     "CREATE INDEX IF NOT EXISTS idx_ds_tt_requirements_teacher ON ds_timetable_class_requirements(school_id, profile_id, teacher_id)",
     "CREATE INDEX IF NOT EXISTS idx_ds_tt_lessons_class_grid ON ds_timetable_lessons(school_id, profile_id, class_id, day_id, period_id)",

@@ -184,6 +184,24 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
         (int(a["teacher_id"]), int(a["day_id"]), int(a["period_id"]))
         for a in fallback_rows
     }
+    subject_unavailable_rows = cur.execute(
+        """SELECT subject_id,day_id,period_id FROM ds_timetable_subject_availability
+           WHERE school_id=? AND profile_id=? AND availability='unavailable'""",
+        (school_id, profile_id),
+    ).fetchall()
+    subject_unavailable = {
+        (int(a["subject_id"]), int(a["day_id"]), int(a["period_id"]))
+        for a in subject_unavailable_rows
+    }
+    subject_fallback_rows = cur.execute(
+        """SELECT subject_id,day_id,period_id FROM ds_timetable_subject_availability
+           WHERE school_id=? AND profile_id=? AND availability='fallback'""",
+        (school_id, profile_id),
+    ).fetchall()
+    subject_fallback_only = {
+        (int(a["subject_id"]), int(a["day_id"]), int(a["period_id"]))
+        for a in subject_fallback_rows
+    }
     preferred_rows = cur.execute(
         """SELECT teacher_id,day_id,period_id FROM ds_timetable_teacher_availability
            WHERE school_id=? AND profile_id=? AND availability='preferred'""",
@@ -301,6 +319,8 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
                     continue
                 if any((task["teacher_id"], day_id, int(p["id"])) in unavailable for p in span):
                     continue
+                if any((task["subject_id"], day_id, int(p["id"])) in subject_unavailable for p in span):
+                    continue
                 if any(
                     _overlap(span[0]["start_time"], span[-1]["end_time"], b["start_time"], b["end_time"])
                     for b in breaks
@@ -323,7 +343,10 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
                     "end_time": span[-1]["end_time"],
                     "period_no": int(period["period_no"]),
                     "preferred": any((task["teacher_id"], day_id, int(p["id"])) in preferred for p in span),
-                    "explicitly_available": all((task["teacher_id"], day_id, int(p["id"])) not in fallback_only for p in span),
+                    "explicitly_available": (
+                        all((task["teacher_id"], day_id, int(p["id"])) not in fallback_only for p in span)
+                        and all((task["subject_id"], day_id, int(p["id"])) not in subject_fallback_only for p in span)
+                    ),
                 })
         if not candidates:
             message = (

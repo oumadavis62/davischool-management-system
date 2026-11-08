@@ -208,6 +208,16 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
                    WHERE a.school_id=? AND a.profile_id=? AND a.availability IN ('fallback','unavailable') ORDER BY d.day_order,p.period_no,t.name""",
                 (school_id,pid),
             ).fetchall()
+            subjects = cur.execute("SELECT id,name FROM subjects WHERE school_id=? ORDER BY name", (school_id,)).fetchall()
+            subject_availability = cur.execute(
+                """SELECT a.*,s.name subject_name,d.day_name,p.label period_label
+                   FROM ds_timetable_subject_availability a
+                   JOIN subjects s ON s.id=a.subject_id AND s.school_id=a.school_id
+                   JOIN ds_timetable_days d ON d.id=a.day_id AND d.profile_id=a.profile_id
+                   JOIN ds_timetable_periods p ON p.id=a.period_id AND p.profile_id=a.profile_id
+                   WHERE a.school_id=? AND a.profile_id=? ORDER BY d.day_order,p.period_no,s.name""",
+                (school_id,pid),
+            ).fetchall()
             requirements = cur.execute(
                 """SELECT r.*,c.name class_name,c.stream,s.name subject_name,t.name teacher_name
                    FROM ds_timetable_class_requirements r
@@ -319,6 +329,21 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
         availability_rows = "".join(
             f"<tr><td>{esc(a['teacher_name'])}</td><td>{esc(a['day_name'])}</td><td>{esc(a['period_label'])}</td><td><span class='tt-pill'>{'Fallback only' if a['availability']=='fallback' else 'X Unavailable'}</span></td><td>{esc(a['reason'] or '—')}</td><td><form method='post' data-native-post='true' action='/app/timetable/setup/row-delete' onsubmit='return confirm(&quot;Clear this availability cell?&quot;)'>{hidden}<input type='hidden' name='kind' value='availability'><input type='hidden' name='row_id' value='{int(a['id'])}'><button class='tt-btn danger'>Clear</button></form></td></tr>" for a in availability
         ) or "<tr><td colspan='6' class='tt-muted'>No teacher availability rules yet.</td></tr>"
+        subject_availability_status = {(int(a['subject_id']), int(a['day_id']), int(a['period_id'])): str(a['availability'] or '') for a in subject_availability}
+        subject_matrix_cells = []
+        for day in days:
+            cells = []
+            for period in periods:
+                status = subject_availability_status.get((int(subjects[0]['id']) if subjects else 0, int(day['id']), int(period['id'])), 'available')
+                symbol = '✓' if status == 'available' else ('X' if status == 'unavailable' else '')
+                status_by_subject = ';'.join(f"{sid}:{value}" for (sid, did, pid), value in subject_availability_status.items() if did == int(day['id']) and pid == int(period['id']))
+                cells.append(f"<td><button type='button' class='tt-sub-av-cell' data-day='{int(day['id'])}' data-period='{int(period['id'])}' data-statuses='{status_by_subject}' data-status='{status}'>{symbol}</button><input type='hidden' name='cell_status' value='{int(day['id'])}|{int(period['id'])}|{status}'></td>")
+            subject_matrix_cells.append(f"<tr><th>{esc(day['day_name'])}</th>{''.join(cells)}</tr>")
+        subject_matrix_period_headers = "".join(f"<th>{esc(p['label'])}<small>{esc(p['start_time'])}–{esc(p['end_time'])}</small></th>" for p in periods)
+        subject_matrix_day_rows = "".join(subject_matrix_cells) or "<tr><td colspan='2' class='tt-muted'>Configure school days and teaching periods first.</td></tr>"
+        subject_availability_rows = "".join(
+            f"<tr><td>{esc(a['subject_name'])}</td><td>{esc(a['day_name'])}</td><td>{esc(a['period_label'])}</td><td><span class='tt-pill'>{'Fallback only' if a['availability']=='fallback' else 'X Unavailable'}</span></td><td><form method='post' data-native-post='true' action='/app/timetable/setup/row-delete' onsubmit='return confirm(&quot;Clear this subject availability cell?&quot;)'>{hidden}<input type='hidden' name='kind' value='subject_availability'><input type='hidden' name='row_id' value='{int(a['id'])}'><button class='tt-btn danger'>Clear</button></form></td></tr>" for a in subject_availability
+        ) or "<tr><td colspan='5' class='tt-muted'>No subject availability restrictions configured.</td></tr>"
         requirement_rows = "".join(
             f"<tr><td>{esc(r['class_name'])} {esc(r['stream'] or '')}</td><td>{esc(r['subject_name'])}</td><td>{esc(r['teacher_name'])}</td><td>{esc(r['lessons_per_week'])}</td><td>{esc(r['duration_periods'])}</td><td>{'Yes' if r['allow_double'] else 'No'}</td><td><details><summary>Edit</summary><form method='post' data-native-post='true' action='/app/timetable/setup/requirement' class='tt-form compact'>{hidden}<input type='hidden' name='allocation' value='{int(r['class_id'])}|{int(r['subject_id'])}|{int(r['teacher_id'])}'><label>Lessons / week<input type='number' min='1' max='30' name='lessons_per_week' value='{int(r['lessons_per_week'])}' required></label><label>Duration<input type='number' min='1' max='4' name='duration_periods' value='{int(r['duration_periods'])}' required></label><label>Max / day<input type='number' min='1' max='10' name='max_lessons_per_day' value='{esc(r['max_lessons_per_day'] or '')}'></label><label class='tt-check'><input type='checkbox' name='allow_double' value='1' {'checked' if r['allow_double'] else ''}> Allow double</label><button class='tt-btn'>Save changes</button></form></details><form method='post' data-native-post='true' action='/app/timetable/setup/row-delete' onsubmit='return confirm(&quot;Delete this subject requirement?&quot;)'>{hidden}<input type='hidden' name='kind' value='requirement'><input type='hidden' name='row_id' value='{int(r['id'])}'><button class='tt-btn danger'>Delete</button></form></td></tr>" for r in requirements
         ) or "<tr><td colspan='7' class='tt-muted'>No weekly lesson requirements configured.</td></tr>"
@@ -361,7 +386,8 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
             <section class='tt-section'><div class='tt-section-title'><div><span class='tt-kicker'>05 · LEARNING SPACES</span><h3>Rooms and facilities</h3><p>Optional setup: register physical spaces only if your school wants room allocation. Leave this section empty if rooms are not needed. Classes and streams are managed separately.</p></div></div><div class='tt-split'><form method='post' data-native-post='true' action='/app/timetable/setup/room' class='tt-form compact'>{hidden}<label>Room code<input name='room_code' required placeholder='LAB-01'></label><label>Room name<input name='name' required placeholder='Science Laboratory'></label><label>Room type<select name='room_type'><option value='classroom'>Classroom</option><option value='laboratory'>Laboratory</option><option value='library'>Library</option><option value='hall'>Hall</option><option value='workshop'>Workshop</option><option value='sports'>Sports facility</option><option value='other'>Other</option></select></label><label>Capacity (optional)<input name='capacity' type='number' min='1' placeholder='Leave blank if unrestricted'></label><label class='wide'>Description (optional)<input name='description' maxlength='240' placeholder='Location or purpose'></label><label class='wide'>Equipment / resources (optional)<input name='equipment' maxlength='400' placeholder='Projector, computers, lab benches…'></label><label class='wide'>Suitable for (optional)<input name='suitable_for' maxlength='300' placeholder='Science practicals, exams, meetings…'></label><button class='tt-btn'>Save room / facility</button></form><div class='tt-table'><table><tr><th>Code</th><th>Room</th><th>Type</th><th>Capacity</th><th>Equipment / resources</th><th>Actions</th></tr>{room_rows}</table></div></div></section>
             <section class='tt-section'><div class='tt-section-title'><div><span class='tt-kicker'>06 · STAFF AVAILABILITY</span><h3>Teacher availability</h3><p>All teachers are available by default. Add a teacher only when you need to set fallback periods or block specific periods.</p></div></div><div class='tt-availability-editor'><form method='post' data-native-post='true' action='/app/timetable/setup/availability-matrix' class='tt-form compact'>{hidden}<label>Teacher<select name='teacher_id' id='tt-availability-teacher' required>{teacher_opts}</select></label><div class='tt-availability-legend'><span><b>✓</b> Available first</span><span><b>Blank</b> Fallback only</span><span><b>X</b> Never place</span></div><div class='tt-table tt-availability-grid'><table><thead><tr><th>Day / Period</th>{matrix_period_headers}</tr></thead><tbody>{matrix_day_rows}</tbody></table></div><p class='tt-muted'>Every cell starts ticked (available). Tap to cycle: ✓ available → blank (fallback only) → X (never place). The generator tries all ticked periods first and uses blank periods only when needed to complete the timetable.</p><button class='tt-btn'>Save teacher availability</button></form><div class='tt-table'><h4>Teacher restrictions</h4><table><tr><th>Teacher</th><th>Day</th><th>Period</th><th>Restriction</th><th>Reason</th><th>Actions</th></tr>{availability_rows}</table></div></div></section>
             {class_limit_form}
-            <section class='tt-section'><div class='tt-section-title'><div><span class='tt-kicker'>07 · WEEKLY LESSON LOAD</span><h3>Subject requirements</h3><p>Set each subject's weekly lesson load once and apply it across all classes and streams where it is taught. Teacher allocations are matched automatically.</p></div></div><div class='tt-split'><div>{bulk_requirement_form}</div><div class='tt-table'><table><tr><th>Class / Stream</th><th>Subject</th><th>Assigned teacher</th><th>Weekly</th><th>Duration</th><th>Double</th><th>Actions</th></tr>{requirement_rows}</table></div></div></section>
+            <section class='tt-section'><div class='tt-section-title'><div><span class='tt-kicker'>07 · SUBJECT AVAILABILITY</span><h3>Subject availability</h3><p>All subjects are available in every configured lesson period by default. Add a subject only when you need to make certain periods fallback-only or completely unavailable.</p></div></div><div class='tt-availability-editor'><form method='post' data-native-post='true' action='/app/timetable/setup/subject-availability-matrix' class='tt-form compact'>{hidden}<label>Subject<select name='subject_id' id='tt-subject-availability' required>{''.join(f"<option value='{int(x['id'])}'>{esc(x['name'])}</option>" for x in subjects)}</select></label><div class='tt-availability-legend'><span><b>✓</b> Available first</span><span><b>Blank</b> Fallback only</span><span><b>X</b> Never schedule</span></div><div class='tt-table tt-availability-grid'><table><thead><tr><th>Day / Period</th>{subject_matrix_period_headers}</tr></thead><tbody>{subject_matrix_day_rows}</tbody></table></div><p class='tt-muted'>Every cell starts ticked. Tap to cycle: ✓ available → blank (fallback only) → X (never schedule). The generator tries ticked periods first and uses blank periods only when needed to complete the timetable.</p><button class='tt-btn'>Save subject availability</button></form><div class='tt-table'><h4>Subject restrictions</h4><table><tr><th>Subject</th><th>Day</th><th>Period</th><th>Restriction</th><th>Actions</th></tr>{subject_availability_rows}</table></div></div></section>
+            <section class='tt-section'><div class='tt-section-title'><div><span class='tt-kicker'>08 · WEEKLY LESSON LOAD</span><h3>Subject requirements</h3><p>Set each subject's weekly lesson load once and apply it across all classes and streams where it is taught. Teacher allocations are matched automatically.</p></div></div><div class='tt-split'><div>{bulk_requirement_form}</div><div class='tt-table'><table><tr><th>Class / Stream</th><th>Subject</th><th>Assigned teacher</th><th>Weekly</th><th>Duration</th><th>Double</th><th>Actions</th></tr>{requirement_rows}</table></div></div></section>
             """
         body = f"""
         <style>
@@ -443,6 +469,7 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
             if(form&&form.matches&&form.matches('form[method="post" i]')) attachTabSession(form);
           }},true);
           const teacherPicker=root.querySelector('#tt-availability-teacher');
+          const subjectPicker=root.querySelector('#tt-subject-availability');
           function setAvailabilityCell(button,teacherId){{
             const statusMap={{}};
             (button.dataset.statuses||'').split(';').filter(Boolean).forEach(item=>{{const parts=item.split(':');statusMap[parts[0]]=parts[1]||'';}});
@@ -470,6 +497,32 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
             teacherPicker.addEventListener('change',()=>root.querySelectorAll('.tt-av-cell').forEach(button=>setAvailabilityCell(button,teacherPicker.value)));
             root.querySelectorAll('.tt-av-cell').forEach(button=>setAvailabilityCell(button,teacherPicker.value));
           }}
+          function setSubjectAvailabilityCell(button,subjectId){{
+            const statusMap={{}};
+            (button.dataset.statuses||'').split(';').filter(Boolean).forEach(item=>{{const parts=item.split(':');statusMap[parts[0]]=parts[1]||'';}});
+            const status=statusMap[String(subjectId)]||'available';
+            button.dataset.status=status;
+            button.textContent=status==='available'?'✓':(status==='unavailable'?'X':'');
+            button.setAttribute('role','checkbox'); button.setAttribute('aria-checked',status==='available'?'true':'false');
+            const hidden=button.nextElementSibling;
+            if(hidden) hidden.value=button.dataset.day+'|'+button.dataset.period+'|'+status;
+          }}
+          root.querySelectorAll('.tt-sub-av-cell').forEach(button=>{{
+            button.addEventListener('click',()=>{{
+              const states=['available','','unavailable'];
+              const current=button.dataset.status||'';
+              const next=states[(states.indexOf(current)+1)%states.length];
+              button.dataset.status=next;
+              button.textContent=next==='available'?'✓':(next==='unavailable'?'X':'');
+              button.setAttribute('aria-checked',next==='available'?'true':'false');
+              const hidden=button.nextElementSibling;
+              if(hidden) hidden.value=button.dataset.day+'|'+button.dataset.period+'|'+next;
+            }});
+          }});
+          if(subjectPicker){{
+            subjectPicker.addEventListener('change',()=>root.querySelectorAll('.tt-sub-av-cell').forEach(button=>setSubjectAvailabilityCell(button,subjectPicker.value)));
+            root.querySelectorAll('.tt-sub-av-cell').forEach(button=>setSubjectAvailabilityCell(button,subjectPicker.value));
+          }}
           // Keep one document-level handler so it survives replacing .tt-wrap.
           // Identify supported actions by endpoint, not button text or submitter support.
           if(!document.documentElement.dataset.ttSetupAjaxBound){{
@@ -479,7 +532,7 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
               if(!form||!form.matches||!form.matches('form[method="post" i]')) return;
               const action=new URL(form.getAttribute('action')||window.location.href,window.location.origin);
               const endpoint=action.pathname;
-              const isSetupWrite=endpoint.startsWith('/app/timetable/setup/')&&new Set(['day','period','break','calendar-event','room','availability','availability-matrix','requirement','class-limits','row-delete','break-gap']).has(endpoint.split('/').pop());
+              const isSetupWrite=endpoint.startsWith('/app/timetable/setup/')&&new Set(['day','period','break','calendar-event','room','availability','availability-matrix','subject-availability-matrix','requirement','class-limits','row-delete','break-gap']).has(endpoint.split('/').pop());
               if(!isSetupWrite) return;
               event.preventDefault();
               if(form.dataset.ajaxBusy==='1') return;
@@ -735,6 +788,7 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
                 "calendar": ("ds_timetable_calendar_exceptions", "profile"),
                 "room": ("ds_timetable_rooms", "school"),
                 "availability": ("ds_timetable_teacher_availability", "profile"),
+                "subject_availability": ("ds_timetable_subject_availability", "profile"),
                 "requirement": ("ds_timetable_class_requirements", "profile"),
                 "class_limit": ("ds_timetable_class_limits", "profile"),
             }
@@ -953,6 +1007,44 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
                 )
             con.commit()
             return redirect_setup(profile_id, "Teacher availability matrix saved.")
+        except (TimetableSetupError, ValueError) as exc:
+            con.rollback()
+            return redirect_setup(profile_id, str(exc), True)
+        finally:
+            con.close()
+
+    @app.post("/app/timetable/setup/subject-availability-matrix")
+    def save_timetable_subject_availability_matrix(request: Request, profile_id: int = Form(...), subject_id: int = Form(...), cell_status: list[str] = Form([])):
+        school = school_for(request)
+        if not school: return RedirectResponse("/", 303)
+        con = get_db()
+        try:
+            subject = con.execute("SELECT id FROM subjects WHERE id=? AND school_id=?", (subject_id, int(school["id"]))).fetchone()
+            if not subject:
+                raise TimetableSetupError("Select a valid subject.")
+            configured_days = {int(r["id"]) for r in con.execute("SELECT id FROM ds_timetable_days WHERE school_id=? AND profile_id=?", (int(school["id"]), profile_id)).fetchall()}
+            configured_periods = {int(r["id"]) for r in con.execute("SELECT id FROM ds_timetable_periods WHERE school_id=? AND profile_id=?", (int(school["id"]), profile_id)).fetchall()}
+            for item in cell_status:
+                parts = item.split("|", 2)
+                if len(parts) != 3: continue
+                day_id, period_id = int(parts[0]), int(parts[1])
+                status = parts[2].strip()
+                if day_id not in configured_days or period_id not in configured_periods or status not in ("", "available", "unavailable"):
+                    raise TimetableSetupError("The subject availability matrix contains an invalid day, period or status.")
+                if status == "available":
+                    con.execute("DELETE FROM ds_timetable_subject_availability WHERE school_id=? AND profile_id=? AND subject_id=? AND day_id=? AND period_id=?", (int(school["id"]), profile_id, subject_id, day_id, period_id))
+                else:
+                    stored_status = status or "fallback"
+                    con.execute(
+                        """INSERT INTO ds_timetable_subject_availability
+                           (school_id,profile_id,subject_id,day_id,period_id,availability)
+                           VALUES(?,?,?,?,?,?)
+                           ON CONFLICT(school_id,profile_id,subject_id,day_id,period_id)
+                           DO UPDATE SET availability=excluded.availability""",
+                        (int(school["id"]), profile_id, subject_id, day_id, period_id, stored_status),
+                    )
+            con.commit()
+            return redirect_setup(profile_id, "Subject availability matrix saved.")
         except (TimetableSetupError, ValueError) as exc:
             con.rollback()
             return redirect_setup(profile_id, str(exc), True)
