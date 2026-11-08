@@ -89,7 +89,7 @@ def register_timetable_generator_routes(app, get_db, get_school_obj, module_page
                 onsubmit="return confirm('Generate normalized sessions, including combined classes and teaching teams?')">
                 <input type='hidden' name='profile_id' value='{pid}'>
                 <button class='ag-btn secondary'>Generate weekly instructional sessions ({int(advanced_instructional_requirements)})</button></form>"""
-            if advanced_requirements and not read_only else ""
+            if advanced_instructional_requirements and not read_only else ""
         )
         date_range_action = (
             f"""<form method='post' action='/app/timetable/automatic/generate-dated'
