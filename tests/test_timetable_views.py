@@ -3,7 +3,7 @@ import sqlite3
 import unittest
 
 from app.timetable.schema import ensure_timetable_schema
-from app.timetable.setup import create_profile, save_day, save_period, save_room, save_class_requirement
+from app.timetable.setup import create_profile, save_day, save_period, save_room, save_class_requirement, save_break
 from app.timetable.builder import place_lesson
 from app.timetable.views import get_timetable_view
 
@@ -34,6 +34,7 @@ class TimetableViewTests(unittest.TestCase):
         save_day(self.db, 1, self.profile_id, "MON", "Monday", 1)
         save_period(self.db, 1, self.profile_id, 1, "Period 1", "08:00", "08:40")
         save_period(self.db, 1, self.profile_id, 2, "Period 2", "08:40", "09:20")
+        save_break(self.db, 1, self.profile_id, 1, "Morning Tea", "09:20", "09:40")
         save_room(self.db, 1, "R1", "Classroom 1", "classroom", 40)
         save_class_requirement(self.db, 1, self.profile_id, 20, 30, 10, 1, 1, 1, False)
         save_class_requirement(self.db, 1, self.profile_id, 21, 31, 11, 1, 1, 1, False)
@@ -53,6 +54,13 @@ class TimetableViewTests(unittest.TestCase):
         result = get_timetable_view(self.db, 1, self.profile_id, "school")
         self.assertEqual(len(result["lessons"]), 2)
         self.assertEqual(result["title"], "School-wide timetable")
+
+    def test_all_timetable_view_data_includes_named_breaks_and_times(self):
+        result = get_timetable_view(self.db, 1, self.profile_id, "school")
+        self.assertEqual(len(result["breaks"]), 1)
+        self.assertEqual(result["breaks"][0]["label"], "Morning Tea")
+        self.assertEqual(result["breaks"][0]["start_time"], "09:20")
+        self.assertEqual(result["breaks"][0]["end_time"], "09:40")
 
     def test_class_view_filters_class_stream(self):
         result = get_timetable_view(self.db, 1, self.profile_id, "class", 20)
