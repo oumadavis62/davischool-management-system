@@ -99,11 +99,11 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
         )
         headers = [Paragraph("Day", header_style)]
         for _, item_type, item in timeline:
-            if item_type == "break":
-                label = str(item["label"]) + "<br/>" + str(item["start_time"]) + " - " + str(item["end_time"])
-            else:
-                label = str(item["label"]) + "<br/>" + str(item["start_time"]) + " - " + str(item["end_time"])
-            headers.append(Paragraph(pdf_text(label), header_style))
+            headers.append(Paragraph(
+                "<b>" + pdf_text(str(item["label"])) + "</b><br/>" +
+                pdf_text(str(item["start_time"])) + " - " + pdf_text(str(item["end_time"])),
+                header_style,
+            ))
         data = [headers]
         break_col_indexes = [i + 1 for i, (_, kind, _) in enumerate(timeline) if kind == "break"]
         for day in result["days"]:
