@@ -450,7 +450,9 @@ def create_scheduled_session(connection: Any, school_id: int, profile_id: int,
                              duration_periods: int = 0,
                              scheduling_requirement_id: int | None = None,
                              pattern_session_no: int | None = None,
-                             created_by: str = "") -> int:
+                             created_by: str = "",
+                             generation_run_id: int | None = None,
+                             ignore_generated_conflicts: bool = False) -> int:
     start_time, end_time = (start_time or "").strip(), (end_time or "").strip()
     if not _TIME_RE.fullmatch(start_time) or not _TIME_RE.fullmatch(end_time) or start_time >= end_time:
         raise TimetableSetupError("Enter a valid start and end time in 24-hour HH:MM format.")
@@ -664,6 +666,7 @@ def create_scheduled_session(connection: Any, school_id: int, profile_id: int,
     conflicts = find_session_conflicts(
         connection, school_id, profile_id, start_time, end_time,
         classes, teachers, learners, room_id, day_id, session_date,
+        ignore_generated_sessions=ignore_generated_conflicts,
     )
     if conflicts:
         summary = "; ".join(
@@ -677,11 +680,11 @@ def create_scheduled_session(connection: Any, school_id: int, profile_id: int,
             """INSERT INTO ds_timetable_sessions
                (school_id,profile_id,schedule_layer,session_type,subject_id,programme_id,
                 teaching_group_id,day_id,session_date,period_id,start_time,end_time,
-                duration_periods,room_id,status,created_by,created_at,updated_at)
-               VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                duration_periods,room_id,generation_run_id,status,created_by,created_at,updated_at)
+               VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
             (school_id, profile_id, schedule_layer, session_type, subject_id, programme_id,
              teaching_group_id, day_id, session_date, period_id, start_time, end_time,
-             int(duration_periods), room_id, "scheduled", created_by, now, now),
+             int(duration_periods), room_id, generation_run_id, "scheduled", created_by, now, now),
         )
         row = cur.execute(
             """SELECT id FROM ds_timetable_sessions
