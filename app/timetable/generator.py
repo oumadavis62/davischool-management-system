@@ -724,12 +724,12 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
     # First attempt a complete timetable using only explicitly available
     # cells. If that cannot satisfy all requirements, retry with blank cells
     # as fallback placements. X cells remain hard exclusions.
-    generated = search(0, False)
+    generated = search(False)
     if not generated:
         placements[:] = list(fixed)
         nodes = 0
         exhausted = False
-        generated = search(0, True)
+        generated = search(True)
 
     snapshot = {
         "profile_id": profile_id,
