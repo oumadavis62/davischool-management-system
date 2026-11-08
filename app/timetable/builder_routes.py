@@ -146,7 +146,7 @@ def register_timetable_builder_routes(app, get_db, get_school_obj, module_page):
 
         esc = lambda value: escape(str(value if value is not None else ""))
         pid = int(selected["id"]) if selected else 0
-        read_only = bool(selected and selected["status"] != "draft")
+        read_only = bool(selected and str(selected["status"] or "draft").strip().lower() in ("published", "archived"))
         notice = f"<div class='tb-alert {'error' if error else 'success'}'>{esc(message)}</div>" if message else ""
         profile_options = "".join(
             f"<option value='{int(p['id'])}' {'selected' if selected and int(p['id'])==pid else ''}>{esc(p['academic_year'])} · {esc(p['term'])} — {esc(p['name'])}</option>"
