@@ -273,3 +273,78 @@ def place_advanced_requirement_session(connection: Any, school_id: int, profile_
         duration_periods=len(span), scheduling_requirement_id=requirement_id,
         pattern_session_no=session_no, created_by=created_by,
     )
+
+
+def place_dated_advanced_requirement_session(connection: Any, school_id: int, profile_id: int,
+                                            requirement_id: int, session_no: int,
+                                            session_date: str, slot_no: int,
+                                            room_id: int | None = None,
+                                            created_by: str = "") -> int:
+    """Place a normalized requirement into a date's resolved day-template slot."""
+    from app.timetable.advanced_setup import resolve_calendar_occurrence
+    from app.timetable.session_engine import create_scheduled_session
+
+    cur = connection.cursor()
+    _profile(cur, school_id, profile_id)
+    requirement = cur.execute(
+        """SELECT * FROM ds_timetable_scheduling_requirements
+           WHERE id=? AND school_id=? AND profile_id=? AND is_active=1""",
+        (requirement_id, school_id, profile_id),
+    ).fetchone()
+    if not requirement:
+        raise TimetableSetupError("Select an active scheduling requirement from this timetable profile.")
+    pattern = cur.execute(
+        """SELECT * FROM ds_timetable_scheduling_patterns
+           WHERE school_id=? AND profile_id=? AND requirement_id=? AND session_no=?""",
+        (school_id, profile_id, requirement_id, session_no),
+    ).fetchone()
+    if not pattern:
+        raise TimetableSetupError("Select a configured session number from this requirement's pattern.")
+
+    occurrence = resolve_calendar_occurrence(connection, school_id, profile_id, session_date)
+    if occurrence["day_id"] is None:
+        raise TimetableSetupError("This date has no configured weekday in the timetable profile.")
+    duration = int(pattern["duration_periods"] or 1)
+    if duration < 1 or duration > 4:
+        raise TimetableSetupError("Advanced sessions must span one to four consecutive periods.")
+
+    allowed = {
+        "instructional": {"instructional"},
+        "additional_learning": {"remedial", "study"},
+        "school_activity": {"activity", "assembly", "other"},
+    }.get(str(requirement["schedule_layer"]), set())
+    slots = occurrence["schedule_slots"]
+    start_index = next((i for i, slot in enumerate(slots)
+                        if int(slot["slot_no"]) == int(slot_no)), None)
+    if start_index is None:
+        raise TimetableSetupError("That slot is not part of the selected date's schedule template.")
+    selected = slots[start_index:start_index + duration]
+    if len(selected) != duration or any(str(slot["slot_type"]).lower() not in allowed for slot in selected):
+        raise TimetableSetupError("The selected date does not have enough consecutive slots for this session type.")
+    for previous, current in zip(selected, selected[1:]):
+        if (int(current["slot_no"]) != int(previous["slot_no"]) + 1
+                or str(previous["end_time"]) != str(current["start_time"])):
+            raise TimetableSetupError("A session cannot span a break or a non-teaching slot.")
+    period_no = selected[0]["period_no"]
+    period_id = None
+    if period_no is not None:
+        period = cur.execute(
+            """SELECT id FROM ds_timetable_periods
+               WHERE school_id=? AND profile_id=? AND period_no=?""",
+            (school_id, profile_id, int(period_no)),
+        ).fetchone()
+        period_id = int(period["id"]) if period else None
+
+    return create_scheduled_session(
+        connection, school_id, profile_id,
+        str(selected[0]["start_time"]), str(selected[-1]["end_time"]),
+        schedule_layer=str(requirement["schedule_layer"]),
+        session_type=str(requirement["session_type"]),
+        room_id=room_id, day_id=int(occurrence["day_id"]),
+        session_date=session_date, period_id=period_id,
+        subject_id=int(requirement["subject_id"]) if requirement["subject_id"] is not None else None,
+        programme_id=int(requirement["programme_id"]) if requirement["programme_id"] is not None else None,
+        teaching_group_id=int(requirement["teaching_group_id"]) if requirement["teaching_group_id"] is not None else None,
+        duration_periods=duration, scheduling_requirement_id=requirement_id,
+        pattern_session_no=session_no, created_by=created_by,
+    )
