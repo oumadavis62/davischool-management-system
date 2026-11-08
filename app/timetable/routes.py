@@ -248,19 +248,41 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
         break_rows = "".join(
             f"<tr><td>{esc(b['break_no'])}</td><td><b>{esc(b['label'])}</b></td><td>{esc(b['start_time'])}–{esc(b['end_time'])}</td><td>{esc(b['applies_to'])}</td><td><details><summary>Edit</summary><form method='post' data-native-post='true' action='/app/timetable/setup/break' class='tt-form compact'>{hidden}<input type='hidden' name='break_no' value='{int(b['break_no'])}'><label>Name<input name='label' value='{esc(b['label'])}' required></label><label>Start<input type='time' name='start_time' value='{esc(b['start_time'])}' required></label><label>End<input type='time' name='end_time' value='{esc(b['end_time'])}' required></label><label>Scope<select name='applies_to'><option value='all' {'selected' if b['applies_to']=='all' else ''}>All</option><option value='selected' {'selected' if b['applies_to']=='selected' else ''}>Selected</option></select></label><button class='tt-btn'>Save changes</button></form></details><form method='post' data-native-post='true' action='/app/timetable/setup/row-delete' onsubmit='return confirm(&quot;Delete this break?&quot;)'>{hidden}<input type='hidden' name='kind' value='break'><input type='hidden' name='row_id' value='{int(b['id'])}'><button class='tt-btn danger'>Delete</button></form></td></tr>" for b in breaks
         ) or "<tr><td colspan='5' class='tt-muted'>No breaks configured.</td></tr>"
-        break_candidate_rows = "".join(
-            f"<tr><td><b>{esc(g['label'])}</b></td><td>{esc(g['start_time'])}–{esc(g['end_time'])}</td><td>{'Selected' if g['selected'] else 'Available'}</td><td>"
-            + ("" if g["selected"] else (
-                "<form method='post' data-native-post='true' action='/app/timetable/setup/break-gap' class='tt-form compact'>"
-                + hidden
-                + "<input type='hidden' name='start_time' value='" + esc(g["start_time"]) + "'>"
-                + "<input type='hidden' name='end_time' value='" + esc(g["end_time"]) + "'>"
-                + "<label>Break name<input name='label' required placeholder='e.g. Tea break'></label>"
-                + "<button class='tt-btn'>Select this gap</button></form>"
-            ))
-            + "</td></tr>"
-            for g in break_candidates
-        ) or "<tr><td colspan='4' class='tt-muted'>No gaps detected. Adjust period times to create a gap.</td></tr>"
+        def render_break_candidate_row(g):
+            selected_break = next(
+                (b for b in breaks if str(b["start_time"]) == str(g["start_time"]) and str(b["end_time"]) == str(g["end_time"])),
+                None,
+            )
+            if selected_break:
+                actions = (
+                    "<details><summary>Edit</summary><form method='post' data-native-post='true' action='/app/timetable/setup/break' class='tt-form compact'>"
+                    + hidden
+                    + f"<input type='hidden' name='break_no' value='{int(selected_break['break_no'])}'>"
+                    + f"<label>Name<input name='label' value='{esc(selected_break['label'])}' required></label>"
+                    + f"<label>Start<input type='time' name='start_time' value='{esc(selected_break['start_time'])}' required></label>"
+                    + f"<label>End<input type='time' name='end_time' value='{esc(selected_break['end_time'])}' required></label>"
+                    + f"<label>Scope<select name='applies_to'><option value='all' {'selected' if selected_break['applies_to']=='all' else ''}>All</option><option value='selected' {'selected' if selected_break['applies_to']=='selected' else ''}>Selected</option></select></label>"
+                    + "<button class='tt-btn'>Save changes</button></form></details>"
+                    + "<form method='post' data-native-post='true' action='/app/timetable/setup/row-delete' onsubmit='return confirm(&quot;Delete this selected break?&quot;)'>"
+                    + hidden
+                    + f"<input type='hidden' name='kind' value='break'><input type='hidden' name='row_id' value='{int(selected_break['id'])}'>"
+                    + "<button class='tt-btn danger'>Delete</button></form>"
+                )
+            else:
+                actions = (
+                    "<form method='post' data-native-post='true' action='/app/timetable/setup/break-gap' class='tt-form compact'>"
+                    + hidden
+                    + "<input type='hidden' name='start_time' value='" + esc(g["start_time"]) + "'>"
+                    + "<input type='hidden' name='end_time' value='" + esc(g["end_time"]) + "'>"
+                    + "<label>Break name<input name='label' required placeholder='e.g. Tea break'></label>"
+                    + "<button class='tt-btn'>Select this gap</button></form>"
+                )
+            display_label = selected_break["label"] if selected_break else g["label"]
+            return (
+                f"<tr><td><b>{esc(display_label)}</b></td><td>{esc(g['start_time'])}–{esc(g['end_time'])}</td>"
+                + f"<td>{'Selected' if selected_break else 'Available'}</td><td>{actions}</td></tr>"
+            )
+        break_candidate_rows = "".join(render_break_candidate_row(g) for g in break_candidates) or "<tr><td colspan='4' class='tt-muted'>No gaps detected. Adjust period times to create a gap.</td></tr>"
 
         calendar_rows = "".join(
             f"<tr><td>{esc(e['exception_date'])}</td><td><b>{esc(e['label'])}</b></td><td>{esc(e['exception_type'])}</td><td>{'Instructional' if e['is_instructional'] else 'Non-instructional'}</td><td>{esc(e['notes'] or '—')}</td><td><details><summary>Edit</summary><form method='post' data-native-post='true' action='/app/timetable/setup/calendar-event' class='tt-form compact'>{hidden}<input type='hidden' name='exception_date' value='{esc(e['exception_date'])}'><input type='hidden' name='label' value='{esc(e['label'])}'><label>Type<select name='exception_type'><option value='holiday' {'selected' if e['exception_type']=='holiday' else ''}>Holiday</option><option value='school_closure' {'selected' if e['exception_type']=='school_closure' else ''}>School closure</option><option value='special_instructional_day' {'selected' if e['exception_type']=='special_instructional_day' else ''}>Special instructional day</option><option value='event' {'selected' if e['exception_type']=='event' else ''}>Event</option></select></label><label>Notes<input name='notes' value='{esc(e['notes'] or '')}'></label><label class='tt-check'><input type='checkbox' name='instructional' value='1' {'checked' if e['is_instructional'] else ''}> Instructional</label><button class='tt-btn'>Save changes</button></form></details><form method='post' data-native-post='true' action='/app/timetable/setup/row-delete' onsubmit='return confirm(&quot;Delete this calendar entry?&quot;)'>{hidden}<input type='hidden' name='kind' value='calendar'><input type='hidden' name='row_id' value='{int(e['id'])}'><button class='tt-btn danger'>Delete</button></form></td></tr>" for e in calendar_events
