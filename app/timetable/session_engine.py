@@ -507,7 +507,7 @@ def create_scheduled_session(connection: Any, school_id: int, profile_id: int,
     )
     _validate_calendar_session(
         cur, school_id, profile_id, session_date, day_id,
-        start_time, end_time, schedule_layer,
+        start_time, end_time, schedule_layer, programme_id,
     )
     _validate_constraints(
         cur, school_id, profile_id, schedule_layer, session_type, subject_id,
