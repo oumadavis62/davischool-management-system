@@ -78,6 +78,46 @@ class TimetableViewTests(unittest.TestCase):
         self.assertEqual(len(result["lessons"]), 2)
         self.assertIn("Classroom 1", result["title"])
 
+
+    def test_weekend_sessions_are_grouped_by_configured_rotation_on_one_view_sheet(self):
+        from app.timetable.advanced_setup import create_rotation_cycle, save_rotation_week
+        save_day(self.db, 1, self.profile_id, "SAT", "Saturday", 6, False)
+        saturday_id = self.db.execute(
+            "SELECT id FROM ds_timetable_days WHERE day_code='SAT'"
+        ).fetchone()[0]
+        self.db.execute(
+            "UPDATE ds_timetable_profiles SET academic_start_date=?,academic_end_date=? WHERE id=?",
+            ("2027-01-01", "2027-12-31", self.profile_id),
+        )
+        cycle = create_rotation_cycle(
+            self.db, 1, self.profile_id, "Weekend departments", 2, "2027-01-02"
+        )
+        save_rotation_week(self.db, 1, self.profile_id, cycle, 1, "Weekend 1", "SCIENCE")
+        save_rotation_week(self.db, 1, self.profile_id, cycle, 2, "Weekend 2", "LANGUAGES")
+        for session_date, label, teacher_id in [
+            ("2027-01-02", "Science clinic", 10),
+            ("2027-01-09", "Language clinic", 11),
+        ]:
+            cur = self.db.cursor()
+            cur.execute(
+                """INSERT INTO ds_timetable_sessions
+                   (school_id,profile_id,schedule_layer,session_type,day_id,session_date,
+                    start_time,end_time,duration_periods,status,created_at,updated_at)
+                   VALUES(?,?,?,?,?,?,?,?,?,?,?,?)""",
+                (1,self.profile_id,"additional_learning","remedial",saturday_id,
+                 session_date,"09:00","10:00",0,"scheduled","2027-01-01","2027-01-01"),
+            )
+            sid = cur.lastrowid
+            cur.execute(
+                "INSERT INTO ds_timetable_session_teachers(school_id,profile_id,session_id,teacher_id) VALUES(?,?,?,?)",
+                (1,self.profile_id,sid,teacher_id),
+            )
+            self.db.commit()
+        result = get_timetable_view(self.db, 1, self.profile_id, "school")
+        self.assertEqual(len(result["weekend_sessions"]), 2)
+        self.assertEqual(set(result["weekend_groups"]), {"Weekend 1", "Weekend 2"})
+        self.assertEqual(len(result["remedial_sessions"]), 2)
+
     def test_views_reject_cross_school_targets(self):
         with self.assertRaises(Exception):
             get_timetable_view(self.db, 2, self.profile_id, "class", 20)
