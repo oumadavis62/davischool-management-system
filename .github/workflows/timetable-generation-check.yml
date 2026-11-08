@@ -1,0 +1,20 @@
+name: Timetable generation syntax check
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "app/timetable/**"
+      - "app/main.py"
+      - ".github/workflows/timetable-generation-check.yml"
+
+jobs:
+  python-compile:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+      - name: Compile application modules
+        run: python -m compileall -q app

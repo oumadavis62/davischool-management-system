@@ -6,7 +6,7 @@ import json
 from urllib.parse import quote
 
 from fastapi import Form, Request
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 
 from app.timetable.setup import TimetableSetupError
 from app.timetable.generator import (
@@ -38,7 +38,7 @@ def register_timetable_generator_routes(app, get_db, get_school_obj, module_page
         return RedirectResponse("/app/timetable/automatic" + (("?" + "&".join(parts)) if parts else ""), 303)
 
     @app.get("/app/timetable/automatic", response_class=HTMLResponse)
-    def timetable_automatic_page(request: Request, profile_id: int = 0, run_id: int = 0, message: str = "", error: int = 0):
+    def timetable_automatic_page(request: Request, profile_id: int = 0, run_id: int = 0, job_id: int = 0, message: str = "", error: int = 0):
         school = school_for(request)
         if not school:
             return RedirectResponse("/", 303)
@@ -87,7 +87,41 @@ def register_timetable_generator_routes(app, get_db, get_school_obj, module_page
         if not selected:
             body = "<div class='ag-empty'><h2>No timetable profile found</h2><p>Create a profile and configure the school week before automatic generation.</p><a class='ag-btn' href='/app/timetable/setup'>Open Timetable Setup</a></div>"
             return module_page(request, "Automatic Timetabling", "timetable", body)
+        job_progress_html = ""
+        if job_id:
+            job_progress_html = f"<section class='ag-result' id='tt-job-progress'><span class='ag-kicker'>BACKGROUND GENERATION · JOB #{int(job_id)}</span><h3 id='tt-job-title'>Checking generation status…</h3><p id='tt-job-message'>The timetable is being generated in the background. You can safely leave this page.</p><div id='tt-job-stage' class='ag-state'>QUEUED</div></section>"
         generator_script = "<script>\n        async function ttRunGenerator(button, action, profileId, mode) {\n            if (button.dataset.busy === '1') return;\n            const payload = new URLSearchParams({profile_id: String(profileId)});\n            if (mode === 'dated') {\n                const start = document.getElementById('tt-start-date');\n                const end = document.getElementById('tt-end-date');\n                if (!start || !end || !start.value || !end.value) {\n                    alert('Choose both the start and end dates before generating.');\n                    return;\n                }\n                if (end.value < start.value) {\n                    alert('The end date must be on or after the start date.');\n                    return;\n                }\n                const span = (Date.parse(end.value + 'T00:00:00Z') - Date.parse(start.value + 'T00:00:00Z')) / 86400000;\n                if (span > 365) {\n                    alert('Generate no more than 366 calendar days at a time.');\n                    return;\n                }\n                payload.set('start_date', start.value);\n                payload.set('end_date', end.value);\n            }\n            const prompts = {\n                complete: 'Generate a complete timetable using the current setup? Existing manual lessons will be preserved.',\n                advanced: 'Generate normalized sessions, including combined classes and teaching teams?',\n                dated: 'Generate dated sessions for every active requirement in this date range?'\n            };\n            if (!confirm(prompts[mode] || 'Start timetable generation?')) return;\n            const original = button.textContent;\n            button.dataset.busy = '1';\n            button.disabled = true;\n            button.textContent = 'Generating timetable…';\n            try {\n                const response = await fetch(action, {\n                    method: 'POST',\n                    credentials: 'same-origin',\n                    headers: {'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8'},\n                    body: payload.toString(),\n                    redirect: 'follow'\n                });\n                if (!response.ok) {\n                    const detail = (await response.text()).slice(0, 500);\n                    throw new Error('Server returned HTTP ' + response.status + (detail ? ': ' + detail : ''));\n                }\n                if (response.redirected && response.url) window.location.assign(response.url);\n                else window.location.reload();\n            } catch (error) {\n                button.disabled = false;\n                button.dataset.busy = '';\n                button.textContent = original;\n                alert('Timetable generation request failed: ' + (error && error.message ? error.message : error));\n            }\n        }\n        </script>"
+        if job_id:
+            generator_script += f"""<script>
+            (function () {{
+                const jobId = {int(job_id)};
+                const title = document.getElementById('tt-job-title');
+                const message = document.getElementById('tt-job-message');
+                const stage = document.getElementById('tt-job-stage');
+                let attempts = 0;
+                async function refreshJob() {{
+                    try {{
+                        const response = await fetch('/app/timetable/generation-jobs/' + jobId, {{credentials:'same-origin', cache:'no-store'}});
+                        if (!response.ok) throw new Error('Could not read job status');
+                        const job = await response.json();
+                        title.textContent = job.status === 'completed' ? 'Timetable generated' : job.status === 'failed' ? 'Generation needs attention' : 'Generating timetable…';
+                        message.textContent = job.message || 'The solver is working. You can safely leave this page.';
+                        stage.textContent = String(job.stage || job.status || 'queued').toUpperCase();
+                        stage.className = 'ag-state ' + (job.status === 'completed' ? 'good' : job.status === 'failed' ? 'bad' : '');
+                        if (job.status === 'completed' && job.result_run_id) {{
+                            window.location.replace('/app/timetable/automatic?profile_id={pid}&run_id=' + encodeURIComponent(job.result_run_id));
+                            return;
+                        }}
+                        if (job.status === 'completed' || job.status === 'failed') return;
+                    }} catch (err) {{
+                        message.textContent = 'Status temporarily unavailable. The background job remains queued or running; refreshing this page is safe.';
+                    }}
+                    attempts += 1;
+                    if (attempts < 1200) window.setTimeout(refreshJob, 3000);
+                }}
+                refreshJob();
+            }})();
+            </script>"""
         read_only = str(selected['status']) != 'draft'
         advanced_action = (
             f"""<button type='button' class='ag-btn secondary' onclick="ttRunGenerator(this,'/app/timetable/automatic/generate-advanced',{pid},'advanced')">Generate weekly instructional sessions ({int(advanced_instructional_requirements)})</button>"""
@@ -141,7 +175,7 @@ def register_timetable_generator_routes(app, get_db, get_school_obj, module_page
         <div class='ag-wrap'><div class='ag-hero'><div><span class='ag-kicker'>DAVISCHOOL · CONSTRAINT SOLVER</span><h2>Automatic Timetable Generator</h2><p>Generate ordinary lessons, combined classes and co-teaching together in one clash-checked weekly run.</p></div><div style='display:flex;gap:8px;flex-wrap:wrap'><a class='ag-btn secondary' href='/app/timetable/builder?profile_id={pid}'>Manual Builder</a><a class='ag-btn secondary' href='/app/timetable/views?profile_id={pid}'>Timetable Views</a><a class='ag-btn secondary' href='/app/timetable/publishing?profile_id={pid}'>Publishing & Versions</a><a class='ag-btn secondary' href='/app/timetable/setup?profile_id={pid}'>Setup</a></div></div>{notice}{selector}
         <section class='ag-card'><span class='ag-kicker'>GENERATION READINESS</span><h3>{esc(selected['name'])}</h3><p>{esc(selected['academic_year'])} · {esc(selected['term'])}. The generator preserves manual lessons and replaces an earlier automatic timetable only after it finds a complete solution.</p><div class='ag-checks'><div class='ag-check'><b>{int(days)}</b><span>Instructional days</span></div><div class='ag-check'><b>{int(periods)}</b><span>Teaching periods</span></div><div class='ag-check'><b>{int(requirements)}</b><span>Lesson requirements</span></div><div class='ag-check'><b>{int(allocations_count)}</b><span>Current allocations</span></div><div class='ag-check'><b>{int(rooms)}</b><span>Available rooms</span></div></div>
         {action_html}
-                </section>{result_html}<section class='ag-history'><span class='ag-kicker'>AUDITABLE GENERATION HISTORY</span><h3>Previous runs</h3><div class='ag-table-scroll'><table><tr><th>Run</th><th>Created</th><th>Status</th><th>Engine</th><th>Result</th></tr>{run_rows}</table></div></section></div>{generator_script}
+                </section>{job_progress_html}{result_html}<section class='ag-history'><span class='ag-kicker'>AUDITABLE GENERATION HISTORY</span><h3>Previous runs</h3><div class='ag-table-scroll'><table><tr><th>Run</th><th>Created</th><th>Status</th><th>Engine</th><th>Result</th></tr>{run_rows}</table></div></section></div>{generator_script}
         """
         return module_page(request, "Automatic Timetabling", "timetable", body)
 
@@ -199,95 +233,29 @@ def register_timetable_generator_routes(app, get_db, get_school_obj, module_page
         school = school_for(request)
         if not school:
             return RedirectResponse("/", 303)
-        con = get_db()
+        from app.timetable.generation_jobs import enqueue_generation_job
         try:
-            advanced_result = None
-            advanced_count = con.execute(
-                """SELECT COUNT(*) FROM ds_timetable_scheduling_requirements
-                   WHERE school_id=? AND profile_id=? AND is_active=1
-                     AND schedule_layer='instructional'""",
-                (int(school["id"]), profile_id),
-            ).fetchone()[0]
-            created_advanced_ids = []
-            try:
-                if int(advanced_count or 0):
-                    advanced_result = generate_advanced_instructional_sessions(
-                        con, int(school["id"]), profile_id, request.session.get("email", ""),
-                        defer_replacement=True,
-                    )
-                    created_advanced_ids = list(advanced_result.get("session_ids") or [])
-                result = generate_timetable(
-                    con, int(school["id"]), profile_id, request.session.get("email", ""),
-                    normalized_run_id=(advanced_result or {}).get("run_id"),
-                )
-                if result.get("status") != "completed":
-                    if created_advanced_ids:
-                        marks = ",".join("?" for _ in created_advanced_ids)
-                        con.execute(f"DELETE FROM ds_timetable_session_classes WHERE session_id IN ({marks})", tuple(created_advanced_ids))
-                        con.execute(f"DELETE FROM ds_timetable_session_teachers WHERE session_id IN ({marks})", tuple(created_advanced_ids))
-                        con.execute(f"DELETE FROM ds_timetable_session_learners WHERE session_id IN ({marks})", tuple(created_advanced_ids))
-                        con.execute(f"DELETE FROM ds_timetable_sessions WHERE school_id=? AND profile_id=? AND id IN ({marks})",
-                                    (int(school["id"]), profile_id, *created_advanced_ids))
-                        if advanced_result and advanced_result.get("run_id"):
-                            con.execute("UPDATE ds_timetable_generation_runs SET status='failed',finished_at=CURRENT_TIMESTAMP WHERE id=? AND school_id=?",
-                                        (int(advanced_result["run_id"]), int(school["id"])))
-                        con.commit()
-                    return redirect_generator(profile_id, int(result.get("run_id") or 0),
-                                              result.get("message", "Generation failed."), True)
-                if advanced_result:
-                    previous_ids = list(advanced_result.get("previous_session_ids") or [])
-                    if previous_ids:
-                        marks = ",".join("?" for _ in previous_ids)
-                        con.execute(f"DELETE FROM ds_timetable_session_classes WHERE session_id IN ({marks})", tuple(previous_ids))
-                        con.execute(f"DELETE FROM ds_timetable_session_teachers WHERE session_id IN ({marks})", tuple(previous_ids))
-                        con.execute(f"DELETE FROM ds_timetable_session_learners WHERE session_id IN ({marks})", tuple(previous_ids))
-                        con.execute(f"DELETE FROM ds_timetable_sessions WHERE school_id=? AND profile_id=? AND id IN ({marks})",
-                                    (int(school["id"]), profile_id, *previous_ids))
-                        con.commit()
-                    result["generated_sessions"] = int(advanced_result.get("generated_sessions") or 0)
-                    result["message"] = (
-                        str(result.get("message") or "Weekly timetable generated.") +
-                        " Combined/co-teaching sessions: " +
-                        str(result["generated_sessions"]) + "."
-                    )
-                return redirect_generator(profile_id, int(result.get("run_id") or 0),
-                                          result.get("message", "Generation finished."), False)
-            except Exception:
-                if created_advanced_ids:
-                    marks = ",".join("?" for _ in created_advanced_ids)
-                    con.execute(f"DELETE FROM ds_timetable_session_classes WHERE session_id IN ({marks})", tuple(created_advanced_ids))
-                    con.execute(f"DELETE FROM ds_timetable_session_teachers WHERE session_id IN ({marks})", tuple(created_advanced_ids))
-                    con.execute(f"DELETE FROM ds_timetable_session_learners WHERE session_id IN ({marks})", tuple(created_advanced_ids))
-                    con.execute(f"DELETE FROM ds_timetable_sessions WHERE school_id=? AND profile_id=? AND id IN ({marks})",
-                                (int(school["id"]), profile_id, *created_advanced_ids))
-                    if advanced_result and advanced_result.get("run_id"):
-                        con.execute("UPDATE ds_timetable_generation_runs SET status='failed',finished_at=CURRENT_TIMESTAMP WHERE id=? AND school_id=?",
-                                    (int(advanced_result["run_id"]), int(school["id"])))
-                    con.commit()
-                raise
-        except TimetableSetupError as exc:
-            try:
-                con.rollback()
-            except Exception:
-                pass
-            return redirect_generator(profile_id, message=str(exc), error=True)
+            job_id = enqueue_generation_job(
+                get_db, int(school["id"]), int(profile_id), request.session.get("email", "")
+            )
         except Exception:
-            # Keep solver/database failures visible in Render logs while
-            # returning the operator to the generation history instead of
-            # exposing a blank HTTP 500 response.
             import logging
             logging.getLogger("davischool.timetable.generator").exception(
-                "Automatic timetable generation failed (school_id=%s, profile_id=%s)",
-                int(school["id"]), profile_id,
+                "Could not enqueue automatic timetable generation (school_id=%s profile_id=%s)",
+                int(school["id"]), int(profile_id),
             )
-            try:
-                con.rollback()
-            except Exception:
-                pass
-            return redirect_generator(
-                profile_id,
-                message="Generation could not complete because of an internal or database error. Check the application logs and retry; existing timetable entries have been preserved.",
-                error=True,
-            )
-        finally:
-            con.close()
+            return redirect_generator(profile_id, message="The generation job could not be queued because the database is busy. Your existing timetable has not been changed. Please retry.", error=True)
+        return RedirectResponse(
+            f"/app/timetable/automatic?profile_id={int(profile_id)}&job_id={job_id}", 303
+        )
+
+    @app.get("/app/timetable/generation-jobs/{job_id}")
+    def timetable_generation_job_status(request: Request, job_id: int):
+        school = school_for(request)
+        if not school:
+            return JSONResponse({"error": "Not authorised"}, status_code=401)
+        from app.timetable.generation_jobs import get_generation_job
+        job = get_generation_job(get_db, int(school["id"]), int(job_id))
+        if not job:
+            return JSONResponse({"error": "Generation job not found"}, status_code=404)
+        return JSONResponse(job)
