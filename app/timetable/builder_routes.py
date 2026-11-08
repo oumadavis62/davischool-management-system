@@ -1,4 +1,4 @@
-"""Manual timetable builder UI and actions."""
+"""Manual timetable builder with days as rows and period/break columns."""
 from __future__ import annotations
 
 from html import escape
