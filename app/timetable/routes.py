@@ -815,7 +815,7 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
             (school_id,pid),
         ).fetchall()
         con.close()
-        esc = lambda v: escape(str(v if v is not None else ""))
+        esc = lambda v, quote=False: escape(str(v if v is not None else ""), quote=quote)
         option = lambda rows, label: "<option value=''>Any " + label + "</option>" + "".join(
             f"<option value='{int(row['id'])}'>{esc(row['name'] if 'name' in row.keys() else row[label])}</option>" for row in rows
         )
