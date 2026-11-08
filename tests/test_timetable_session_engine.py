@@ -700,5 +700,25 @@ class TimetableSessionEngineTests(unittest.TestCase):
             )
 
 
+    def test_normalized_session_conflicts_detect_legacy_weekly_lessons(self):
+        self.db.execute(
+            """INSERT INTO ds_timetable_lessons
+               (school_id,profile_id,class_id,subject_id,teacher_id,room_id,
+                day_id,period_id,duration_periods,status,created_at,updated_at)
+               VALUES(8,?,?,1,11,?, ?,?,1,'scheduled','now','now')""",
+            (self.profile_id, 1, self.room_id, self.day_id, self.period_id),
+        )
+        conflicts = find_session_conflicts(
+            self.db, 8, self.profile_id, "08:20", "09:00",
+            class_ids=[1], teacher_ids=[11], room_id=self.room_id,
+            day_id=self.day_id,
+        )
+        self.assertEqual(len(conflicts), 1)
+        self.assertEqual(conflicts[0]["source"], "legacy")
+        self.assertEqual(
+            set(conflicts[0]["reasons"]),
+            {"class:1", "teacher:11", f"room:{self.room_id}"},
+        )
+
 if __name__ == "__main__":
     unittest.main()
