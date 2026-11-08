@@ -323,9 +323,11 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
                 for _ in range(max(0, weekly - len(planned_sessions)))
             )
         else:
+            # Start with the non-manual weekly occurrences; shared sessions
+            # are removed from this list immediately below.
             planned_sessions = [
                 {"duration": duration, "preferred_period_id": None}
-                for _ in range(remaining)
+                for _ in range(max(0, weekly - already))
             ]
 
         for shared_duration in covered_sessions:
