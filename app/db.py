@@ -12,6 +12,7 @@ import atexit
 import psycopg
 from psycopg_pool import ConnectionPool
 from urllib.parse import urlsplit, urlunsplit
+from contextvars import ContextVar
 
 
 class CompatRow(dict):
@@ -177,6 +178,60 @@ class CompatCursor:
 
 _pools = {}
 _database_guard_lock = threading.Lock()
+
+# Every HTTP request owns the database connections it acquires. The legacy
+# application has many route handlers written before pooled connections were
+# introduced; several close on the normal path but not on every exception or
+# early return. This request scope is a final safety net so one failed route
+# cannot permanently lease a pool slot.
+_request_connections: ContextVar[list | None] = ContextVar(
+    "davischool_request_database_connections", default=None
+)
+
+
+class RequestDatabaseConnectionMiddleware:
+    """Return every connection acquired during an HTTP request, on all exits.
+
+    This is pure ASGI middleware (rather than BaseHTTPMiddleware) so the
+    ContextVar scope is inherited by FastAPI's sync endpoint worker threads.
+    """
+
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope.get("type") != "http":
+            await self.app(scope, receive, send)
+            return
+
+        token = _request_connections.set([])
+        try:
+            await self.app(scope, receive, send)
+        finally:
+            connections = _request_connections.get() or []
+            _request_connections.reset(token)
+            seen = set()
+            for connection in reversed(connections):
+                identity = id(connection)
+                if identity in seen:
+                    continue
+                seen.add(identity)
+                try:
+                    connection.close()
+                except Exception as exc:
+                    print(
+                        "DAVISCHOOL_REQUEST_DB_CLEANUP_WARNING:",
+                        type(exc).__name__,
+                        flush=True,
+                    )
+
+
+def _track_request_connection(connection):
+    active = _request_connections.get()
+    if active is not None:
+        active.append(connection)
+    return connection
+
 _database_guard_checked = set()
 
 
@@ -323,7 +378,20 @@ class CompatConnection:
         pool = _get_pool(database_url, connect_timeout=connect_timeout)
         object.__setattr__(self, "_pool", pool)
 
-        conn = pool.getconn(timeout=connect_timeout)
+        try:
+            conn = pool.getconn(timeout=connect_timeout)
+        except Exception as exc:
+            # Expose pool pressure without logging credentials or SQL values.
+            try:
+                stats = pool.get_stats()
+                print(
+                    "DAVISCHOOL_DB_POOL_ACQUIRE_FAILED: %s stats=%r"
+                    % (type(exc).__name__, stats),
+                    flush=True,
+                )
+            except Exception:
+                pass
+            raise
         object.__setattr__(self, "_conn", conn)
         object.__setattr__(self, "_returned", False)
         try:
@@ -345,6 +413,7 @@ class CompatConnection:
                 except Exception:
                     pass
             raise
+        _track_request_connection(self)
 
     @property
     def row_factory(self):
