@@ -9,7 +9,7 @@ from app.timetable.setup import TimetableSetupError, _profile
 from app.timetable.session_engine import _validate_constraints
 
 
-ENGINE_VERSION = "1.1"
+ENGINE_VERSION = "1.2"
 DEFAULT_NODE_LIMIT = 100000
 
 
@@ -798,17 +798,32 @@ def generate_advanced_instructional_sessions(connection: Any, school_id: int,
                 return None
         return span
 
+    # Read preference rules once. The previous implementation queried the
+    # same table for every candidate slot, multiplying database round-trips
+    # by tasks × days × periods.
+    preference_rules = cur.execute(
+        """SELECT * FROM ds_timetable_constraints
+           WHERE school_id=? AND profile_id=? AND is_active=1
+             AND constraint_type='prefer'
+             AND (schedule_layer='all' OR schedule_layer='instructional')
+             AND (applies_to='all' OR applies_to='lesson')""",
+        (school_id, profile_id),
+    ).fetchall()
+
+    # Room inventory is also immutable during this search. Load it once and
+    # filter it in memory for each requirement instead of querying it for
+    # every day/period combination.
+    active_rooms = cur.execute(
+        """SELECT id,capacity,allocation_mode,assigned_class_id,room_type
+           FROM ds_timetable_rooms WHERE school_id=? AND is_active=1
+           ORDER BY capacity DESC,id""",
+        (school_id,),
+    ).fetchall()
+    enrolment_cache = {}
+
     def preference_penalty(task, option):
-        rules = cur.execute(
-            """SELECT * FROM ds_timetable_constraints
-               WHERE school_id=? AND profile_id=? AND is_active=1
-                 AND constraint_type='prefer'
-                 AND (schedule_layer='all' OR schedule_layer='instructional')
-                 AND (applies_to='all' OR applies_to='lesson')""",
-            (school_id, profile_id),
-        ).fetchall()
         penalty = 0
-        for rule in rules:
+        for rule in preference_rules:
             if rule["subject_id"] is not None and int(rule["subject_id"]) != int(task["subject_id"] or 0):
                 continue
             if rule["teacher_id"] is not None and int(rule["teacher_id"]) not in task["teachers"]:
@@ -831,6 +846,39 @@ def generate_advanced_instructional_sessions(connection: Any, school_id: int,
     candidates = []
     for task in tasks:
         options = []
+        class_key = tuple(sorted(task["classes"]))
+        if class_key not in enrolment_cache:
+            room_enrolment = len(task["learners"])
+            if task["classes"]:
+                class_marks = ",".join("?" for _ in task["classes"])
+                enrolled_count = cur.execute(
+                    f"SELECT COUNT(*) FROM students WHERE school_id=? AND class_id IN ({class_marks})",
+                    (school_id, *task["classes"]),
+                ).fetchone()[0]
+                room_enrolment = max(room_enrolment, int(enrolled_count or 0))
+            enrolment_cache[class_key] = room_enrolment
+        room_enrolment = enrolment_cache[class_key]
+
+        if task["room_assignment_mode"] == "fixed":
+            room_ids_for_task = [task["preferred_room_id"]] if task["preferred_room_id"] is not None else []
+        elif task["room_type"] or task["room_assignment_mode"] == "preferred":
+            eligible_rooms = [
+                room for room in active_rooms
+                if (not task["room_type"] or str(room["room_type"] or "") == str(task["room_type"]))
+                and (str(room["allocation_mode"] or "shared") != "dedicated"
+                     or int(room["assigned_class_id"] or 0) in task["classes"])
+                and (room["capacity"] is None or int(room["capacity"]) >= room_enrolment)
+            ]
+            room_ids_for_task = [int(room["id"]) for room in eligible_rooms]
+            if (task["room_assignment_mode"] == "preferred"
+                    and task["preferred_room_id"] is not None
+                    and task["preferred_room_id"] in room_ids_for_task):
+                room_ids_for_task = [task["preferred_room_id"]] + [
+                    value for value in room_ids_for_task if value != task["preferred_room_id"]
+                ]
+        else:
+            room_ids_for_task = [None]
+
         for day in days:
             day_id = int(day["id"])
             for index, period in enumerate(periods):
@@ -858,37 +906,7 @@ def generate_advanced_instructional_sessions(connection: Any, school_id: int,
                 ).fetchone()
                 if unavailable:
                     continue
-                room_enrolment = len(task["learners"])
-                if task["classes"]:
-                    class_marks = ",".join("?" for _ in task["classes"])
-                    room_enrolment = max(room_enrolment, int(cur.execute(
-                        f"SELECT COUNT(*) FROM students WHERE school_id=? AND class_id IN ({class_marks})",
-                        (school_id, *task["classes"]),
-                    ).fetchone()[0] or 0))
-                if task["room_assignment_mode"] == "fixed":
-                    room_ids = [task["preferred_room_id"]] if task["preferred_room_id"] is not None else []
-                elif task["room_type"] or task["room_assignment_mode"] == "preferred":
-                    room_params = [school_id]
-                    room_sql = """SELECT id,capacity,allocation_mode,assigned_class_id FROM ds_timetable_rooms
-                                  WHERE school_id=? AND is_active=1"""
-                    if task["room_type"]:
-                        room_sql += " AND room_type=?"
-                        room_params.append(task["room_type"])
-                    room_sql += " ORDER BY capacity DESC,id"
-                    rooms = cur.execute(room_sql, tuple(room_params)).fetchall()
-                    room_ids = [
-                        int(r["id"]) for r in rooms
-                        if (str(r["allocation_mode"] or "shared") != "dedicated"
-                            or int(r["assigned_class_id"] or 0) in task["classes"])
-                        and (r["capacity"] is None or int(r["capacity"]) >= room_enrolment)
-                    ]
-                    if (task["room_assignment_mode"] == "preferred"
-                            and task["preferred_room_id"] is not None
-                            and task["preferred_room_id"] in room_ids):
-                        room_ids = [task["preferred_room_id"]] + [value for value in room_ids if value != task["preferred_room_id"]]
-                else:
-                    room_ids = [None]
-                for room_id in room_ids:
+                for room_id in room_ids_for_task:
                     if _validate_constraints:
                         try:
                             _validate_constraints(cur, school_id, profile_id, "instructional", "lesson",
