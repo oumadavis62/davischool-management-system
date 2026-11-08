@@ -511,21 +511,21 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
     from collections import defaultdict
     blocked_candidates = set()
     existing_by_id = {}
-    conflict_rows = cur.execute(
-        """SELECT s.id,s.day_id,s.start_time,s.end_time,s.room_id,
-                  sc.class_id,st.teacher_id
-           FROM ds_timetable_sessions s
-           LEFT JOIN ds_timetable_session_classes sc
-             ON sc.session_id=s.id AND sc.school_id=s.school_id
-           LEFT JOIN ds_timetable_session_teachers st
-             ON st.session_id=s.id AND st.school_id=s.school_id
-           WHERE s.school_id=? AND s.profile_id=?
-             AND s.session_date IS NULL
-             AND s.status NOT IN ('cancelled','void')
-             AND (s.generation_run_id IS NULL OR s.generation_run_id=?)
-           ORDER BY s.id""",
-        (school_id, profile_id, int(normalized_run_id)),
-    ).fetchall()
+    conflict_sql = """SELECT s.id,s.day_id,s.start_time,s.end_time,s.room_id,
+                              sc.class_id,st.teacher_id
+                       FROM ds_timetable_sessions s
+                       LEFT JOIN ds_timetable_session_classes sc
+                         ON sc.session_id=s.id AND sc.school_id=s.school_id
+                       LEFT JOIN ds_timetable_session_teachers st
+                         ON st.session_id=s.id AND st.school_id=s.school_id
+                       WHERE s.school_id=? AND s.profile_id=?
+                         AND s.session_date IS NULL
+                         AND s.status NOT IN ('cancelled','void')"""
+    conflict_params = [school_id, profile_id]
+    if normalized_run_id is not None:
+        conflict_sql += " AND (s.generation_run_id IS NULL OR s.generation_run_id=?)"
+        conflict_params.append(int(normalized_run_id))
+    conflict_rows = cur.execute(conflict_sql + " ORDER BY s.id", tuple(conflict_params)).fetchall()
     for row in conflict_rows:
         item = existing_by_id.setdefault(int(row["id"]), {
             "day_id": int(row["day_id"]) if row["day_id"] is not None else None,
