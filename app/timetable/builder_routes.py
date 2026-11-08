@@ -355,10 +355,10 @@ def register_timetable_builder_routes(app, get_db, get_school_obj, module_page):
                     "end_time": str(slot["end_time"]),
                 }
                 for slot in occurrence["schedule_slots"]
-                if str(slot["slot_type"]).lower() == "instructional"
+                if occurrence["is_instructional"] and str(slot["slot_type"]).lower() == "instructional"
             ]
             rotations = [
-                str(item.get("week", {}).get("label") or item.get("programme_name") or "Active rotation")
+                str((item.get("week") or {}).get("label") or item.get("cycle_name") or "Active rotation")
                 for item in occurrence.get("rotations", [])
             ]
             return JSONResponse({
