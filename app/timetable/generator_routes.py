@@ -91,6 +91,37 @@ def register_timetable_generator_routes(app, get_db, get_school_obj, module_page
         if job_id:
             job_progress_html = f"<section class='ag-result' id='tt-job-progress'><span class='ag-kicker'>BACKGROUND GENERATION · JOB #{int(job_id)}</span><h3 id='tt-job-title'>Checking generation status…</h3><p id='tt-job-message'>The timetable is being generated in the background. You can safely leave this page.</p><div id='tt-job-stage' class='ag-state'>QUEUED</div></section>"
         generator_script = "<script>\n        async function ttRunGenerator(button, action, profileId, mode) {\n            if (button.dataset.busy === '1') return;\n            const payload = new URLSearchParams({profile_id: String(profileId)});\n            if (mode === 'dated') {\n                const start = document.getElementById('tt-start-date');\n                const end = document.getElementById('tt-end-date');\n                if (!start || !end || !start.value || !end.value) {\n                    alert('Choose both the start and end dates before generating.');\n                    return;\n                }\n                if (end.value < start.value) {\n                    alert('The end date must be on or after the start date.');\n                    return;\n                }\n                const span = (Date.parse(end.value + 'T00:00:00Z') - Date.parse(start.value + 'T00:00:00Z')) / 86400000;\n                if (span > 365) {\n                    alert('Generate no more than 366 calendar days at a time.');\n                    return;\n                }\n                payload.set('start_date', start.value);\n                payload.set('end_date', end.value);\n            }\n            const prompts = {\n                complete: 'Generate a complete timetable using the current setup? Existing manual lessons will be preserved.',\n                advanced: 'Generate normalized sessions, including combined classes and teaching teams?',\n                dated: 'Generate dated sessions for every active requirement in this date range?'\n            };\n            if (!confirm(prompts[mode] || 'Start timetable generation?')) return;\n            const original = button.textContent;\n            button.dataset.busy = '1';\n            button.disabled = true;\n            button.textContent = 'Generating timetable…';\n            try {\n                const response = await fetch(action, {\n                    method: 'POST',\n                    credentials: 'same-origin',\n                    headers: {'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8'},\n                    body: payload.toString(),\n                    redirect: 'follow'\n                });\n                if (!response.ok) {\n                    const detail = (await response.text()).slice(0, 500);\n                    throw new Error('Server returned HTTP ' + response.status + (detail ? ': ' + detail : ''));\n                }\n                if (response.redirected && response.url) window.location.assign(response.url);\n                else window.location.reload();\n            } catch (error) {\n                button.disabled = false;\n                button.dataset.busy = '';\n                button.textContent = original;\n                alert('Timetable generation request failed: ' + (error && error.message ? error.message : error));\n            }\n        }\n        </script>"
+        if job_id:
+            generator_script += f"""<script>
+            (function () {{
+                const jobId = {int(job_id)};
+                const title = document.getElementById('tt-job-title');
+                const message = document.getElementById('tt-job-message');
+                const stage = document.getElementById('tt-job-stage');
+                let attempts = 0;
+                async function refreshJob() {{
+                    try {{
+                        const response = await fetch('/app/timetable/generation-jobs/' + jobId, {{credentials:'same-origin', cache:'no-store'}});
+                        if (!response.ok) throw new Error('Could not read job status');
+                        const job = await response.json();
+                        title.textContent = job.status === 'completed' ? 'Timetable generated' : job.status === 'failed' ? 'Generation needs attention' : 'Generating timetable…';
+                        message.textContent = job.message || 'The solver is working. You can safely leave this page.';
+                        stage.textContent = String(job.stage || job.status || 'queued').toUpperCase();
+                        stage.className = 'ag-state ' + (job.status === 'completed' ? 'good' : job.status === 'failed' ? 'bad' : '');
+                        if (job.status === 'completed' && job.result_run_id) {{
+                            window.location.replace('/app/timetable/automatic?profile_id={pid}&run_id=' + encodeURIComponent(job.result_run_id));
+                            return;
+                        }}
+                        if (job.status === 'completed' || job.status === 'failed') return;
+                    }} catch (err) {{
+                        message.textContent = 'Status temporarily unavailable. The background job remains queued or running; refreshing this page is safe.';
+                    }}
+                    attempts += 1;
+                    if (attempts < 1200) window.setTimeout(refreshJob, 3000);
+                }}
+                refreshJob();
+            }})();
+            </script>"""
         read_only = str(selected['status']) != 'draft'
         advanced_action = (
             f"""<button type='button' class='ag-btn secondary' onclick="ttRunGenerator(this,'/app/timetable/automatic/generate-advanced',{pid},'advanced')">Generate weekly instructional sessions ({int(advanced_instructional_requirements)})</button>"""
