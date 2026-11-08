@@ -304,7 +304,8 @@ def find_session_conflicts(connection: Any, school_id: int, profile_id: int,
                            exclude_session_id: int | None = None,
                            ignore_generated_sessions: bool = False,
                            include_legacy_lessons: bool = True,
-                           generated_run_id: int | None = None) -> list[dict[str, Any]]:
+                           generated_run_id: int | None = None,
+                           ignore_generated_legacy_lessons: bool = False) -> list[dict[str, Any]]:
     """Return every overlapping new-engine session sharing a resource."""
     classes = _unique_ids(class_ids, "class")
     teachers = _unique_ids(teacher_ids, "teacher")
@@ -376,6 +377,8 @@ def find_session_conflicts(connection: Any, school_id: int, profile_id: int,
                          WHERE l.school_id=? AND l.profile_id=? AND l.day_id=?
                            AND l.status='scheduled' AND l.generation_run_id IS NULL
                            AND p.start_time < ? AND e.end_time > ?"""
+        if ignore_generated_legacy_lessons:
+            legacy_base += " AND l.generation_run_id IS NULL"
         legacy_params = (school_id, profile_id, day_id, end_time, start_time)
         def collect_legacy(sql: str, values: tuple[Any, ...], reason: str) -> None:
             for row in cur.execute(sql, values).fetchall():
@@ -460,7 +463,8 @@ def create_scheduled_session(connection: Any, school_id: int, profile_id: int,
                              pattern_session_no: int | None = None,
                              created_by: str = "",
                              generation_run_id: int | None = None,
-                             ignore_generated_conflicts: bool = False) -> int:
+                             ignore_generated_conflicts: bool = False,
+                             ignore_generated_legacy_conflicts: bool = False) -> int:
     start_time, end_time = (start_time or "").strip(), (end_time or "").strip()
     if not _TIME_RE.fullmatch(start_time) or not _TIME_RE.fullmatch(end_time) or start_time >= end_time:
         raise TimetableSetupError("Enter a valid start and end time in 24-hour HH:MM format.")
@@ -675,6 +679,7 @@ def create_scheduled_session(connection: Any, school_id: int, profile_id: int,
         connection, school_id, profile_id, start_time, end_time,
         classes, teachers, learners, room_id, day_id, session_date,
         ignore_generated_sessions=ignore_generated_conflicts,
+        ignore_generated_legacy_lessons=ignore_generated_legacy_conflicts,
     )
     if conflicts:
         summary = "; ".join(

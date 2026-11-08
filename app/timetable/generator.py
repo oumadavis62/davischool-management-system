@@ -874,7 +874,7 @@ def generate_advanced_instructional_sessions(connection: Any, school_id: int,
                             continue
                     if find_session_conflicts(connection, school_id, profile_id, start, end,
                         task["classes"], task["teachers"], task["learners"], room_id, day_id,
-                        ignore_generated_sessions=True):
+                        ignore_generated_sessions=True, ignore_generated_legacy_lessons=True):
                         continue
                     options.append({"day_id": day_id, "period_id": int(period["id"]),
                         "start": start, "end": end, "room_id": room_id,
@@ -981,6 +981,7 @@ def generate_advanced_instructional_sessions(connection: Any, school_id: int,
                 scheduling_requirement_id=task["requirement_id"],
                 pattern_session_no=task["session_no"], created_by=created_by,
                 generation_run_id=run_id, ignore_generated_conflicts=True,
+                ignore_generated_legacy_conflicts=True,
             ))
         old_rows = cur.execute(
             """SELECT id FROM ds_timetable_sessions
