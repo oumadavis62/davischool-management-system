@@ -689,9 +689,6 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
         finally: con.close()
 
     @app.post("/app/timetable/setup/requirements/bulk")
-    def create_timetable_requirements_bulk(request: Request, profile_id: int = Form(...), lessons_per_week: int = Form(5), duration_periods: int = Form(1)):
-        school = school_for(request)
-        if not school:     @app.post("/app/timetable/setup/requirements/bulk")
     def create_timetable_requirements_bulk(
         request: Request,
         profile_id: int = Form(...),
@@ -705,58 +702,25 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
         if not school: return RedirectResponse("/", 303)
         con = get_db()
         try:
-            if not 1 <= lessons_per_week <= 30 or not 1 <= duration_periods <= 4:
-                raise TimetableSetupError("Choose a valid weekly lesson load and lesson duration.")
-            if max_lessons_per_day.strip() and not 1 <= int(max_lessons_per_day) <= 10:
-                raise TimetableSetupError("Maximum lessons per day must be between 1 and 10.")
-            selected_subjects = sorted(set(int(value) for value in subject_ids))
-            if not selected_subjects:
-                raise TimetableSetupError("Select at least one subject.")
-            school_id = int(school["id"])
-            cur = con.cursor()
-            _profile(cur, school_id, profile_id)
-            placeholders = ",".join("?" for _ in selected_subjects)
-            rows = cur.execute(
-                f"""SELECT DISTINCT ta.class_id,ta.subject_id,ta.teacher_id
-                    FROM teacher_allocations ta
-                    JOIN classes c ON c.id=ta.class_id AND c.school_id=ta.school_id
-                    JOIN subjects s ON s.id=ta.subject_id AND s.school_id=ta.school_id
-                    JOIN teachers t ON t.id=ta.teacher_id AND t.school_id=ta.school_id
-                    WHERE ta.school_id=? AND ta.subject_id IN ({placeholders})
-                    ORDER BY ta.subject_id,ta.class_id,ta.teacher_id""",
-                (school_id, *selected_subjects),
-            ).fetchall()
-            if not rows:
-                raise TimetableSetupError("The selected subjects have no active class and teacher allocations in this school.")
-            created = skipped = 0
-            for row in rows:
-                exists = cur.execute(
-                    """SELECT id FROM ds_timetable_class_requirements
-                       WHERE school_id=? AND profile_id=? AND class_id=? AND subject_id=? AND teacher_id=? LIMIT 1""",
-                    (school_id, profile_id, row["class_id"], row["subject_id"], row["teacher_id"]),
-                ).fetchone()
-                if exists:
-                    skipped += 1
-                    continue
-                save_class_requirement(
-                    con, school_id, profile_id, int(row["class_id"]),
-                    int(row["subject_id"]), int(row["teacher_id"]),
-                    lessons_per_week, duration_periods,
-                    int(max_lessons_per_day) if max_lessons_per_day.strip() else None,
-                    allow_double == "1",
-                )
-                created += 1
-            selected_count = len(selected_subjects)
+            selected, created, preserved = save_subject_requirements(
+                con, int(school["id"]), profile_id, subject_ids,
+                lessons_per_week, duration_periods,
+                int(max_lessons_per_day) if max_lessons_per_day.strip() else None,
+                allow_double == "1",
+            )
             return redirect_setup(
                 profile_id,
-                f"Subject requirements applied: {selected_count} subject(s), {created} class/teacher requirements added; {skipped} existing customized requirements preserved.",
+                f"Subject requirements applied: {selected} subject(s), {created} class/teacher requirements added; {preserved} existing customized requirements preserved.",
             )
         except (TimetableSetupError, ValueError) as exc:
             return redirect_setup(profile_id, str(exc), True)
         finally:
             con.close()
 
-")):
+    @app.post("/app/timetable/setup/class-limits")
+    def create_class_timetable_limits(request: Request, profile_id: int = Form(...),
+        class_id: int = Form(...), max_lessons_per_week: str = Form(""),
+        max_periods_per_day: str = Form(""), notes: str = Form("")):
         school = school_for(request)
         if not school: return RedirectResponse("/", 303)
         con = get_db()
