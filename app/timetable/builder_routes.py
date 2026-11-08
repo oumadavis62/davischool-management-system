@@ -111,8 +111,8 @@ def register_timetable_builder_routes(app, get_db, get_school_obj, module_page):
             ).fetchall()
             advanced_sessions = cur.execute(
                 """SELECT s.*,sub.name subject_name,d.day_name,p.label period_label,
-                          GROUP_CONCAT(DISTINCT c.name || COALESCE(' ' || c.stream,'')) class_names,
-                          GROUP_CONCAT(DISTINCT t.name) teacher_names,rm.name room_name
+                          STRING_AGG(DISTINCT (c.name || COALESCE(' ' || c.stream,''))::text, ', ') class_names,
+                          STRING_AGG(DISTINCT t.name::text, ', ') teacher_names,rm.name room_name
                    FROM ds_timetable_sessions s
                    LEFT JOIN subjects sub ON sub.id=s.subject_id AND sub.school_id=s.school_id
                    LEFT JOIN ds_timetable_days d ON d.id=s.day_id AND d.profile_id=s.profile_id
