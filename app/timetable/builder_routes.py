@@ -235,7 +235,7 @@ def register_timetable_builder_routes(app, get_db, get_school_obj, module_page):
             <button class='tb-btn'>Save room rule</button></form></section>"""
             if not read_only and advanced_requirements else ""
         )
-        class_group_options = "".join(f"<option value='{int(c['id'])}'>{esc(c['name'])} {esc(c['stream'] or '')}</option>" for c in class_records)
+        classclass_group_options = "".join(f"<option value='{int(c['id'])}'>{esc(c['name'])} {esc(c['stream'] or '')}</option>" for c in class_records)
         teacher_group_options = "".join(f"<option value='{int(t['id'])}'>{esc(t['name'])}</option>" for t in teacher_records)
         subject_group_options = "".join(f"<option value='{int(x['id'])}'>{esc(x['name'])}</option>" for x in subject_records)
         combined_group_form = (
