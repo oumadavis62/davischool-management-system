@@ -17,6 +17,7 @@ from app.timetable.setup import (
     save_room,
     save_teacher_availability,
     save_class_requirement,
+    save_class_limits,
     _profile,
 )
 from app.timetable.advanced_setup import save_timetable_constraint
@@ -164,7 +165,7 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
             selected = profiles[0]
         selected_status = str(selected["status"] or "draft").strip().lower() if selected else ""
         has_draft_profile = any(str(p["status"] or "draft").strip().lower() == "draft" for p in profiles)
-        days = periods = breaks = calendar_events = rooms = teachers = allocations = availability = requirements = []
+        days = periods = breaks = calendar_events = rooms = teachers = allocations = availability = requirements = class_limits = []
         if selected:
             pid = int(selected["id"])
             days = cur.execute("SELECT * FROM ds_timetable_days WHERE school_id=? AND profile_id=? ORDER BY day_order,id", (school_id,pid)).fetchall()
@@ -201,6 +202,13 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
                    WHERE r.school_id=? AND r.profile_id=? ORDER BY c.name,c.stream,s.name""",
                 (school_id,pid),
             ).fetchall()
+            class_limits = cur.execute(
+                """SELECT l.*,c.name class_name,c.stream
+                   FROM ds_timetable_class_limits l
+                   JOIN classes c ON c.id=l.class_id AND c.school_id=l.school_id
+                   WHERE l.school_id=? AND l.profile_id=? ORDER BY c.name,c.stream""",
+                (school_id,pid),
+            ).fetchall()
         con.close()
 
         esc = lambda value: escape(str(value if value is not None else ""))
@@ -227,6 +235,15 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
         allocation_opts = "".join(f"<option value='{int(a['class_id'])}|{int(a['subject_id'])}|{int(a['teacher_id'])}'>{esc(a['class_name'])} {esc(a['stream'] or '')} · {esc(a['subject_name'])} · {esc(a['teacher_name'])}</option>" for a in allocations)
         availability_rows = "".join(f"<tr><td>{esc(a['teacher_name'])}</td><td>{esc(a['day_name'])}</td><td>{esc(a['period_label'])}</td><td><span class='tt-pill'>{esc(a['availability'])}</span></td><td>{esc(a['reason'] or '—')}</td></tr>" for a in availability) or "<tr><td colspan='5' class='tt-muted'>No teacher availability rules yet.</td></tr>"
         requirement_rows = "".join(f"<tr><td>{esc(r['class_name'])} {esc(r['stream'] or '')}</td><td>{esc(r['subject_name'])}</td><td>{esc(r['teacher_name'])}</td><td>{esc(r['lessons_per_week'])}</td><td>{esc(r['duration_periods'])}</td><td>{'Yes' if r['allow_double'] else 'No'}</td></tr>" for r in requirements) or "<tr><td colspan='6' class='tt-muted'>No weekly lesson requirements configured.</td></tr>"
+        class_limit_rows = "".join(
+            f"<tr><td><b>{esc(x['class_name'])} {esc(x['stream'] or '')}</b></td><td>{esc(x['max_lessons_per_week'] if x['max_lessons_per_week'] is not None else 'No limit')}</td><td>{esc(x['max_periods_per_day'] if x['max_periods_per_day'] is not None else 'No limit')}</td><td>{esc(x['notes'] or '—')}</td></tr>"
+            for x in class_limits
+        ) or "<tr><td colspan='4' class='tt-muted'>No class workload limits configured.</td></tr>"
+        class_limit_class_opts = "".join(
+            f"<option value='{int(x['class_id'])}'>{esc(x['class_name'])} {esc(x['stream'] or '')}</option>"
+            for x in allocations if int(x['class_id']) not in {int(y['class_id']) for y in class_limits}
+        )
+        class_limit_form = f"""<section class='tt-section'><div class='tt-section-title'><div><span class='tt-kicker'>08 · CLASS WORKLOAD LIMITS</span><h3>Maximum weekly lessons and daily periods</h3><p>Set a ceiling independently for each class or stream. Double and triple lessons count by their actual period duration toward the daily period ceiling.</p></div></div><div class='tt-split'><form method='post' data-native-post='true' action='/app/timetable/setup/class-limits' class='tt-form compact'>{hidden}<label class='wide'>Class / stream<select name='class_id' required><option value=''>Select class or stream</option>{class_limit_class_opts}</select></label><label>Maximum lessons per week<input name='max_lessons_per_week' type='number' min='1' max='100' placeholder='No limit'></label><label>Maximum periods per day<input name='max_periods_per_day' type='number' min='1' max='30' placeholder='No limit'></label><label class='wide'>Notes<input name='notes' maxlength='180' placeholder='Optional workload guidance'></label><button class='tt-btn'>Save class workload limits</button></form><div class='tt-table'><table><tr><th>Class / stream</th><th>Max lessons / week</th><th>Max periods / day</th><th>Notes</th></tr>{class_limit_rows}</table></div></div></section>"""
         bulk_requirement_form = (
             "<form method='post' data-native-post='true' action='/app/timetable/setup/requirements/bulk' class='tt-bulk-requirements'>"
             + hidden
@@ -253,6 +270,7 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
             <section class='tt-section'><div class='tt-section-title'><div><span class='tt-kicker'>04 · ACADEMIC CALENDAR</span><h3>Holidays and special dates</h3><p>Mark closures, holidays and exceptional instructional days inside this term.</p></div></div><div class='tt-split'><form method='post' data-native-post='true' action='/app/timetable/setup/calendar-event' class='tt-form compact'>{hidden}<label>Date<input name='exception_date' type='date' required></label><label>Event name<input name='label' required placeholder='National holiday'></label><label>Event type<select name='exception_type'><option value='holiday'>Public / school holiday</option><option value='school_closure'>School closure</option><option value='special_instructional_day'>Special instructional day</option><option value='event'>School event</option></select></label><label>Notes<input name='notes' maxlength='180' placeholder='Optional details'></label><label class='tt-check'><input type='checkbox' name='instructional' value='1'> Instructional day</label><button class='tt-btn'>Save calendar date</button></form><div class='tt-table'><table><tr><th>Date</th><th>Event</th><th>Type</th><th>Day type</th><th>Notes</th></tr>{calendar_rows}</table></div></div></section>
             <section class='tt-section'><div class='tt-section-title'><div><span class='tt-kicker'>05 · LEARNING SPACES</span><h3>Rooms and facilities</h3><p>Register classrooms, laboratories, halls and specialist spaces.</p></div></div><div class='tt-split'><form method='post' data-native-post='true' action='/app/timetable/setup/room' class='tt-form compact'>{hidden}<label>Room code<input name='room_code' required placeholder='LAB-01'></label><label>Room name<input name='name' required placeholder='Science Laboratory'></label><label>Room type<select name='room_type'><option value='classroom'>Classroom</option><option value='laboratory'>Laboratory</option><option value='library'>Library</option><option value='hall'>Hall</option><option value='workshop'>Workshop</option><option value='sports'>Sports facility</option><option value='other'>Other</option></select></label><label>Capacity<input name='capacity' type='number' min='1' placeholder='40'></label><button class='tt-btn'>Save room</button></form><div class='tt-table'><table><tr><th>Code</th><th>Room</th><th>Type</th><th>Capacity</th></tr>{room_rows}</table></div></div></section>
             <section class='tt-section'><div class='tt-section-title'><div><span class='tt-kicker'>06 · STAFF AVAILABILITY</span><h3>Teacher availability</h3><p>Mark unavailable or preferred teacher periods.</p></div></div><div class='tt-split'><form method='post' data-native-post='true' action='/app/timetable/setup/availability' class='tt-form compact'>{hidden}<label>Teacher<select name='teacher_id' required><option value=''>Select teacher</option>{teacher_opts}</select></label><label>Day<select name='day_id' required><option value=''>Select day</option>{day_opts}</select></label><label>Period<select name='period_id' required><option value=''>Select period</option>{period_opts}</select></label><label>Availability<select name='availability'><option value='unavailable'>Unavailable</option><option value='preferred'>Preferred</option><option value='available'>Available</option></select></label><label>Reason<input name='reason' maxlength='160' placeholder='e.g. Part-time availability'></label><button class='tt-btn'>Save availability</button></form><div class='tt-table'><table><tr><th>Teacher</th><th>Day</th><th>Period</th><th>Status</th><th>Reason</th></tr>{availability_rows}</table></div></div></section>
+            {class_limit_form}
             <section class='tt-section'><div class='tt-section-title'><div><span class='tt-kicker'>07 · WEEKLY LESSON LOAD</span><h3>Class subject requirements</h3><p>Set weekly lesson frequency using existing teacher allocations.</p></div></div><div class='tt-split'><div><form method='post' data-native-post='true' action='/app/timetable/setup/requirement' class='tt-form compact'>{hidden}<label class='wide'>Allocated class · subject · teacher<select name='allocation' required><option value=''>Select existing allocation</option>{allocation_opts}</select></label><label>Lessons per week<input name='lessons_per_week' type='number' min='1' max='30' required value='5'></label><label>Duration<select name='duration_periods'><option value='1'>Single period</option><option value='2'>Double period</option><option value='3'>Triple period</option></select></label><label>Maximum per day<input name='max_lessons_per_day' type='number' min='1' max='10' placeholder='No limit'></label><label class='tt-check'><input type='checkbox' name='allow_double' value='1'> Allow double lessons</label><button class='tt-btn'>Save one requirement</button></form>{bulk_requirement_form}</div><div class='tt-table'><table><tr><th>Class / Stream</th><th>Subject</th><th>Teacher</th><th>Weekly</th><th>Duration</th><th>Double</th></tr>{requirement_rows}</table></div></div></section>
             """
         body = f"""
@@ -637,6 +655,26 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
                 save_class_requirement(con, school_id, profile_id, int(row["class_id"]), int(row["subject_id"]), int(row["teacher_id"]), lessons_per_week, duration_periods)
                 created += 1
             return redirect_setup(profile_id, f"Bulk setup complete: {created} requirements added; {skipped} existing requirements preserved.")
+        except (TimetableSetupError, ValueError) as exc:
+            return redirect_setup(profile_id, str(exc), True)
+        finally:
+            con.close()
+
+    @app.post("/app/timetable/setup/class-limits")
+    def create_class_timetable_limits(request: Request, profile_id: int = Form(...),
+        class_id: int = Form(...), max_lessons_per_week: str = Form(""),
+        max_periods_per_day: str = Form(""), notes: str = Form("")):
+        school = school_for(request)
+        if not school: return RedirectResponse("/", 303)
+        con = get_db()
+        try:
+            save_class_limits(
+                con, int(school["id"]), profile_id, class_id,
+                int(max_lessons_per_week) if max_lessons_per_week.strip() else None,
+                int(max_periods_per_day) if max_periods_per_day.strip() else None,
+                notes,
+            )
+            return redirect_setup(profile_id, "Class workload limits saved.")
         except (TimetableSetupError, ValueError) as exc:
             return redirect_setup(profile_id, str(exc), True)
         finally:
