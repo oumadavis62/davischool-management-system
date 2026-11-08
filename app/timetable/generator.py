@@ -433,6 +433,8 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
     nodes = 0
     exhausted = False
 
+    from app.timetable.session_engine import find_session_conflicts
+
     def search(position: int, fallback: bool = False) -> bool:
         nonlocal nodes, exhausted
         if position >= len(order):
@@ -468,6 +470,17 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
                     exhausted = True
                     return False
                 placement = dict(candidate, room_id=room_id)
+                # Normalized combined/co-teaching sessions occupy the same
+                # weekly resources as legacy lessons. Keep them as fixed
+                # anchors while solving this engine's ordinary requirements.
+                if find_session_conflicts(
+                    connection, school_id, profile_id,
+                    placement["start_time"], placement["end_time"],
+                    class_ids=[task["class_id"]],
+                    teacher_ids=[task["teacher_id"]],
+                    room_id=room_id, day_id=placement["day_id"],
+                ):
+                    continue
                 if not _can_place(task, placement, placements):
                     continue
                 placement.update({
