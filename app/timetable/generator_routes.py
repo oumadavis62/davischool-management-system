@@ -127,9 +127,9 @@ def register_timetable_generator_routes(app, get_db, get_school_obj, module_page
         generate_action = "/app/timetable/automatic/generate"
         if tab_id:
             generate_action += "?ds_tab=" + quote(tab_id)
-        tab_field = f"<input type='hidden' name='ds_tab' value='{esc(tab_id, quote=True)}'>" if tab_id else ""
+        tab_field = f"<input type='hidden' name='ds_tab' value='{esc(tab_id)}'>" if tab_id else ""
         action_html = (
-            f"""<form method='post' action='{esc(generate_action, quote=True)}' class='ag-generate-form' onsubmit="return confirm('Generate a complete timetable using the current setup? Existing manual lessons will be preserved.');"><input type='hidden' name='profile_id' value='{pid}'>{tab_field}<button type='submit' class='ag-btn'>⚡ Generate complete timetable</button></form>"""
+            f"""<form method='post' action='{esc(generate_action)}' class='ag-generate-form' onsubmit="return confirm('Generate a complete timetable using the current setup? Existing manual lessons will be preserved.');"><input type='hidden' name='profile_id' value='{pid}'>{tab_field}<button type='submit' class='ag-btn'>⚡ Generate complete timetable</button></form>"""
             if ready else
             (f"""<div class='ag-warning'>This profile is {esc(selected['status']).replace('_',' ')} and is read-only. Create a new draft revision before generating or changing its timetable.</div><a class='ag-btn secondary' href='/app/timetable/publishing?profile_id={pid}'>Create Revision</a>""" if read_only else
              f"""<div class='ag-warning'>Complete the setup requirements first: add instructional days, teaching periods and a weekly requirement for every current class-subject-teacher allocation.</div><a class='ag-btn secondary' href='/app/timetable/setup?profile_id={pid}'>Complete Setup</a>""")
