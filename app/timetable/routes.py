@@ -476,8 +476,7 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
           }}
           let serial=0;
           root.querySelectorAll('.tt-section').forEach(section=>{
-            const addForm=section.querySelector('.tt-form.compact');
-            if(!addForm) return;
+            const addForm=Array.from(section.querySelectorAll('.tt-form.compact')).find(form=>!form.closest('.tt-table')&&!form.closest('details'))||null;
             const title=section.querySelector('h3')?.textContent?.trim()||'Configuration';
             const modalId='tt-setup-modal-'+(++serial);
             const host=document.createElement('div'); host.className='tt-modal'; host.id=modalId; host.setAttribute('role','dialog'); host.setAttribute('aria-modal','true');
@@ -487,10 +486,9 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
             const close=document.createElement('button'); close.type='button'; close.className='tt-modal-close'; close.setAttribute('aria-label','Close'); close.innerHTML='&times;';
             head.append(copy,close);
             const formSlot=document.createElement('div'); formSlot.className='tt-modal-form-slot';
-            const addParent=addForm.parentNode;
-            const card=document.createElement('div'); card.className='tt-add-card'; const open=document.createElement('button'); open.type='button'; open.className='tt-btn secondary'; open.innerHTML='<span aria-hidden="true">＋</span> Add '+title.toLowerCase(); card.append(open);
-            addParent.replaceChild(card,addForm);
-            formSlot.append(addForm); dialog.append(head,formSlot); host.append(dialog); root.append(host);
+            let open=null;
+            if(addForm){const addParent=addForm.parentNode; const card=document.createElement('div'); card.className='tt-add-card'; open=document.createElement('button'); open.type='button'; open.className='tt-btn secondary'; open.innerHTML='<span aria-hidden="true">＋</span> Add '+title.toLowerCase(); card.append(open); addParent.replaceChild(card,addForm); formSlot.append(addForm);}
+            dialog.append(head,formSlot); host.append(dialog); root.append(host);
             const openModal=(form,mode)=>{
               formSlot.replaceChildren(form);
               copy.querySelector('h3').textContent=(mode==='edit'?'Edit ':'Add ')+title;
@@ -498,11 +496,11 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
             };
             const closeModal=()=>{
               host.classList.remove('is-open'); document.body.style.overflow='';
-              formSlot.replaceChildren(addForm);
+              formSlot.replaceChildren(...(addForm?[addForm]:[]));
               copy.querySelector('h3').textContent='Add '+title;
-              open.focus();
+              if(open) open.focus();
             };
-            open.addEventListener('click',()=>openModal(addForm,'add'));
+            if(open) open.addEventListener('click',()=>openModal(addForm,'add'));
             close.addEventListener('click',closeModal);
             host.addEventListener('click',e=>{if(e.target===host)closeModal();});
             host.addEventListener('keydown',e=>{if(e.key==='Escape')closeModal();});
