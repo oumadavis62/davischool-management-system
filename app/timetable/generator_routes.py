@@ -86,62 +86,8 @@ def register_timetable_generator_routes(app, get_db, get_school_obj, module_page
         selector = f"<form method='get' action='/app/timetable/automatic' class='ag-select'><label>Timetable profile</label><select name='profile_id' onchange='this.form.submit()'>{profile_options}</select></form>" if profiles else ""
         if not selected:
             body = "<div class='ag-empty'><h2>No timetable profile found</h2><p>Create a profile and configure the school week before automatic generation.</p><a class='ag-btn' href='/app/timetable/setup'>Open Timetable Setup</a></div>"
-            <script>
-        async function ttRunGenerator(button, action, profileId, mode) {
-            if (button.dataset.busy === '1') return;
-            const payload = new URLSearchParams({profile_id: String(profileId)});
-            if (mode === 'dated') {
-                const start = document.getElementById('tt-start-date');
-                const end = document.getElementById('tt-end-date');
-                if (!start || !end || !start.value || !end.value) {
-                    alert('Choose both the start and end dates before generating.');
-                    return;
-                }
-                if (end.value < start.value) {
-                    alert('The end date must be on or after the start date.');
-                    return;
-                }
-                const span = (Date.parse(end.value + 'T00:00:00Z') - Date.parse(start.value + 'T00:00:00Z')) / 86400000;
-                if (span > 365) {
-                    alert('Generate no more than 366 calendar days at a time.');
-                    return;
-                }
-                payload.set('start_date', start.value);
-                payload.set('end_date', end.value);
-            }
-            const prompts = {
-                complete: 'Generate a complete timetable using the current setup? Existing manual lessons will be preserved.',
-                advanced: 'Generate normalized sessions, including combined classes and teaching teams?',
-                dated: 'Generate dated sessions for every active requirement in this date range?'
-            };
-            if (!confirm(prompts[mode] || 'Start timetable generation?')) return;
-            const original = button.textContent;
-            button.dataset.busy = '1';
-            button.disabled = true;
-            button.textContent = 'Generating timetable…';
-            try {
-                const response = await fetch(action, {
-                    method: 'POST',
-                    credentials: 'same-origin',
-                    headers: {'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8'},
-                    body: payload.toString(),
-                    redirect: 'follow'
-                });
-                if (!response.ok) {
-                    const detail = (await response.text()).slice(0, 500);
-                    throw new Error('Server returned HTTP ' + response.status + (detail ? ': ' + detail : ''));
-                }
-                if (response.redirected && response.url) window.location.assign(response.url);
-                else window.location.reload();
-            } catch (error) {
-                button.disabled = false;
-                button.dataset.busy = '';
-                button.textContent = original;
-                alert('Timetable generation request failed: ' + (error && error.message ? error.message : error));
-            }
-        }
-        </script>
-        return module_page(request, "Automatic Timetabling", "timetable", body)
+            return module_page(request, "Automatic Timetabling", "timetable", body)
+        generator_script = "<script>\n        async function ttRunGenerator(button, action, profileId, mode) {\n            if (button.dataset.busy === '1') return;\n            const payload = new URLSearchParams({profile_id: String(profileId)});\n            if (mode === 'dated') {\n                const start = document.getElementById('tt-start-date');\n                const end = document.getElementById('tt-end-date');\n                if (!start || !end || !start.value || !end.value) {\n                    alert('Choose both the start and end dates before generating.');\n                    return;\n                }\n                if (end.value < start.value) {\n                    alert('The end date must be on or after the start date.');\n                    return;\n                }\n                const span = (Date.parse(end.value + 'T00:00:00Z') - Date.parse(start.value + 'T00:00:00Z')) / 86400000;\n                if (span > 365) {\n                    alert('Generate no more than 366 calendar days at a time.');\n                    return;\n                }\n                payload.set('start_date', start.value);\n                payload.set('end_date', end.value);\n            }\n            const prompts = {\n                complete: 'Generate a complete timetable using the current setup? Existing manual lessons will be preserved.',\n                advanced: 'Generate normalized sessions, including combined classes and teaching teams?',\n                dated: 'Generate dated sessions for every active requirement in this date range?'\n            };\n            if (!confirm(prompts[mode] || 'Start timetable generation?')) return;\n            const original = button.textContent;\n            button.dataset.busy = '1';\n            button.disabled = true;\n            button.textContent = 'Generating timetable…';\n            try {\n                const response = await fetch(action, {\n                    method: 'POST',\n                    credentials: 'same-origin',\n                    headers: {'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8'},\n                    body: payload.toString(),\n                    redirect: 'follow'\n                });\n                if (!response.ok) {\n                    const detail = (await response.text()).slice(0, 500);\n                    throw new Error('Server returned HTTP ' + response.status + (detail ? ': ' + detail : ''));\n                }\n                if (response.redirected && response.url) window.location.assign(response.url);\n                else window.location.reload();\n            } catch (error) {\n                button.disabled = false;\n                button.dataset.busy = '';\n                button.textContent = original;\n                alert('Timetable generation request failed: ' + (error && error.message ? error.message : error));\n            }\n        }\n        </script>"
         read_only = str(selected['status']) != 'draft'
         advanced_action = (
             f"""<button type='button' class='ag-btn secondary' onclick="ttRunGenerator(this,'/app/timetable/automatic/generate-advanced',{pid},'advanced')">Generate weekly instructional sessions ({int(advanced_instructional_requirements)})</button>"""
@@ -184,7 +130,7 @@ def register_timetable_generator_routes(app, get_db, get_school_obj, module_page
         <div class='ag-wrap'><div class='ag-hero'><div><span class='ag-kicker'>DAVISCHOOL · CONSTRAINT SOLVER</span><h2>Automatic Timetable Generator</h2><p>Generate ordinary lessons, combined classes and co-teaching together in one clash-checked weekly run.</p></div><div style='display:flex;gap:8px;flex-wrap:wrap'><a class='ag-btn secondary' href='/app/timetable/builder?profile_id={pid}'>Manual Builder</a><a class='ag-btn secondary' href='/app/timetable/views?profile_id={pid}'>Timetable Views</a><a class='ag-btn secondary' href='/app/timetable/publishing?profile_id={pid}'>Publishing & Versions</a><a class='ag-btn secondary' href='/app/timetable/setup?profile_id={pid}'>Setup</a></div></div>{notice}{selector}
         <section class='ag-card'><span class='ag-kicker'>GENERATION READINESS</span><h3>{esc(selected['name'])}</h3><p>{esc(selected['academic_year'])} · {esc(selected['term'])}. The generator preserves manual lessons and replaces an earlier automatic timetable only after it finds a complete solution.</p><div class='ag-checks'><div class='ag-check'><b>{int(days)}</b><span>Instructional days</span></div><div class='ag-check'><b>{int(periods)}</b><span>Teaching periods</span></div><div class='ag-check'><b>{int(requirements)}</b><span>Lesson requirements</span></div><div class='ag-check'><b>{int(allocations_count)}</b><span>Current allocations</span></div><div class='ag-check'><b>{int(rooms)}</b><span>Available rooms</span></div></div>
         {action_html}
-                </section>{result_html}<section class='ag-history'><span class='ag-kicker'>AUDITABLE GENERATION HISTORY</span><h3>Previous runs</h3><div class='ag-table-scroll'><table><tr><th>Run</th><th>Created</th><th>Status</th><th>Engine</th><th>Result</th></tr>{run_rows}</table></div></section></div>
+                </section>{result_html}<section class='ag-history'><span class='ag-kicker'>AUDITABLE GENERATION HISTORY</span><h3>Previous runs</h3><div class='ag-table-scroll'><table><tr><th>Run</th><th>Created</th><th>Status</th><th>Engine</th><th>Result</th></tr>{run_rows}</table></div></section></div>{generator_script}
         """
         return module_page(request, "Automatic Timetabling", "timetable", body)
 
