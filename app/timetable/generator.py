@@ -694,7 +694,7 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
             int(tasks[symmetry_members[group_id][0]]["subject_id"]),
         ),
     )
-    search_mrv_window = 8
+    search_mrv_window = 3
 
     placements = list(fixed)
     class_week = {}
