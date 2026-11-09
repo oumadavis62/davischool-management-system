@@ -406,6 +406,9 @@ class TimetableSchoolSnapshotIntegrationTests(unittest.TestCase):
         for source_id, target_id in subject_map.items():
             self.db.execute("INSERT INTO subjects VALUES(?,?,?)", (target_id, 1, subject_names[source_id]))
 
+        # Remove the tiny setUp fixture's allocation; this test replaces it
+        # with the complete allocation matrix from the school snapshot.
+        self.db.execute("DELETE FROM teacher_allocations WHERE school_id=1")
         # (class, subject, teacher, weekly occurrences, max lessons/day)
         requirements = [
             (1,1,6,5,None),(1,2,9,5,None),(1,3,4,4,1),(1,4,4,5,1),(1,5,5,4,1),
