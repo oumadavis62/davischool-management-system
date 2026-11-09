@@ -22,7 +22,11 @@ def _overlap(a: dict, b: dict) -> bool:
 
 
 def _resource_ids(task: dict, field: str, singular: str) -> set[int]:
-    return {int(value) for value in task.get(field, [task[singular]])}
+    values = task.get(field)
+    if values is None:
+        value = task.get(singular)
+        values = [value] if value is not None else []
+    return {int(value) for value in values if value is not None}
 
 
 def _build_and_solve(
@@ -101,7 +105,8 @@ def _build_and_solve(
                     penalty += 12
                 if not candidate.get("explicitly_available"):
                     penalty += 500
-                penalty += max(0, int(candidate.get("period_no", 1)) - 1)
+                penalty += max(0, int(candidate.get("period_no") or 1) - 1)
+                penalty += max(0, int(candidate.get("preference_cost") or 0))
                 objective_terms.append(penalty * var)
         if not task_vars:
             return {
@@ -149,7 +154,8 @@ def _build_and_solve(
         for var, placement, _room in entries:
             day = int(placement["day_id"])
             for class_id in _resource_ids(task, "class_ids", "class_id"):
-                subject_day_vars[(class_id, int(task["subject_id"]), day)].append(var)
+                if task.get("enforce_subject_daily", True):
+                    subject_day_vars[(class_id, int(task["subject_id"]), day)].append(var)
                 class_day_vars[(class_id, day)].append((var, int(placement["duration"])))
                 class_week_vars[class_id].append(var)
             for teacher_id in _resource_ids(task, "teacher_ids", "teacher_id"):
@@ -255,8 +261,9 @@ def _build_and_solve(
             task = tasks[task_index]
             placement = dict(selected[0])
             placement.update({
-                "class_id": int(task["class_id"]),
-                "subject_id": int(task["subject_id"]),
+                "task_index": int(task_index),
+                "class_id": int(task.get("class_id") or 0),
+                "subject_id": int(task.get("subject_id") or 0),
                 "teacher_id": int(task["teacher_id"]),
                 "class_ids": sorted(_resource_ids(task, "class_ids", "class_id")),
                 "teacher_ids": sorted(_resource_ids(task, "teacher_ids", "teacher_id")),
