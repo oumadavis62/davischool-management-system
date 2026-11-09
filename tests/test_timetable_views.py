@@ -24,7 +24,7 @@ class TimetableViewTests(unittest.TestCase):
         """)
         self.db.executemany("INSERT INTO teachers VALUES(?,?,?)", [(10,1,"Teacher A"),(11,1,"Teacher B")])
         self.db.executemany("INSERT INTO classes VALUES(?,?,?,?)", [(20,1,"Grade 7","Blue"),(21,1,"Grade 8","Green")])
-        self.db.executemany("INSERT INTO subjects VALUES(?,?,?)", [(30,1,"Mathematics"),(31,1,"English")])
+        self.db.executemany("INSERT INTO subjects (id,school_id,name,initial) VALUES(?,?,?,?)", [(30,1,"Mathematics","M"),(31,1,"English","E")])
         self.db.executemany(
             "INSERT INTO teacher_allocations VALUES(?,?,?,?,?)",
             [(1,1,10,30,20),(2,1,11,31,21)],
