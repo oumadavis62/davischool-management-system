@@ -30,6 +30,13 @@ def register_timetable_builder_routes(app, get_db, get_school_obj, module_page):
             return color
         return "#2563EB"
 
+    def teacher_name_text_color(value):
+        color = safe_teacher_color(value)
+        channels = [int(color[index:index + 2], 16) for index in (1, 3, 5)]
+        # Keep the teacher's chosen hue, but darken it so the name stays
+        # clearly readable over the softly tinted lesson-card background.
+        return "#" + "".join(f"{max(0, round(channel * 0.48)):02X}" for channel in channels)
+
     def redirect_builder(profile_id=0, message="", error=False):
         parts = []
         if profile_id:
@@ -388,7 +395,8 @@ def register_timetable_builder_routes(app, get_db, get_school_obj, module_page):
                             if not read_only:
                                 manage_html = f"""<details class='tb-actions'><summary>Manage</summary><form method='post' action='/app/timetable/builder/move'><input type='hidden' name='profile_id' value='{pid}'><input type='hidden' name='lesson_id' value='{int(lesson['id'])}'><label>Move to day<select name='day_id'>{move_day_opts}</select></label><label>Start period<select name='period_id'>{move_period_opts}</select></label><label>Room<select name='room_id'>{move_room_opts}</select></label><button class='tb-small'>Move lesson</button></form><form method='post' action='/app/timetable/builder/delete' onsubmit="return confirm('Remove this lesson from the timetable?')"><input type='hidden' name='profile_id' value='{pid}'><input type='hidden' name='lesson_id' value='{int(lesson['id'])}'><button class='tb-delete'>Delete lesson</button></form></details>"""
                             teacher_color = safe_teacher_color(lesson["teacher_color"])
-                            cards.append(f"""<div class='tb-lesson' style='--teacher-color:{teacher_color}' title='{esc(lesson['subject_name'])} · {esc(lesson['teacher_name'])}' draggable='{'false' if read_only else 'true'}' data-lesson-id='{int(lesson['id'])}' ondragstart='dragTimetableLesson(event)'><div class='tb-lesson-top'><b class='tb-subject-initials'>{esc(str(lesson['subject_initial'] or '').strip().upper() or '—')}</b><span>{duration}P</span></div><div class='tb-meta tb-teacher-name' style='color:{teacher_color}!important;-webkit-text-fill-color:{teacher_color}'>{esc(lesson['teacher_name'])}</div><div class='tb-meta'>⌂ {room_label}</div>{manage_html}</div>""")
+                            teacher_name_color = teacher_name_text_color(teacher_color)
+                            cards.append(f"""<div class='tb-lesson' style='--teacher-color:{teacher_color}' title='{esc(lesson['subject_name'])} · {esc(lesson['teacher_name'])}' draggable='{'false' if read_only else 'true'}' data-lesson-id='{int(lesson['id'])}' ondragstart='dragTimetableLesson(event)'><div class='tb-lesson-top'><b class='tb-subject-initials'>{esc(str(lesson['subject_initial'] or '').strip().upper() or '—')}</b><span>{duration}P</span></div><div class='tb-meta tb-teacher-name' style='color:{teacher_name_color}!important;-webkit-text-fill-color:{teacher_name_color}'>{esc(lesson['teacher_name'])}</div><div class='tb-meta'>⌂ {room_label}</div>{manage_html}</div>""")
                         cells.append(f"<td class='tb-cell tb-cell-multi' data-day-id='{int(day['id'])}' data-period-id='{int(period['id'])}' ondragover='event.preventDefault()' ondrop='dropTimetableLesson(event,this)'>{''.join(cards)}</td>")
                     elif continued_lessons:
                         continued_html = "".join(
