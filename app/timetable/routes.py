@@ -427,9 +427,29 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
                     f"</span>" for index, item in enumerate(saved_pattern, 1)
                 ) or "<span class='tt-session-chip muted'>Not yet broken into sessions</span>"
             ) + f"<small class='tt-req-subline'>{used} of {int(req['lessons_per_week'])} periods configured · {max(0, int(req['lessons_per_week'])-used)} remaining</small>"
+        requirement_cards_by_class = {}
+        for r in requirements:
+            cid = int(r["class_id"])
+            class_label = str(r["class_name"]) + (" " + str(r["stream"] or "")).rstrip()
+            search_text = (class_label + " " + str(r["subject_name"]) + " " + str(r["teacher_name"])).lower()
+            manage_editor = "<details><summary>Manage</summary><div class='tt-req-manage'><form method='post' data-native-post='true' action='/app/timetable/setup/requirement' class='tt-form compact'>{hidden}<input type='hidden' name='allocation' value='{int(r['class_id'])}|{int(r['subject_id'])}|{int(r['teacher_id'])}'><label>Weekly period target<input type='number' min='1' max='30' name='lessons_per_week' value='{int(r['lessons_per_week'])}' required></label><label>Duration<input type='number' min='1' max='4' name='duration_periods' value='{int(r['duration_periods'])}' required></label><label>Max / day<input type='number' min='1' max='10' name='max_lessons_per_day' value='{esc(r['max_lessons_per_day'] or '')}'></label><label class='tt-check'><input type='checkbox' name='allow_double' value='1' {'checked' if r['allow_double'] else ''}> Allow double</label><div class='wide tt-session-editor' data-session-editor> <div class='tt-session-editor-head'><b>Weekly session planner</b><span>Edit every weekly occurrence independently</span></div> <div class='tt-session-linking'> <label>Link another class<select data-link-class><option value=''>Choose class to link</option>{class_group_options}</select></label> <label>Add co-teacher<select data-link-teacher><option value=''>Choose additional teacher</option>{teacher_group_options}</select></label> </div> <div class='tt-session-list' data-session-list><div class='tt-session-row'><span class='tt-session-number'>1</span><label>Lesson type<select data-session-duration><option value='1'>Single · 1 period</option><option value='2'>Double · 2 periods</option><option value='3'>Triple · 3 periods</option><option value='4'>Quadruple · 4 periods</option></select></label><button type='button' data-remove-session disabled>Remove</button></div></div> <button type='button' class='tt-btn secondary' data-add-session>＋ Add another session</button> <input type='hidden' name='weekly_pattern' data-weekly-pattern value='{esc(requirement_pattern_values.get(int(r['id']), ''))}'> <small>Choose single or double separately for each occurrence. Class and co-teacher choices are session planning controls.</small> </div><button class='tt-btn'>Save changes</button></form><form method='post' data-native-post='true' action='/app/timetable/setup/row-delete' onsubmit='return confirm(&quot;Delete this subject requirement?&quot;)'>{hidden}<input type='hidden' name='kind' value='requirement'><input type='hidden' name='row_id' value='{int(r['id'])}'><button class='tt-btn danger'>Delete requirement</button></form></div></details>"
+            card = (
+                f"<article class='tt-req-card' data-requirement-row data-class='{cid}' "
+                f"data-subject='{int(r['subject_id'])}' data-teacher='{int(r['teacher_id'])}' "
+                f"data-search='{esc(search_text)}'>"
+                f"<div class='tt-req-card-main'><div class='tt-req-card-title'>"
+                f"<span class='tt-req-card-subject'>{esc(r['subject_name'])}</span>"
+                f"<span class='tt-req-card-teacher'>Lead teacher · {esc(r['teacher_name'])}</span></div>"
+                f"<div class='tt-req-card-load'><div class='tt-session-chip-list'>{requirement_pattern_display.get(int(r['id']), '')}</div>"
+                f"<small class='tt-req-subline'>Weekly target · {int(r['lessons_per_week'])} periods</small></div>"
+                f"<div class='tt-req-card-action'>{manage_editor}</div></div></article>"
+            )
+            requirement_cards_by_class.setdefault(cid, {"label": class_label, "cards": []})["cards"].append(card)
         requirement_rows = "".join(
-            f"<tr data-requirement-row data-class='{int(r['class_id'])}' data-subject='{int(r['subject_id'])}' data-teacher='{int(r['teacher_id'])}' data-search='{esc(str(r['class_name'])+' '+str(r['stream'] or '')+' '+str(r['subject_name'])+' '+str(r['teacher_name'])).lower()}'><td><b>{esc(r['class_name'])} {esc(r['stream'] or '')}</b></td><td>{esc(r['subject_name'])}</td><td><div class='tt-session-chip-list'>{requirement_pattern_display.get(int(r['id']), '')}</div><small class='tt-req-subline'>Weekly maximum: {int(r['lessons_per_week'])} periods</small></td><td>{esc(r['teacher_name'])}</td><td><details><summary>Manage</summary><div class='tt-req-manage'><form method='post' data-native-post='true' action='/app/timetable/setup/requirement' class='tt-form compact'>{hidden}<input type='hidden' name='allocation' value='{int(r['class_id'])}|{int(r['subject_id'])}|{int(r['teacher_id'])}'><label>Weekly period target<input type='number' min='1' max='30' name='lessons_per_week' value='{int(r['lessons_per_week'])}' required></label><label>Duration<input type='number' min='1' max='4' name='duration_periods' value='{int(r['duration_periods'])}' required></label><label>Max / day<input type='number' min='1' max='10' name='max_lessons_per_day' value='{esc(r['max_lessons_per_day'] or '')}'></label><label class='tt-check'><input type='checkbox' name='allow_double' value='1' {'checked' if r['allow_double'] else ''}> Allow double</label><div class='wide tt-session-editor' data-session-editor> <div class='tt-session-editor-head'><b>Weekly session planner</b><span>Edit every weekly occurrence independently</span></div> <div class='tt-session-linking'> <label>Link another class<select data-link-class><option value=''>Choose class to link</option>{class_group_options}</select></label> <label>Add co-teacher<select data-link-teacher><option value=''>Choose additional teacher</option>{teacher_group_options}</select></label> </div> <div class='tt-session-list' data-session-list><div class='tt-session-row'><span class='tt-session-number'>1</span><label>Lesson type<select data-session-duration><option value='1'>Single · 1 period</option><option value='2'>Double · 2 periods</option><option value='3'>Triple · 3 periods</option><option value='4'>Quadruple · 4 periods</option></select></label><button type='button' data-remove-session disabled>Remove</button></div></div> <button type='button' class='tt-btn secondary' data-add-session>＋ Add another session</button> <input type='hidden' name='weekly_pattern' data-weekly-pattern value='{esc(requirement_pattern_values.get(int(r['id']), ''))}'> <small>Choose single or double separately for each occurrence. Class and co-teacher choices are session planning controls.</small> </div><button class='tt-btn'>Save changes</button></form><form method='post' data-native-post='true' action='/app/timetable/setup/row-delete' onsubmit='return confirm(&quot;Delete this subject requirement?&quot;)'>{hidden}<input type='hidden' name='kind' value='requirement'><input type='hidden' name='row_id' value='{int(r['id'])}'><button class='tt-btn danger'>Delete requirement</button></form></div></details></td></tr>" for r in requirements if not class_id or int(r["class_id"]) == int(class_id)
-        ) or "<tr><td colspan='5' class='tt-muted'>No weekly lesson requirements configured.</td></tr>"
+            f"<section class='tt-req-class-group' data-requirement-group><header><b>{esc(group['label'])}</b>"
+            f"<span>{len(group['cards'])} subject(s)</span></header>{''.join(group['cards'])}</section>"
+            for _, group in sorted(requirement_cards_by_class.items(), key=lambda item: item[1]["label"].lower())
+        ) or "<div class='tt-req-empty'>No weekly subject requirements configured yet. Use <b>Add subject requirement</b> to begin.</div>"
         requirement_class_filters = "".join(f"<option value='{int(cid)}' {'selected' if class_id and int(cid)==int(class_id) else ''}>{esc(name)}</option>" for cid,name in sorted({(int(r['class_id']), str(r['class_name'])+' '+str(r['stream'] or '')) for r in requirements}, key=lambda x:x[1].lower()))
         requirement_subject_filters = "".join(f"<option value='{int(sid)}'>{esc(name)}</option>" for sid,name in sorted({(int(r['subject_id']), str(r['subject_name'])) for r in requirements}, key=lambda x:x[1].lower()))
         requirement_teacher_filters = "".join(f"<option value='{int(tid)}'>{esc(name)}</option>" for tid,name in sorted({(int(r['teacher_id']), str(r['teacher_name'])) for r in requirements}, key=lambda x:x[1].lower()))
@@ -650,7 +670,7 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
     <span class='tt-req-count' id='tt-req-count'></span>
    </div>
    <div class='tt-req-results-head'><div><h3>Configured weekly requirements</h3><p>Open Manage to edit the weekly target and session pattern.</p></div><span class='tt-req-results-total'>{len(requirements)} records</span></div>
-   <div class='tt-table tt-req-table'><table><thead><tr><th>Class / stream</th><th>Subject</th><th>Weekly requirement</th><th>Lead teacher</th><th>Actions</th></tr></thead><tbody>{requirement_rows}</tbody></table></div>
+   <div class='tt-req-groups'>{requirement_rows}</div>
    <div class='tt-req-pagination'><span id='tt-req-page-info'></span><div><button type='button' class='tt-btn secondary' id='tt-req-prev'>← Previous</button><button type='button' class='tt-btn secondary' id='tt-req-next'>Next →</button></div></div>
   </div>
  </div>
@@ -683,6 +703,30 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
         .tt-req-table tbody tr:nth-child(even){{background:#fbfdfb}}
         .tt-req-table tbody tr:hover{{background:#f2f8f3}}
         .tt-req-table .tt-req-subline{{display:block;color:#7a8c7f;font-size:10px;margin-top:4px}}
+        .tt-req-groups{{display:grid;gap:15px}}
+        .tt-req-class-group{{border:1px solid #dfeae1;border-radius:15px;background:#fff;overflow:hidden}}
+        .tt-req-class-group[hidden]{{display:none!important}}
+        .tt-req-class-group>header{{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:12px 16px;background:#f1f7f2;border-bottom:1px solid #e2ece3;color:#28543a}}
+        .tt-req-class-group>header b{{font-size:13px}}
+        .tt-req-class-group>header span{{font-size:10px;font-weight:800;color:#6e8574;background:#fff;border:1px solid #e0eae1;border-radius:20px;padding:5px 9px}}
+        .tt-req-card{{padding:14px 16px;border-bottom:1px solid #edf2ed;background:#fff}}
+        .tt-req-card:last-child{{border-bottom:0}}
+        .tt-req-card[hidden]{{display:none!important}}
+        .tt-req-card:hover{{background:#fbfdfb}}
+        .tt-req-card-main{{display:grid;grid-template-columns:minmax(150px,1fr) minmax(200px,1.25fr) auto;align-items:center;gap:18px}}
+        .tt-req-card-title{{display:grid;gap:5px;min-width:0}}
+        .tt-req-card-subject{{font-size:13px;font-weight:850;color:#254d36}}
+        .tt-req-card-teacher{{font-size:10px;color:#718477}}
+        .tt-req-card-load{{min-width:0}}
+        .tt-req-card-action{{display:flex;justify-content:flex-end}}
+        .tt-req-card-action>details{{position:relative}}
+        .tt-req-card-action>details>summary{{list-style:none;cursor:pointer;border:1px solid #d7e6da;background:#f8fcf8;color:#286443;border-radius:9px;padding:9px 13px;font-size:11px;font-weight:850;white-space:nowrap}}
+        .tt-req-card-action>details>summary::-webkit-details-marker{{display:none}}
+        .tt-req-card-action>details[open]{{grid-column:1/-1}}
+        .tt-req-card-action>details[open] .tt-req-manage{{margin-top:10px;padding:14px;border:1px solid #e0ebe2;border-radius:12px;background:#f8fbf8;min-width:min(680px,80vw)}}
+        .tt-req-empty{{padding:35px 20px;text-align:center;border:1px dashed #cfdfd2;border-radius:14px;background:#fbfdfb;color:#6c8172;font-size:12px}}
+        @media(max-width:700px){{.tt-req-card-main{{grid-template-columns:minmax(0,1fr) auto;gap:10px}}.tt-req-card-load{{grid-column:1/-1;grid-row:2}}.tt-req-card-action{{grid-column:2;grid-row:1}}.tt-req-card-action>details[open]{{grid-column:1/-1}}.tt-req-card-action>details[open] .tt-req-manage{{min-width:0;width:calc(100vw - 82px)}}.tt-req-class-group>header{{padding:11px 13px}}.tt-req-card{{padding:12px 13px}}}
+
         .tt-req-pagination{{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;padding-top:13px}}
         .tt-req-pagination>div{{display:flex;gap:7px}}
         .tt-req-filter-panel{{z-index:30}}
@@ -954,6 +998,7 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
               const pages=Math.max(1,Math.ceil(visible.length/pageSize));page=Math.min(page,pages-1);
               reqRows.forEach(row=>row.hidden=true);
               visible.slice(page*pageSize,(page+1)*pageSize).forEach(row=>row.hidden=false);
+              root.querySelectorAll('[data-requirement-group]').forEach(group=>{{group.hidden=!group.querySelector('[data-requirement-row]:not([hidden])');}});
               if(count)count.textContent=visible.length+' of '+reqRows.length+' requirements';
               if(info)info.textContent='Page '+(page+1)+' of '+pages+' · Showing '+(visible.length?Math.min(page*pageSize+1,visible.length):0)+'–'+Math.min((page+1)*pageSize,visible.length);
               if(prev)prev.disabled=page===0;if(next)next.disabled=page>=pages-1;
