@@ -212,12 +212,15 @@ def register_timetable_view_routes(app, get_db, get_school_obj, module_page):
                                 subject_initial = str(lesson["subject_initial"] or "").strip().upper() or "—"
                                 room_html = f"<div class='tb-meta tb-room-label'>⌂ {esc(lesson['room_name'] or 'Room not assigned')}</div>"
                                 class_label = esc(str(lesson["class_name"]) + ((" · " + str(lesson["stream"])) if lesson["stream"] else ""))
-                                class_line = f"<div class='tb-meta tb-class-label'>{class_label}</div>" if view_type == "teacher" else ""
-                                teacher_avatar = "" if view_type == "teacher" else f"<div class='tb-lesson-footer'><span class='tb-teacher-initials' title='{esc(lesson['teacher_name'])}'>{esc(teacher_initials)}</span></div>"
+                                teacher_footer = (
+                                    f"<div class='tb-lesson-footer'><span class='tb-meta tb-class-label'>{class_label}</span></div>"
+                                    if view_type == "teacher"
+                                    else f"<div class='tb-lesson-footer'><span class='tb-teacher-initials' title='{esc(lesson['teacher_name'])}'>{esc(teacher_initials)}</span></div>"
+                                )
                                 cards.append(
                                     f"<div class='tb-lesson {'tb-lesson-double' if duration > 1 else ''}' style='--teacher-color:{teacher_color}' title='{esc(lesson['subject_name'])} · {esc(lesson['teacher_name'])}'>"
                                     f"<div class='tb-lesson-top'><b class='tb-subject-initials'>{esc(subject_initial)}</b><span>{duration}P</span></div>"
-                                    f"{class_line}{room_html}{teacher_avatar}</div>"
+                                    f"{room_html}{teacher_footer}</div>"
                                 )
                             cells.append(f"<td class='tb-cell tb-cell-multi {'tb-cell-double' if cell_span > 1 else ''}' colspan='{cell_span}'>{''.join(cards)}</td>")
                         elif continued_lessons:
