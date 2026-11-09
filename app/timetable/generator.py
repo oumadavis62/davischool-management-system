@@ -787,7 +787,7 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
         nonlocal nodes, exhausted, exhausted_reason
         if time.monotonic() >= active_deadline:
             exhausted = True
-            exhausted_reason = "deadline" if active_deadline >= deadline else "strict_pass_budget"
+            exhausted_reason = "deadline" if active_deadline >= deadline else "strict_pass_budget" if active_deadline >= deadline else "strict_pass_budget"
             return False
         if len(assigned) >= len(tasks):
             return True
@@ -800,9 +800,9 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
         best_task_index = None
         best_rank_key = None
         for group_id, members in symmetry_members.items():
-            if time.monotonic() >= deadline:
+            if time.monotonic() >= active_deadline:
                 exhausted = True
-                exhausted_reason = "deadline"
+                exhausted_reason = "deadline" if active_deadline >= deadline else "strict_pass_budget"
                 return False
             task_index = next((index for index in members if index not in assigned), None)
             if task_index is None:
@@ -812,18 +812,18 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
             choices = []
             room_ids = _rooms_for_task(task)
             for candidate_rank, candidate in enumerate(candidate_lookup[task_index]):
-                if time.monotonic() >= deadline:
+                if time.monotonic() >= active_deadline:
                     exhausted = True
-                    exhausted_reason = "deadline"
+                    exhausted_reason = "deadline" if active_deadline >= deadline else "strict_pass_budget"
                     return False
                 if candidate_rank <= minimum_rank:
                     continue
                 if not fallback and not candidate.get("explicitly_available"):
                     continue
                 for room_id in room_ids:
-                    if time.monotonic() >= deadline:
+                    if time.monotonic() >= active_deadline:
                         exhausted = True
-                        exhausted_reason = "deadline"
+                        exhausted_reason = "deadline" if active_deadline >= deadline else "strict_pass_budget"
                         return False
                     if (task_index, candidate["day_id"], candidate["period_id"], room_id) in blocked_candidates:
                         continue
