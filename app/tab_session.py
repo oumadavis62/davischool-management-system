@@ -349,9 +349,14 @@ class DaviSchoolTabSessionMiddleware:
         # normally afterward.
         tab_id = self._tab_id(scope)
         replay_messages = []
+        query_has_tab = bool(
+            parse_qs(
+                scope.get("query_string", b"").decode("utf-8", "ignore"),
+                keep_blank_values=True,
+            ).get(_TAB_PARAM, [""])[0]
+        )
         if (
-            not tab_id
-            and scope.get("type") == "http"
+            scope.get("type") == "http"
             and scope.get("method", "GET").upper() == "POST"
             and any(
                 name.lower() == b"content-type"
@@ -380,7 +385,11 @@ class DaviSchoolTabSessionMiddleware:
                 )
                 candidates = form_values.get(_TAB_PARAM, [])
                 candidate = candidates[0] if candidates else ""
-                if _TAB_RE.fullmatch(candidate or ""):
+                # A form's hidden ds_tab is written by the active page
+                # controller at submit time. Prefer it over a possibly stale
+                # Referer-derived ID; an explicit query-string ID remains
+                # authoritative because it is part of the submitted action.
+                if _TAB_RE.fullmatch(candidate or "") and not query_has_tab:
                     tab_id = candidate
 
         if replay_messages:
@@ -488,7 +497,10 @@ class DaviSchoolTabSessionMiddleware:
             ]
             selected_cookie_present = True
             migrated_legacy_session = True
-        if scope.get("type") == "http" and scope.get("path", "").startswith("/app/timetable/builder"):
+        if scope.get("type") == "http" and (
+            scope.get("path", "").startswith("/app/timetable/builder")
+            or scope.get("path") in ("/app/timetable/automatic", "/app/session-keepalive")
+        ):
             authenticated_tab_count = sum(
                 1 for name, value in cookie_pairs
                 if name.startswith("davischool_session_") and cookie_has_authenticated_session(value)
@@ -501,7 +513,9 @@ class DaviSchoolTabSessionMiddleware:
                 f"selected_authenticated={cookie_has_authenticated_session(selected_cookie_value)} "
                 f"legacy_present={bool(legacy_value)} "
                 f"legacy_authenticated={cookie_has_authenticated_session(legacy_value)} "
-                f"authenticated_tab_cookie_count={authenticated_tab_count}",
+                f"authenticated_tab_cookie_count={authenticated_tab_count} "
+                f"query_has_tab={query_has_tab} "
+                f"method_has_form_tab={bool(replay_messages)}",
                 flush=True,
             )
 
