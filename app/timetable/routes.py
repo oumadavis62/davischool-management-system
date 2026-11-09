@@ -522,16 +522,64 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
           </script>
         </section>
         """
-        bulk_requirement_form = (
-            "<form method='post' data-native-post='true' action='/app/timetable/setup/requirements/bulk' class='tt-form compact'>"
-            + hidden
-            + "<p class='wide'>Set the weekly period ceiling for each selected subject. This bulk action creates a default single-period requirement; use Manage to save the exact mix of doubles and singles for each class/teacher allocation. Existing customized requirements are preserved.</p>"
-            + "<div class='wide'><b>Subjects to include</b><div style='display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:8px;margin-top:8px'>" + subject_opts + "</div></div>"
-            + "<label>Weekly period target<input name='lessons_per_week' type='number' min='1' max='30' value='5' required></label>"
-            + "<label>Maximum lessons per day<input name='max_lessons_per_day' type='number' min='1' max='10' placeholder='No limit'></label>"
-            + "<label class='tt-check'><input type='checkbox' name='allow_double' value='1'> Allow double lessons</label>"
-            + "<button class='tt-btn' type='submit'>Apply subject requirements to all classes</button></form>"
+        requirement_allocation_options = "".join(
+            f"<option value='{int(a['class_id'])}|{int(a['subject_id'])}|{int(a['teacher_id'])}'>{esc(a['class_name'])} {esc(a['stream'] or '')} · {esc(a['subject_name'])} · {esc(a['teacher_name'])}</option>"
+            for a in allocations
         )
+        bulk_requirement_form = f"""
+          <div class='tt-req-add-actions'>
+            <button type='button' class='tt-btn' data-req-add-open>＋ Add subject requirement</button>
+            <details class='tt-req-bulk-details'><summary>Bulk apply default requirements</summary>
+              <form method='post' data-native-post='true' action='/app/timetable/setup/requirements/bulk' class='tt-form compact'>
+                {hidden}
+                <p class='wide'>Apply a default single-period weekly target to selected subjects across their class allocations. Existing customized requirements are preserved.</p>
+                <div class='wide'><b>Subjects to include</b><div style='display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:8px;margin-top:8px'>{subject_opts}</div></div>
+                <label>Weekly period target<input name='lessons_per_week' type='number' min='1' max='30' value='5' required></label>
+                <label>Maximum lessons per day<input name='max_lessons_per_day' type='number' min='1' max='10' placeholder='No limit'></label>
+                <label class='tt-check'><input type='checkbox' name='allow_double' value='1'> Allow double lessons</label>
+                <button class='tt-btn' type='submit'>Apply to selected subjects</button>
+              </form>
+            </details>
+          </div>
+          <div class='tt-req-add-modal' id='tt-req-add-modal' role='dialog' aria-modal='true' aria-labelledby='tt-req-add-title' hidden>
+            <div class='tt-req-add-dialog'>
+              <div class='tt-req-add-head'>
+                <div><span class='tt-kicker'>WEEKLY LESSON LOAD</span><h3 id='tt-req-add-title'>Add subject requirement</h3><p>Configure the same weekly lesson settings available under Manage.</p></div>
+                <button type='button' class='tt-req-add-close' data-req-add-close aria-label='Close'>&times;</button>
+              </div>
+              <form method='post' data-native-post='true' action='/app/timetable/setup/requirement' class='tt-form compact tt-req-add-form'>
+                {hidden}
+                <label class='wide'>Class · Subject · Teacher
+                  <select name='allocation' required>
+                    <option value=''>Select an allocated subject</option>{requirement_allocation_options}
+                  </select>
+                </label>
+                <label>Weekly period target<input type='number' min='1' max='30' name='lessons_per_week' value='5' required></label>
+                <label>Duration<input type='number' min='1' max='4' name='duration_periods' value='1' required></label>
+                <label>Max / day<input type='number' min='1' max='10' name='max_lessons_per_day' placeholder='No limit'></label>
+                <label class='tt-check'><input type='checkbox' name='allow_double' value='1'> Allow double</label>
+                <label class='wide'>Saved lesson mix<input name='weekly_pattern' maxlength='180' placeholder='e.g. 2 or 2, 1, 1, 1'><small>Enter one session per item: 2 = double, 1 = single. You can save a partial mix and reopen Manage to add the remaining sessions. Add @period for a preferred starting period, e.g. 2@4. Enter auto to clear the mix.</small></label>
+                <div class='tt-req-add-footer'><button type='button' class='tt-btn secondary' data-req-add-close>Cancel</button><button class='tt-btn' type='submit'>Save requirement</button></div>
+              </form>
+            </div>
+          </div>
+          <script>
+          (function(){{
+            const root=document.querySelector('.tt-requirements-section');
+            if(!root||root.dataset.reqAddReady)return;
+            root.dataset.reqAddReady='1';
+            const modal=root.querySelector('#tt-req-add-modal');
+            if(!modal)return;
+            const open=()=>{{modal.hidden=false;modal.querySelector('select')?.focus();document.body.classList.add('tt-modal-scroll-locked');}};
+            const close=()=>{{modal.hidden=true;document.body.classList.remove('tt-modal-scroll-locked');}};
+            root.addEventListener('click',event=>{{
+              if(event.target.closest('[data-req-add-open]')){{open();return;}}
+              if(event.target.closest('[data-req-add-close]')||event.target===modal)close();
+            }});
+            root.addEventListener('keydown',event=>{{if(event.key==='Escape'&&!modal.hidden)close();}});
+          }})();
+          </script>
+        """
 
         create_profile_html = """<section class='tt-card tt-profile-create-card'><span class='tt-kicker'>FIRST STEP</span><h3>Create timetable profile</h3><p>Choose the academic year and term this timetable will serve.</p><a class='tt-btn' href='#tt-profile-create-modal'>＋ Create timetable profile</a><span id='tt-profile-create-close'></span><div class='tt-modal' id='tt-profile-create-modal' role='dialog' aria-modal='true' aria-labelledby='tt-profile-create-title'><div class='tt-modal-dialog'><div class='tt-modal-head'><div><span class='tt-kicker'>FIRST STEP</span><h3 id='tt-profile-create-title'>Create timetable profile</h3><p>Choose the academic year and term for this schedule.</p></div><a class='tt-modal-close' href='#tt-profile-create-close' aria-label='Close'>&times;</a></div><form method='post' data-native-post='true' action='/app/timetable/setup/profile' class='tt-form'><label>Profile name<input name='name' required maxlength='80' placeholder='2027 Term 1 Master Timetable'></label><label>Academic year<input name='academic_year' required maxlength='20' placeholder='2027'></label><label>Term / semester<input name='term' required maxlength='40' placeholder='Term 1, Semester 1, Quarter 1…'></label><label>Academic start date<input name='academic_start_date' type='date'></label><label>Academic end date<input name='academic_end_date' type='date'></label><button class='tt-btn' type='submit'>Create profile</button></form></div></div></section>"""
         read_only_html = (
@@ -591,7 +639,25 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
         .tt-table details{{display:inline-block;position:relative;margin-right:6px}}.tt-table details summary{{cursor:pointer;list-style:none;border:1px solid #cfe2d2;background:#edf6ee;color:#2a6a43;border-radius:8px;padding:8px 10px;font-size:11px;font-weight:800}}.tt-table details summary::-webkit-details-marker{{display:none}}.tt-table details[open]{{min-width:240px;white-space:normal}}.tt-table details[open] form{{position:absolute;z-index:20;right:0;top:34px;width:260px;max-height:65vh;overflow:auto;padding:12px;background:#fff;border:1px solid #dce8de;border-radius:12px;box-shadow:0 12px 30px rgba(25,60,38,.18)}}.tt-table details label{{display:block;margin:7px 0;font-size:11px;font-weight:700;white-space:normal}}.tt-table details input,.tt-table details select{{width:100%;padding:8px;border:1px solid #d7e3d8;border-radius:7px}}.tt-table td:last-child>form{{display:inline-block}}.tt-table td:last-child>form button{{padding:8px 10px;min-height:34px}}
         .tt-btn.secondary{{background:#edf6ee;color:#2a6a43;border:1px solid #cfe2d2;box-shadow:none}}.tt-btn.secondary:hover{{background:#e2f0e4}}
         .tt-add-card{{min-height:100%;display:flex;align-items:center}}.tt-add-card .tt-btn{{width:100%;min-height:74px;white-space:normal;text-align:center}}
-        .tt-req-workspace{{min-width:0}}.tt-req-toolbar{{display:flex;align-items:end;gap:9px;flex-wrap:wrap;margin:0 0 10px}}.tt-req-search{{display:flex;flex:1 1 230px;flex-direction:column;gap:5px;font-size:10px;font-weight:800;color:#557061}}.tt-req-search input{{width:100%;padding:10px 12px;border:1px solid #d5e4d7;border-radius:10px;background:#fbfdfb;font-size:12px}}.tt-req-filter{{position:relative;flex:none}}.tt-req-filter>summary{{list-style:none;cursor:pointer;border:1px solid #d5e4d7;border-radius:10px;padding:10px 13px;background:#f3f8f3;color:#326846;font-size:11px;font-weight:850}}.tt-req-filter>summary::-webkit-details-marker{{display:none}}.tt-req-filter>summary span{{margin-left:6px;padding:3px 7px;border-radius:20px;background:#e2efe4}}.tt-req-filter-panel{{position:absolute;z-index:80;right:0;top:calc(100% + 7px);width:min(290px,88vw);display:grid;gap:10px;padding:15px;background:#fff;border:1px solid #dce8de;border-radius:13px;box-shadow:0 15px 35px rgba(25,60,38,.16)}}.tt-req-filter-head{{display:flex;align-items:center;justify-content:space-between;gap:10px;color:#234c37;font-size:12px}}.tt-req-filter-close{{display:grid;place-items:center;width:29px;height:29px;flex:none;border:1px solid #dce8de;border-radius:8px;background:#f3f8f3;color:#416b4d;font-size:20px;line-height:1;cursor:pointer}}.tt-req-filter-close:hover{{background:#e5f1e7;border-color:#bcd7c1}}.tt-req-filter-panel label{{display:grid;gap:5px;font-size:10px;font-weight:800;color:#557061}}.tt-req-filter-panel select{{width:100%;padding:9px;border:1px solid #d5e4d7;border-radius:8px;background:#fbfdfb;color:#234638}}.tt-req-count{{font-size:10px;color:#7a8d80;font-weight:750}}.tt-req-table table{{min-width:620px}}.tt-req-table th,.tt-req-table td{{padding:9px 10px}}.tt-req-subline{{display:block;margin-top:3px;color:#85958a;font-size:9px}}.tt-req-table td:last-child details{{margin:0}}.tt-req-table details[open]{{min-width:0}}.tt-req-table details[open] .tt-req-manage{{position:absolute;z-index:90;right:0;top:35px;width:min(310px,85vw);max-height:70vh;overflow:auto;padding:13px;background:#fff;border:1px solid #dce8de;border-radius:12px;box-shadow:0 12px 30px rgba(25,60,38,.18)}}.tt-req-table details[open] .tt-req-manage form{{position:static;z-index:auto;top:auto;right:auto;width:100%;max-height:none;overflow:visible;padding:0;background:transparent;border:0;border-radius:0;box-shadow:none}}.tt-req-manage .tt-form{{grid-template-columns:1fr 1fr;gap:8px}}.tt-req-manage .tt-form button,.tt-req-manage .tt-form label.wide{{grid-column:1/-1}}.tt-req-manage>form+form{{margin-top:9px}}.tt-req-pagination{{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 2px}}.tt-req-pagination>div{{display:flex;gap:6px}}.tt-req-pagination .tt-btn{{min-height:33px;padding:7px 10px;font-size:10px}}.tt-req-table tr[hidden]{{display:none!important}}@media(max-width:600px){{.tt-req-toolbar{{align-items:stretch}}.tt-req-filter{{align-self:flex-start}}.tt-req-pagination{{align-items:flex-start;flex-direction:column}}.tt-req-pagination>div{{width:100%}}.tt-req-pagination button{{flex:1}}}}
+        .tt-req-workspace{{min-width:0}}.tt-req-toolbar{{display:flex;align-items:end;gap:9px;flex-wrap:wrap;margin:0 0 10px}}.tt-req-search{{display:flex;flex:1 1 230px;flex-direction:column;gap:5px;font-size:10px;font-weight:800;color:#557061}}.tt-req-search input{{width:100%;padding:10px 12px;border:1px solid #d5e4d7;border-radius:10px;background:#fbfdfb;font-size:12px}}.tt-req-filter{{position:relative;flex:none}}.tt-req-filter>summary{{list-style:none;cursor:pointer;border:1px solid #d5e4d7;border-radius:10px;padding:10px 13px;background:#f3f8f3;color:#326846;font-size:11px;font-weight:850}}.tt-req-filter>summary::-webkit-details-marker{{display:none}}.tt-req-filter>summary span{{margin-left:6px;padding:3px 7px;border-radius:20px;background:#e2efe4}}.tt-req-filter-panel{{position:absolute;z-index:80;right:0;top:calc(100% + 7px);width:min(290px,88vw);display:grid;gap:10px;padding:15px;background:#fff;border:1px solid #dce8de;border-radius:13px;box-shadow:0 15px 35px rgba(25,60,38,.16)}}.tt-req-filter-head{{display:flex;align-items:center;justify-content:space-between;gap:10px;color:#234c37;font-size:12px}}.tt-req-filter-close{{display:grid;place-items:center;width:29px;height:29px;flex:none;border:1px solid #dce8de;border-radius:8px;background:#f3f8f3;color:#416b4d;font-size:20px;line-height:1;cursor:pointer}}.tt-req-filter-close:hover{{background:#e5f1e7;border-color:#bcd7c1}}.tt-req-filter-panel label{{display:grid;gap:5px;font-size:10px;font-weight:800;color:#557061}}.tt-req-filter-panel select{{width:100%;padding:9px;border:1px solid #d5e4d7;border-radius:8px;background:#fbfdfb;color:#234638}}.tt-req-count{{font-size:10px;color:#7a8d80;font-weight:750}}
+        .tt-req-add-actions{{display:flex;flex-direction:column;gap:12px;min-width:0}}
+        .tt-req-add-actions>.tt-btn{{align-self:flex-start}}
+        .tt-req-bulk-details{{font-size:11px;color:#557061}}
+        .tt-req-bulk-details>summary{{cursor:pointer;font-weight:750;padding:8px 0}}
+        .tt-req-bulk-details[open]{{padding:10px;border:1px solid #e0ebe1;border-radius:12px;background:#fbfdfb}}
+        .tt-req-add-modal[hidden]{{display:none!important}}
+        .tt-req-add-modal{{position:fixed;inset:0;z-index:10060;display:flex;align-items:center;justify-content:center;padding:16px;background:rgba(15,35,27,.58)}}
+        .tt-req-add-dialog{{width:min(560px,100%);max-height:min(88vh,760px);overflow:auto;padding:20px;background:#fff;border:1px solid #dce8de;border-radius:18px;box-shadow:0 24px 70px rgba(0,0,0,.24)}}
+        .tt-req-add-head{{display:flex;justify-content:space-between;align-items:flex-start;gap:14px;margin-bottom:16px}}
+        .tt-req-add-head h3{{margin:5px 0;color:#234c37;font-size:18px}}
+        .tt-req-add-head p{{margin:4px 0 0;color:#718579;font-size:11px;line-height:1.5}}
+        .tt-req-add-close{{width:34px;height:34px;flex:none;border:1px solid #dce8de;border-radius:9px;background:#f5faf5;color:#345b43;font-size:23px;line-height:1;cursor:pointer}}
+        .tt-req-add-form{{grid-template-columns:1fr 1fr;gap:10px}}
+        .tt-req-add-form label.wide,.tt-req-add-footer{{grid-column:1/-1}}
+        .tt-req-add-form small{{display:block;margin-top:5px;color:#7a8d80;font-size:9px;line-height:1.5;font-weight:500}}
+        .tt-req-add-footer{{display:flex;justify-content:flex-end;gap:8px;margin-top:4px}}
+        @media(max-width:560px){{.tt-req-add-dialog{{padding:15px;border-radius:14px}}.tt-req-add-form{{grid-template-columns:1fr}}.tt-req-add-form label.wide,.tt-req-add-footer{{grid-column:1}}.tt-req-add-footer button{{flex:1}}}}
+        .tt-req-table table{{min-width:620px}}.tt-req-table th,.tt-req-table td{{padding:9px 10px}}.tt-req-subline{{display:block;margin-top:3px;color:#85958a;font-size:9px}}.tt-req-table td:last-child details{{margin:0}}.tt-req-table details[open]{{min-width:0}}.tt-req-table details[open] .tt-req-manage{{position:absolute;z-index:90;right:0;top:35px;width:min(310px,85vw);max-height:70vh;overflow:auto;padding:13px;background:#fff;border:1px solid #dce8de;border-radius:12px;box-shadow:0 12px 30px rgba(25,60,38,.18)}}.tt-req-table details[open] .tt-req-manage form{{position:static;z-index:auto;top:auto;right:auto;width:100%;max-height:none;overflow:visible;padding:0;background:transparent;border:0;border-radius:0;box-shadow:none}}.tt-req-manage .tt-form{{grid-template-columns:1fr 1fr;gap:8px}}.tt-req-manage .tt-form button,.tt-req-manage .tt-form label.wide{{grid-column:1/-1}}.tt-req-manage>form+form{{margin-top:9px}}.tt-req-pagination{{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 2px}}.tt-req-pagination>div{{display:flex;gap:6px}}.tt-req-pagination .tt-btn{{min-height:33px;padding:7px 10px;font-size:10px}}.tt-req-table tr[hidden]{{display:none!important}}@media(max-width:600px){{.tt-req-toolbar{{align-items:stretch}}.tt-req-filter{{align-self:flex-start}}.tt-req-pagination{{align-items:flex-start;flex-direction:column}}.tt-req-pagination>div{{width:100%}}.tt-req-pagination button{{flex:1}}}}
         .tt-table{{overflow:auto;border:1px solid #e1ebe2;border-radius:13px;background:#fff}}.tt-table table{{width:100%;border-collapse:collapse;min-width:450px}}.tt-table th{{background:#edf5ee;color:#315b3e;text-align:left;font-size:10px;letter-spacing:.04em}}.tt-table th,.tt-table td{{padding:11px;border-bottom:1px solid #edf2ed;font-size:11px;white-space:nowrap}}.tt-table tr:last-child td{{border-bottom:0}}.tt-muted{{color:#94a39a;text-align:center;padding:18px!important}}
         .tt-alert{{padding:12px 14px;border-radius:11px;margin-bottom:14px;font-size:12px;font-weight:700}}.tt-alert.success{{background:#eaf5ec;color:#17633b}}.tt-alert.error{{background:#fff1f0;color:#a12828}}.tt-empty{{text-align:center;padding:34px}}.tt-empty b{{font-size:18px}}
         /* Compact seven-step setup accordion */
