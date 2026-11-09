@@ -314,12 +314,34 @@ def save_requirement_session_pattern(connection: Any, school_id: int, profile_id
                 raise TimetableSetupError("A preferred slot must be an instructional slot in this profile.")
         if period_id is not None:
             period = cur.execute(
-                """SELECT id,period_type FROM ds_timetable_periods
+                """SELECT id,period_no,start_time,end_time,period_type FROM ds_timetable_periods
                    WHERE id=? AND school_id=? AND profile_id=?""",
                 (int(period_id), school_id, profile_id),
             ).fetchone()
             if not period or str(period["period_type"] or "lesson") != "lesson":
                 raise TimetableSetupError("A preferred start period must be an instructional period in this profile.")
+            if duration > 1:
+                span = cur.execute(
+                    """SELECT period_no,start_time,end_time,period_type FROM ds_timetable_periods
+                       WHERE school_id=? AND profile_id=? AND period_no>=?
+                       ORDER BY period_no,id LIMIT ?""",
+                    (school_id, profile_id, int(period["period_no"]), duration),
+                ).fetchall()
+                valid_span = len(span) == duration
+                for offset, occupied in enumerate(span):
+                    if str(occupied["period_type"] or "lesson") != "lesson":
+                        valid_span = False
+                        break
+                    if offset and (
+                        int(occupied["period_no"]) != int(span[offset - 1]["period_no"]) + 1
+                        or str(span[offset - 1]["end_time"]) != str(occupied["start_time"])
+                    ):
+                        valid_span = False
+                        break
+                if not valid_span:
+                    raise TimetableSetupError(
+                        f"A {duration}-period session starting at Period {int(period['period_no'])} must fit in consecutive teaching periods without a break."
+                    )
         label = str(session.get("session_label") or "").strip()[:80] or f"Session {index}"
         normalized.append((index, duration, int(day_id) if day_id is not None else None,
                            int(slot_id) if slot_id is not None else None,
