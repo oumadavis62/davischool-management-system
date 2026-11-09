@@ -175,7 +175,7 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
             AND rc.requirement_id=r.id
            JOIN ds_timetable_scheduling_requirement_teachers rt
              ON rt.school_id=r.school_id AND rt.profile_id=r.profile_id
-            AND rt.requirement_id=r.id
+            AND rt.requirement_id=r.id AND rt.role='lead'
            JOIN ds_timetable_scheduling_patterns p
              ON p.school_id=r.school_id AND p.profile_id=r.profile_id
             AND p.requirement_id=r.id
