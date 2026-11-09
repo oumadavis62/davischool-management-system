@@ -631,6 +631,12 @@ def init_db():
         if "teacher_color" not in teacher_columns:
             cur.execute("ALTER TABLE teachers ADD COLUMN teacher_color TEXT DEFAULT '#2563EB'")
             teacher_color_column_added = True
+        if "teacher_initials" not in teacher_columns:
+            cur.execute("ALTER TABLE teachers ADD COLUMN teacher_initials TEXT")
+            for teacher_row in cur.execute("SELECT id,name FROM teachers").fetchall():
+                parts = [part for part in re.split(r"\\s+", str(teacher_row["name"] or "").strip()) if part]
+                initials = "".join(part[0] for part in (parts[:1] + (parts[-1:] if len(parts) > 1 else []))).upper()[:4]
+                cur.execute("UPDATE teachers SET teacher_initials=? WHERE id=?", (initials, teacher_row["id"]))
     except Exception:
         pass
     try:
