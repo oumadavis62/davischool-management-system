@@ -420,7 +420,7 @@ def register_timetable_builder_routes(app, get_db, get_school_obj, module_page):
                             if can_merge and duration > cell_span:
                                 cell_span = duration
                                 merged_period_ids.update(int(p["id"]) for p in span_periods[1:])
-                            room_html = f"<div class='tb-meta tb-room-label'>{esc(lesson['room_name'])}</div>" if lesson["room_name"] else ""
+                            room_html = f"<div class='tb-meta tb-room-label'>{esc(lesson['room_name'] or 'Room not assigned')}</div>"
                             move_day_opts = "".join(
                                 f"<option value='{int(d['id'])}' {'selected' if int(d['id'])==int(lesson['day_id']) else ''}>{esc(d['day_name'])}</option>" for d in days
                             )
