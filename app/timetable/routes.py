@@ -548,20 +548,6 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
             for a in allocations
         )
         bulk_requirement_form = f"""
-          <div class='tt-req-add-actions'>
-            <button type='button' class='tt-btn' data-req-add-open>＋ Add subject requirement</button>
-            <details class='tt-req-bulk-details'><summary>Bulk apply default requirements</summary>
-              <form method='post' data-native-post='true' action='/app/timetable/setup/requirements/bulk' class='tt-form compact'>
-                {hidden}
-                <p class='wide'>Apply a default single-period weekly target to selected subjects across their class allocations. Existing customized requirements are preserved.</p>
-                <div class='wide'><b>Subjects to include</b><div style='display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:8px;margin-top:8px'>{subject_opts}</div></div>
-                <label>Weekly period target<input name='lessons_per_week' type='number' min='1' max='30' value='5' required></label>
-                <label>Maximum lessons per day<input name='max_lessons_per_day' type='number' min='1' max='10' placeholder='No limit'></label>
-                <label class='tt-check'><input type='checkbox' name='allow_double' value='1'> Allow double lessons</label>
-                <button class='tt-btn' type='submit'>Apply to selected subjects</button>
-              </form>
-            </details>
-          </div>
           <div class='tt-req-add-modal' id='tt-req-add-modal' role='dialog' aria-modal='true' aria-labelledby='tt-req-add-title' hidden>
             <div class='tt-req-add-dialog'>
               <div class='tt-req-add-head'>
@@ -649,6 +635,7 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
   <div><span class='tt-kicker'>WEEKLY LESSON PLANNING</span><h2>Subject requirements</h2><p>Set each class-subject weekly workload, define its single and double sessions, and review teacher allocations before timetable generation.</p></div>
   <div class='tt-req-head-actions'><button type='button' class='tt-btn' data-req-add-open>＋ Add subject requirement</button></div>
  </div>
+ {bulk_requirement_form}
  <div class='tt-req-overview'>
   <div><span>Configured requirements</span><b>{len(requirements)}</b><small>Class · subject allocations</small></div>
   <div><span>Allocated classes</span><b>{len(set(int(x['class_id']) for x in requirements))}</b><small>With weekly requirements</small></div>
@@ -656,10 +643,6 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
   <div><span>Teachers involved</span><b>{len(set(int(x['teacher_id']) for x in requirements))}</b><small>Lead allocations</small></div>
  </div>
  <div class='tt-req-main-layout'>
-  <aside class='tt-req-side'>
-   <div class='tt-req-side-head'><span class='tt-kicker'>SETUP ACTIONS</span><h3>Manage requirements</h3><p>Configure one allocation or apply defaults in bulk.</p></div>
-   {bulk_requirement_form}
-  </aside>
   <div class='tt-req-workspace'>
    <div class='tt-req-toolbar'>
     <label class='tt-req-search'><span>Search requirements</span><input type='search' id='tt-req-search' placeholder='Search class, subject or teacher…'></label>
@@ -685,17 +668,10 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
         .tt-req-overview>div{{padding:12px 14px;border:1px solid #e1ece2;border-radius:12px;background:#fbfdfb;min-width:0}}
         .tt-req-overview span,.tt-req-overview small{{display:block;color:#718477;font-size:10px;font-weight:700}}
         .tt-req-overview b{{display:block;color:#286443;font-size:23px;line-height:1.35;margin:2px 0}}
-        .tt-req-main-layout{{display:grid;grid-template-columns:minmax(235px,.72fr) minmax(0,2fr);gap:0;align-items:stretch}}
-        .tt-req-side{{padding:20px;background:#f6faf6;border-right:1px solid #e1ece2;min-width:0}}
-        .tt-req-side-head h3,.tt-req-results-head h3{{font-size:15px;color:#254d36;margin:4px 0}}
-        .tt-req-side-head p,.tt-req-results-head p{{font-size:11px;color:#718477;line-height:1.5;margin:0 0 14px}}
-        .tt-req-side .tt-req-add-actions{{display:grid;gap:12px}}
-        .tt-req-side .tt-req-add-actions>[data-req-add-open]{{width:100%;min-height:48px}}
-        .tt-req-side .tt-req-bulk-details{{border:1px solid #dce9de;border-radius:12px;background:#fff;padding:12px}}
-        .tt-req-side .tt-req-bulk-details>summary{{cursor:pointer;color:#315f42;font-size:12px;font-weight:850;list-style:none}}
-        .tt-req-side .tt-req-bulk-details>summary::-webkit-details-marker{{display:none}}
-        .tt-req-side .tt-form{{margin-top:12px;grid-template-columns:1fr}}
-        .tt-req-side .tt-form .wide{{grid-column:auto}}
+        .tt-req-main-layout{{display:block;min-width:0}}
+        
+        .tt-req-results-head h3{{font-size:15px;color:#254d36;margin:4px 0}}
+        .tt-req-results-head p{{font-size:11px;color:#718477;line-height:1.5;margin:0 0 14px}}
         .tt-req-workspace{{padding:20px;min-width:0}}
         .tt-req-toolbar{{margin-bottom:14px}}
         .tt-req-results-head{{display:flex;justify-content:space-between;align-items:center;gap:12px;margin:8px 0 12px}}
@@ -725,8 +701,7 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
         .tt-session-row label{{flex:1}}
         .tt-session-row button{{border:1px solid #ead6d4;border-radius:8px;padding:8px 10px;background:#fff5f4;color:#9d4842;font-weight:800}}
         .tt-session-row button:disabled{{opacity:.45}}
-        @media(max-width:900px){{.tt-req-main-layout{{grid-template-columns:1fr}}.tt-req-side{{border-right:0;border-bottom:1px solid #e1ece2}}}}
-        @media(max-width:600px){{.tt-req-overview{{grid-template-columns:repeat(2,minmax(0,1fr));padding:12px}}.tt-req-page-head,.tt-req-workspace,.tt-req-side{{padding:15px}}.tt-session-filters,.tt-session-linking{{grid-template-columns:1fr}}.tt-req-pagination .tt-btn{{padding:9px}}}}
+        @media(max-width:600px){{.tt-req-overview{{grid-template-columns:repeat(2,minmax(0,1fr));padding:12px}}.tt-req-page-head,.tt-req-workspace{{padding:15px}}.tt-session-filters,.tt-session-linking{{grid-template-columns:1fr}}.tt-req-pagination .tt-btn{{padding:9px}}}}
 
         .tt-wrap *{{box-sizing:border-box}}
         .tt-wrap{{background:linear-gradient(145deg,#edf6ef 0%,#e4f0e6 42%,#f7faf7 100%);border-radius:26px;padding:24px}}
