@@ -594,13 +594,20 @@ def register_timetable_builder_routes(app, get_db, get_school_obj, module_page):
             f"<option value='{int(x['id'])}' data-class='{esc(str(x['class_name']) + ((' ' + str(x['stream'])) if x['stream'] else ''))}' data-subject='{esc(x['subject_name'])}' data-teacher='{esc(x['teacher_name'])}' data-day='{esc(x['day_name'])}' data-period='{esc(x['period_label'])}' data-duration='{int(x['duration_periods'] or 1)}'>{esc(x['day_name'])} · {esc(x['period_label'])} · {esc(x['class_name'])}{(' ' + esc(x['stream'])) if x['stream'] else ''} · {esc(x['subject_name'])} · {esc(x['teacher_name'])} ({int(x['duration_periods'] or 1)}P)</option>"
             for x in lessons
         )
+        swap_classes = sorted({str(x['class_name']) + ((' ' + str(x['stream'])) if x['stream'] else '') for x in lessons}, key=str.casefold)
+        swap_subjects = sorted({str(x['subject_name']) for x in lessons}, key=str.casefold)
+        swap_days = sorted({str(x['day_name']) for x in lessons}, key=str.casefold)
+        swap_class_options = "<option value=''>All classes / streams</option>" + "".join(f"<option value='{esc(v)}'>{esc(v)}</option>" for v in swap_classes)
+        swap_subject_options = "<option value=''>All subjects</option>" + "".join(f"<option value='{esc(v)}'>{esc(v)}</option>" for v in swap_subjects)
+        swap_day_options = "<option value=''>Any day</option>" + "".join(f"<option value='{esc(v)}'>{esc(v)}</option>" for v in swap_days)
+        swap_filters = f"<div class='tb-swap-filters'><label>Class / stream<select data-swap-filter='class'>{swap_class_options}</select></label><label>Subject<select data-swap-filter='subject'>{swap_subject_options}</select></label><label>Day<select data-swap-filter='day'>{swap_day_options}</select></label></div>"
         swap_form = f"""<section class='tb-panel tb-swap-panel'>
-          <p class='tb-swap-help'>Choose the two lessons whose time slots you want to exchange. Search by class, subject, teacher, day or period.</p>
+          <p class='tb-swap-help'>Filter by class and subject first. Only matching scheduled lessons will remain in the lesson list.</p>
           <form method='post' action='/app/timetable/builder/swap{('?' + tab_qs) if tab_qs else ''}' class='tb-swap-selects' onsubmit="return confirm('Swap the positions of these two lessons?')">
             <input type='hidden' name='profile_id' value='{pid}'><input type='hidden' name='ds_tab' value='{esc(tab_id)}'>
-            <div class='tb-swap-choice'><span class='tb-swap-step'>1</span><label>First lesson<input type='search' class='tb-swap-search' data-swap-search placeholder='Search lessons…' autocomplete='off'><select name='first_lesson_id' data-swap-lesson required>{swap_lesson_options}</select><span class='tb-swap-preview' data-swap-preview>Select a lesson to view its details.</span></label></div>
+            <div class='tb-swap-choice'><span class='tb-swap-step'>1</span><div class='tb-swap-choice-content'><strong>First lesson</strong>{swap_filters}<label>Matching lesson<select name='first_lesson_id' data-swap-lesson required>{swap_lesson_options}</select></label><span class='tb-swap-preview' data-swap-preview>Select a lesson to view its details.</span></div></div>
             <div class='tb-swap-direction' aria-hidden='true'>⇅</div>
-            <div class='tb-swap-choice'><span class='tb-swap-step'>2</span><label>Second lesson<input type='search' class='tb-swap-search' data-swap-search placeholder='Search lessons…' autocomplete='off'><select name='second_lesson_id' data-swap-lesson required>{swap_lesson_options}</select><span class='tb-swap-preview' data-swap-preview>Select a lesson to view its details.</span></label></div>
+            <div class='tb-swap-choice'><span class='tb-swap-step'>2</span><div class='tb-swap-choice-content'><strong>Second lesson</strong>{swap_filters}<label>Matching lesson<select name='second_lesson_id' data-swap-lesson required>{swap_lesson_options}</select></label><span class='tb-swap-preview' data-swap-preview>Select a lesson to view its details.</span></div></div>
             <div class='tb-swap-note'>Only the timetable positions change. Class, subject, teacher and room assignments remain attached to their lessons.</div>
             <button class='tb-btn' type='submit'>⇄ Swap positions</button>
           </form>
@@ -669,20 +676,19 @@ def register_timetable_builder_routes(app, get_db, get_school_obj, module_page):
           document.addEventListener('keydown',function(event){{if(event.key==='Escape')closeAll();}});
           const swapModal=document.getElementById('tb-modal-swap');
           if(swapModal){{
-            const searches=Array.from(swapModal.querySelectorAll('[data-swap-search]'));
             const lessonSelects=Array.from(swapModal.querySelectorAll('[data-swap-lesson]'));
             const previews=Array.from(swapModal.querySelectorAll('[data-swap-preview]'));
-            const allOptions=lessonSelects.length?Array.from(lessonSelects[0].options).slice(1):[];
+            const filterGroups=Array.from(swapModal.querySelectorAll('.tb-swap-filters'));
             function refreshChoices(){{
               lessonSelects.forEach(function(select,index){{
-                const search=(searches[index]&&searches[index].value||'').trim().toLowerCase();
-                const other=lessonSelects[1-index];
-                const otherValue=other?other.value:'';
+                const group=filterGroups[index];
+                const filters={{}};
+                if(group)group.querySelectorAll('[data-swap-filter]').forEach(function(field){{filters[field.dataset.swapFilter]=field.value;}});
+                const other=lessonSelects[1-index],otherValue=other?other.value:'';
                 Array.from(select.options).slice(1).forEach(function(option){{
-                  const matches=!search||option.textContent.toLowerCase().includes(search);
+                  const matches=(!filters.class||option.dataset.class===filters.class)&&(!filters.subject||option.dataset.subject===filters.subject)&&(!filters.day||option.dataset.day===filters.day);
                   const duplicate=!!otherValue&&option.value===otherValue;
-                  option.hidden=!matches||duplicate;
-                  option.disabled=!matches||duplicate;
+                  option.hidden=!matches||duplicate;option.disabled=!matches||duplicate;
                 }});
                 if(select.selectedOptions.length&&select.selectedOptions[0].disabled)select.value='';
               }});
@@ -690,14 +696,13 @@ def register_timetable_builder_routes(app, get_db, get_school_obj, module_page):
             }}
             function updateSwapPreviews(){{
               lessonSelects.forEach(function(select,index){{
-                const option=select.selectedOptions&&select.selectedOptions[0];
-                const preview=previews[index];
+                const option=select.selectedOptions&&select.selectedOptions[0],preview=previews[index];
                 if(!preview)return;
-                if(!option||!option.value){{preview.textContent='Select a lesson to view its details.';return;}}
+                if(!option||!option.value){{preview.textContent='Choose a matching lesson.';return;}}
                 preview.textContent=[option.dataset.subject,option.dataset.class,option.dataset.teacher,option.dataset.day,option.dataset.period,(option.dataset.duration||'1')+' period(s)'].filter(Boolean).join(' · ');
               }});
             }}
-            searches.forEach(function(search){{search.addEventListener('input',refreshChoices);}});
+            filterGroups.forEach(function(group){{group.querySelectorAll('[data-swap-filter]').forEach(function(field){{field.addEventListener('change',function(){{const select=group.parentElement.querySelector('[data-swap-lesson]');if(select)select.value='';refreshChoices();}});}});}});
             lessonSelects.forEach(function(select){{select.addEventListener('change',refreshChoices);}});
             refreshChoices();
           }}
