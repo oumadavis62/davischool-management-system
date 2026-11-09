@@ -596,7 +596,7 @@ def register_timetable_builder_routes(app, get_db, get_school_obj, module_page):
         )
         swap_form = f"""<section class='tb-panel tb-swap-panel'>
           <p class='tb-swap-help'>Choose the two lessons whose time slots you want to exchange. Search by class, subject, teacher, day or period.</p>
-          <form method='post' action='/app/timetable/builder/swap' class='tb-swap-selects' onsubmit="return confirm('Swap the positions of these two lessons?')">
+          <form method='post' action='/app/timetable/builder/swap{('?' + tab_qs) if tab_qs else ''}' class='tb-swap-selects' onsubmit="return confirm('Swap the positions of these two lessons?')">
             <input type='hidden' name='profile_id' value='{pid}'><input type='hidden' name='ds_tab' value='{esc(tab_id)}'>
             <div class='tb-swap-choice'><span class='tb-swap-step'>1</span><label>First lesson<input type='search' class='tb-swap-search' data-swap-search placeholder='Search lessons…' autocomplete='off'><select name='first_lesson_id' data-swap-lesson required>{swap_lesson_options}</select><span class='tb-swap-preview' data-swap-preview>Select a lesson to view its details.</span></label></div>
             <div class='tb-swap-direction' aria-hidden='true'>⇅</div>
