@@ -397,27 +397,19 @@ class DaviSchoolTabSessionMiddleware:
 
             receive = replay_receive
 
-        scope["davischool_tab_id"] = tab_id
-
-        session_cookie = self._cookie_name(tab_id) if tab_id else "session"
-        is_student_save = (
-            scope.get("type") == "http"
-            and scope.get("method", "GET").upper() == "POST"
-            and scope.get("path") == "/app/students/add"
-        )
+        # If an internal navigation arrives without ds_tab and without a usable
+        # Referer, recover only when this browser request carries exactly one
+        # authenticated DaviSchool tab cookie. This avoids falling back to the
+        # now-retired generic session cookie after a tab has been upgraded.
         cookie_header = next(
             (value.decode("latin-1", "ignore") for name, value in scope.get("headers", []) if name.lower() == b"cookie"),
             "",
         )
-
-        cookie_pairs = [
+        early_cookie_pairs = [
             (part.strip().split("=", 1)[0], part.strip().split("=", 1)[1])
             for part in cookie_header.split(";")
             if "=" in part
         ]
-        selected_cookie_value = next((value for name, value in cookie_pairs if name == session_cookie), None)
-        legacy_value = next((value for name, value in cookie_pairs if name == "session"), None)
-        selected_cookie_present = selected_cookie_value is not None
 
         def cookie_has_authenticated_session(value):
             if not value:
@@ -430,6 +422,33 @@ class DaviSchoolTabSessionMiddleware:
                 return bool(payload.get("email"))
             except (BadSignature, ValueError, TypeError, UnicodeDecodeError, json.JSONDecodeError):
                 return False
+
+        if not tab_id:
+            authenticated_tab_ids = []
+            for name, value in early_cookie_pairs:
+                prefix = "davischool_session_"
+                candidate = name[len(prefix):] if name.startswith(prefix) else ""
+                if _TAB_RE.fullmatch(candidate or "") and cookie_has_authenticated_session(value):
+                    authenticated_tab_ids.append(candidate)
+            if len(authenticated_tab_ids) == 1:
+                tab_id = authenticated_tab_ids[0]
+
+        scope["davischool_tab_id"] = tab_id
+
+        session_cookie = self._cookie_name(tab_id) if tab_id else "session"
+        is_student_save = (
+            scope.get("type") == "http"
+            and scope.get("method", "GET").upper() == "POST"
+            and scope.get("path") == "/app/students/add"
+        )
+        cookie_pairs = [
+            (part.strip().split("=", 1)[0], part.strip().split("=", 1)[1])
+            for part in cookie_header.split(";")
+            if "=" in part
+        ]
+        selected_cookie_value = next((value for name, value in cookie_pairs if name == session_cookie), None)
+        legacy_value = next((value for name, value in cookie_pairs if name == "session"), None)
+        selected_cookie_present = selected_cookie_value is not None
 
         migrated_legacy_session = False
         # A tab cookie may already exist but contain an empty session created
@@ -457,6 +476,23 @@ class DaviSchoolTabSessionMiddleware:
             ]
             selected_cookie_present = True
             migrated_legacy_session = True
+        if scope.get("type") == "http" and scope.get("path", "").startswith("/app/timetable/builder"):
+            authenticated_tab_count = sum(
+                1 for name, value in cookie_pairs
+                if name.startswith("davischool_session_") and cookie_has_authenticated_session(value)
+            )
+            print(
+                "DAVISCHOOL_TAB_AUTH_DIAG "
+                f"method={scope.get('method', 'GET')} "
+                f"tab_present={bool(tab_id)} "
+                f"selected_cookie_present={selected_cookie_present} "
+                f"selected_authenticated={cookie_has_authenticated_session(selected_cookie_value)} "
+                f"legacy_present={bool(legacy_value)} "
+                f"legacy_authenticated={cookie_has_authenticated_session(legacy_value)} "
+                f"authenticated_tab_cookie_count={authenticated_tab_count}",
+                flush=True,
+            )
+
         if is_student_save:
             query = scope.get("query_string", b"").decode("utf-8", "ignore")
             referer = next(
