@@ -741,11 +741,16 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
     # size. At each search node, run dynamic MRV only across a small window
     # of the most constrained remaining groups rather than rescanning every
     # requirement and every candidate in the timetable.
+    # Schedule multi-period sessions before singles. Within each duration
+    # tier, retain most-constrained-first ordering so doubles/triples with the
+    # fewest legal options are protected before more flexible sessions.
+    # Singles are then placed with the same fail-first strategy; the existing
+    # diagonal candidate ordering spreads them across days and periods.
     search_group_order = sorted(
         symmetry_members,
         key=lambda group_id: (
-            len(candidate_lookup[symmetry_members[group_id][0]]),
             -int(tasks[symmetry_members[group_id][0]]["duration"]),
+            len(candidate_lookup[symmetry_members[group_id][0]]),
             int(tasks[symmetry_members[group_id][0]]["class_id"]),
             int(tasks[symmetry_members[group_id][0]]["subject_id"]),
         ),
