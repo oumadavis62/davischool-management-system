@@ -195,7 +195,7 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
 
             calendar_events = cur.execute("SELECT * FROM ds_timetable_calendar_exceptions WHERE school_id=? AND profile_id=? ORDER BY exception_date,label", (school_id,pid)).fetchall()
             rooms = cur.execute("SELECT * FROM ds_timetable_rooms WHERE school_id=? AND is_active=1 ORDER BY name", (school_id,)).fetchall()
-            teachers = cur.execute("SELECT id,name FROM teachers WHERE school_id=? ORDER BY name", (school_id,)).fetchall()
+            teachers = cur.execute("SELECT id,name,teacher_color FROM teachers WHERE school_id=? ORDER BY name", (school_id,)).fetchall()
             class_records = cur.execute("SELECT id,name,stream FROM classes WHERE school_id=? ORDER BY name,stream", (school_id,)).fetchall()
             allocations = cur.execute(
                 """SELECT DISTINCT ta.class_id,ta.subject_id,ta.teacher_id,c.name class_name,c.stream,
@@ -415,7 +415,17 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
             for x in class_records
         )
         class_limit_form = f"""<section class='tt-section'><div class='tt-section-title'><div><span class='tt-kicker'>08 · CLASS WORKLOAD LIMITS</span><h3>Maximum weekly lessons and daily periods</h3><p>Set a ceiling independently for each class or stream. Double and triple lessons count by their actual period duration toward the daily period ceiling.</p></div></div><div class='tt-split'><form method='post' data-native-post='true' action='/app/timetable/setup/class-limits' class='tt-form compact'>{hidden}<label class='wide'>Class / stream<select name='class_id' required><option value=''>Select class or stream</option>{class_limit_class_opts}</select></label><label>Maximum lessons per week<input name='max_lessons_per_week' type='number' min='1' max='100' placeholder='No limit'></label><label>Maximum periods per day<input name='max_periods_per_day' type='number' min='1' max='30' placeholder='No limit'></label><label class='wide'>Notes<input name='notes' maxlength='180' placeholder='Optional workload guidance'></label><button class='tt-btn'>Save class workload limits</button></form><div class='tt-table'><table><tr><th>Class / stream</th><th>Max lessons / week</th><th>Max periods / day</th><th>Notes</th><th>Actions</th></tr>{class_limit_rows}</table></div></div></section>"""
-        # Current allocation monitor: compare the weekly lessons configured for each
+                teacher_color_rows = "".join(
+            f"<tr><td><b>{esc(t['name'])}</b></td><td><form method='post' data-native-post='true' action='/app/timetable/setup/teacher-color' class='tt-teacher-color-form'>{hidden}<input type='hidden' name='teacher_id' value='{int(t['id'])}'><input aria-label='Colour for {esc(t['name'])}' type='color' name='teacher_color' value='{esc(t['teacher_color'] or '#2563EB', True)}' required><span class='tt-teacher-color-code'>{esc(t['teacher_color'] or '#2563EB')}</span><button class='tt-btn'>Save colour</button></form></td></tr>"
+            for t in teachers
+        ) or "<tr><td colspan='2' class='tt-muted'>No teachers are registered yet.</td></tr>"
+        teacher_colour_section = f"""
+        <section class='tt-section tt-teacher-colours'>
+          <div class='tt-section-title'><div><span class='tt-kicker'>09 · TIMETABLE APPEARANCE</span><h3>Teacher colours</h3><p>Choose a colour for each teacher. Every lesson card assigned to that teacher uses the same colour across the timetable.</p></div></div>
+          <style>.tt-teacher-colours .tt-teacher-color-form{{display:flex;align-items:center;gap:10px;flex-wrap:wrap}}.tt-teacher-colours input[type=color]{{width:52px;height:38px;padding:2px;border:1px solid #d5e4d7;border-radius:9px;background:#fff;cursor:pointer}}.tt-teacher-color-code{{font:700 11px ui-monospace,monospace;color:#607669;min-width:65px}}.tt-teacher-colours table{{min-width:360px}}</style>
+          <div class='tt-table'><table><thead><tr><th>Teacher</th><th>Lesson card colour</th></tr></thead><tbody>{teacher_color_rows}</tbody></table></div>
+        </section>"""
+# Current allocation monitor: compare the weekly lessons configured for each
         # allocated class/stream with its own workload ceiling before generation.
         requirements_by_allocation = {
             (int(r["class_id"]), int(r["subject_id"]), int(r["teacher_id"])): r
@@ -536,6 +546,7 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
             <section class='tt-section'><div class='tt-section-title'><div><span class='tt-kicker'>05 · LEARNING SPACES</span><h3>Rooms and facilities</h3><p>Optional setup: register physical spaces only if your school wants room allocation. Leave this section empty if rooms are not needed. Classes and streams are managed separately.</p></div></div><div class='tt-split'><form method='post' data-native-post='true' action='/app/timetable/setup/room' class='tt-form compact'>{hidden}<label>Room code<input name='room_code' required placeholder='LAB-01'></label><label>Room name<input name='name' required placeholder='Science Laboratory'></label><label>Room type<select name='room_type'><option value='classroom'>Classroom</option><option value='laboratory'>Laboratory</option><option value='library'>Library</option><option value='hall'>Hall</option><option value='workshop'>Workshop</option><option value='sports'>Sports facility</option><option value='other'>Other</option></select></label><label>Capacity (optional)<input name='capacity' type='number' min='1' placeholder='Leave blank if unrestricted'></label>{room_policy_fields('shared',None)}<label class='wide'>Description (optional)<input name='description' maxlength='240' placeholder='Location or purpose'></label><label class='wide'>Equipment / resources (optional)<input name='equipment' maxlength='400' placeholder='Projector, computers, lab benches…'></label><label class='wide'>Suitable for (optional)<input name='suitable_for' maxlength='300' placeholder='Science practicals, exams, meetings…'></label><button class='tt-btn'>Save room / facility</button></form><div class='tt-table'><table><tr><th>Code</th><th>Room</th><th>Type</th><th>Capacity</th><th>Allocation</th><th>Equipment / resources</th><th>Actions</th></tr>{room_rows}</table></div></div></section>
             <section class='tt-section'><div class='tt-section-title'><div><span class='tt-kicker'>06 · STAFF AVAILABILITY</span><h3>Teacher availability</h3><p>All teachers are available by default. Add a teacher only when you need to set fallback periods or block specific periods.</p></div></div><div class='tt-availability-editor'><form method='post' data-native-post='true' action='/app/timetable/setup/availability-matrix' class='tt-form compact'>{hidden}<label>Teacher<select name='teacher_id' id='tt-availability-teacher' required>{teacher_opts}</select></label><div class='tt-availability-legend'><span><b>✓</b> Available first</span><span><b>Blank</b> Fallback only</span><span><b>X</b> Never place</span></div><div class='tt-table tt-availability-grid'><table><thead><tr><th>Day / Period</th>{matrix_period_headers}</tr></thead><tbody>{matrix_day_rows}</tbody></table></div><p class='tt-muted'>Every cell starts ticked (available). Tap to cycle: ✓ available → blank (fallback only) → X (never place). The generator tries all ticked periods first and uses blank periods only when needed to complete the timetable.</p><button class='tt-btn'>Save teacher availability</button></form><div class='tt-availability-summary'><label class='tt-summary-search'>Search teachers<input type='search' data-availability-search='teacher' placeholder='Find teacher…'></label><div class='tt-table'><h4>Teacher restrictions</h4><table><thead><tr><th>Teacher</th><th title='Total restricted cells'>#</th><th title='Available'>✓</th><th title='Fallback only'>—</th><th title='Unavailable'>X</th><th>Actions</th></tr></thead><tbody>{availability_rows}</tbody></table></div></div></div></section>
             {class_limit_form}
+            {teacher_colour_section}
             {allocation_monitor_section}
             <section class='tt-section'><div class='tt-section-title'><div><span class='tt-kicker'>07 · SUBJECT AVAILABILITY</span><h3>Subject availability</h3><p>All subjects are available in every configured lesson period by default. Add a subject only when you need to make certain periods fallback-only or completely unavailable.</p></div></div><div class='tt-availability-editor'><form method='post' data-native-post='true' action='/app/timetable/setup/subject-availability-matrix' class='tt-form compact'>{hidden}<label>Subject<select name='subject_id' id='tt-subject-availability' required>{''.join(f"<option value='{int(x['id'])}'>{esc(x['name'])}</option>" for x in subjects)}</select></label><div class='tt-availability-legend'><span><b>✓</b> Available first</span><span><b>Blank</b> Fallback only</span><span><b>X</b> Never schedule</span></div><div class='tt-table tt-availability-grid'><table><thead><tr><th>Day / Period</th>{subject_matrix_period_headers}</tr></thead><tbody>{subject_matrix_day_rows}</tbody></table></div><p class='tt-muted'>Every cell starts ticked. Tap to cycle: ✓ available → blank (fallback only) → X (never schedule). The generator tries ticked periods first and uses blank periods only when needed to complete the timetable.</p><button class='tt-btn'>Save subject availability</button></form><div class='tt-availability-summary'><label class='tt-summary-search'>Search subjects<input type='search' data-availability-search='subject' placeholder='Find subject…'></label><div class='tt-table'><h4>Subject restrictions</h4><table><thead><tr><th>Subject</th><th title='Total restricted cells'>#</th><th title='Available'>✓</th><th title='Fallback only'>—</th><th title='Unavailable'>X</th><th>Actions</th></tr></thead><tbody>{subject_availability_rows}</tbody></table></div></div></div></section>
             <section class='tt-section'><div class='tt-section-title'><div><span class='tt-kicker'>08 · WEEKLY LESSON LOAD</span><h3>Subject requirements</h3><p>Set each subject's weekly lesson load once and apply it across all classes and streams where it is taught. Teacher allocations are matched automatically.</p></div></div><div class='tt-split'><div>{bulk_requirement_form}</div><div class='tt-req-workspace'><div class='tt-req-toolbar'><label class='tt-req-search'><span>Search requirements</span><input type='search' id='tt-req-search' placeholder='Search class, subject or teacher…'></label><details class='tt-req-filter'><summary>⚙ Filters <span id='tt-req-filter-count'>All</span></summary><div class='tt-req-filter-panel'><div class='tt-req-filter-head'><strong>Filter requirements</strong><button type='button' class='tt-req-filter-close' aria-label='Close filters' title='Close filters'>×</button></div><label>Class / stream<select id='tt-req-class'><option value=''>All classes</option>{requirement_class_filters}</select></label><label>Subject<select id='tt-req-subject'><option value=''>All subjects</option>{requirement_subject_filters}</select></label><label>Teacher<select id='tt-req-teacher'><option value=''>All teachers</option>{requirement_teacher_filters}</select></label><button type='button' class='tt-btn secondary' id='tt-req-reset'>Clear filters</button></div></details><span class='tt-req-count' id='tt-req-count'></span></div><div class='tt-table tt-req-table'><table><thead><tr><th>Class / stream</th><th>Subject</th><th>Weekly requirement</th><th>Teacher</th><th>Manage</th></tr></thead><tbody>{requirement_rows}</tbody></table></div><div class='tt-req-pagination'><span id='tt-req-page-info'></span><div><button type='button' class='tt-btn secondary' id='tt-req-prev'>← Previous</button><button type='button' class='tt-btn secondary' id='tt-req-next'>Next →</button></div></div></div></div></section>
@@ -1499,6 +1510,35 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
             )
             return redirect_setup(profile_id, "Class workload limits saved.")
         except (TimetableSetupError, ValueError) as exc:
+            return redirect_setup(profile_id, str(exc), True)
+        finally:
+            con.close()
+
+    @app.post("/app/timetable/setup/teacher-color")
+    def save_timetable_teacher_color(
+        request: Request,
+        profile_id: int = Form(0),
+        teacher_id: int = Form(...),
+        teacher_color: str = Form(...),
+    ):
+        school = school_for(request)
+        if not school:
+            return RedirectResponse("/", 303)
+        color = teacher_color.strip().upper()
+        if len(color) != 7 or not color.startswith("#") or not all(ch in "0123456789ABCDEF" for ch in color[1:]):
+            return redirect_setup(profile_id, "Choose a valid teacher colour.", True)
+        con = get_db()
+        try:
+            result = con.execute(
+                "UPDATE teachers SET teacher_color=? WHERE id=? AND school_id=?",
+                (color, teacher_id, int(school["id"])),
+            )
+            if result.rowcount != 1:
+                raise TimetableSetupError("The selected teacher could not be found.")
+            con.commit()
+            return redirect_setup(profile_id, "Teacher timetable colour saved.")
+        except (TimetableSetupError, ValueError) as exc:
+            con.rollback()
             return redirect_setup(profile_id, str(exc), True)
         finally:
             con.close()
