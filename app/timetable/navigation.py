@@ -12,7 +12,9 @@ def timetable_workspace(request, body):
         return body
 
     requested = str(request.query_params.get("tab", "setup") or "setup").lower()
-    marker = "<span class='tt-workspace-state' data-requested-tab='" + escape(requested, quote=True) + "' hidden></span>"
+    requested_section = str(request.query_params.get("section", "") or "").lower()
+    marker = ("<span class='tt-workspace-state' data-requested-tab='" + escape(requested, quote=True) +
+              "' data-requested-section='" + escape(requested_section, quote=True) + "' hidden></span>")
     intro = """
       <div class='tt-workflow-intro'><span>▦</span><div>
         <b>TIMETABLE CONFIGURATION</b>
@@ -40,6 +42,7 @@ def timetable_workspace(request, body):
         if(!sections.length)return;
         const state=document.querySelector('.tt-workspace-state');
         const requested=state?.getAttribute('data-requested-tab')||'setup';
+        const requestedSection=state?.getAttribute('data-requested-section')||'';
         const nav=document.createElement('nav');
         nav.className='tt-setup-tabs';
         nav.setAttribute('role','tablist');
@@ -48,10 +51,10 @@ def timetable_workspace(request, body):
           const heading=section.querySelector('h3,h2,h4');
           return (heading?.textContent||('Section '+(index+1))).trim();
         });
-        // Sidebar destinations are focused workspaces, not merely shortcuts
-        // that land on the full setup page with every unrelated tab exposed.
+        // Teaching Requirements is one landing workspace with exactly two tabs:
+        // Tracking and Subject Requirements. Never expose a separate requirements-only page.
         const keep = allLabels.map(label=>{
-          if(requested==='requirements') return /requirement|workload|allocation/i.test(label);
+          if(requested==='requirements') return /track class lesson allocations|subject requirements/i.test(label);
           if(requested==='availability') return /teacher availability/i.test(label);
           if(requested==='setup') return !/teacher availability|subject availability|requirement|workload|allocation/i.test(label);
           return true;
@@ -60,9 +63,16 @@ def timetable_workspace(request, body):
         const visibleLabels=allLabels.filter((label,index)=>keep[index]);
         sections.forEach((section,index)=>{ if(!keep[index]) section.hidden=true; });
         if(!visibleSections.length)return;
-        let initial=0;
         const sectionsForTabs=visibleSections;
         const labels=visibleLabels;
+        let initial=0;
+        if(requested==='requirements'){
+          const wanted=requestedSection==='tracking'
+            ? /track class lesson allocations/i
+            : /subject requirements/i;
+          const match=labels.findIndex(label=>wanted.test(label));
+          initial=match>=0?match:Math.max(0,labels.findIndex(label=>/subject requirements/i.test(label)));
+        }
         function activate(index){
           sectionsForTabs.forEach((section,i)=>{
             section.hidden=i!==index;
