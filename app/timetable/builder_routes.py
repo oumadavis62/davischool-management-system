@@ -300,12 +300,29 @@ def register_timetable_builder_routes(app, get_db, get_school_obj, module_page):
             f"<option value='{int(r['id'])}'>{esc(r['name'])} ({esc(r['room_type'])})</option>" for r in rooms
         )
         period_index = {int(p["id"]): i for i,p in enumerate(periods)}
-        # A school timetable has many classes running in parallel in the same slot.
-        # Keep every lesson in each cell; a single-value dictionary silently hid all
-        # but the last class scheduled for a day/period.
+        # Keep the original day/period grid, but give each class/stream its own row.
+        # This prevents parallel classes from stacking inside the same period cell.
+        class_rows_by_id = {}
+        for allocation in allocations:
+            class_rows_by_id[int(allocation["class_id"])] = {
+                "class_id": int(allocation["class_id"]),
+                "class_name": allocation["class_name"],
+                "stream": allocation["stream"] or "",
+            }
+        for lesson in lessons:
+            class_rows_by_id.setdefault(int(lesson["class_id"]), {
+                "class_id": int(lesson["class_id"]),
+                "class_name": lesson["class_name"],
+                "stream": lesson["stream"] or "",
+            })
+        class_rows = sorted(class_rows_by_id.values(), key=lambda item: (
+            str(item["class_name"]).casefold(), str(item["stream"]).casefold()
+        ))
         lesson_by_start = {}
         for lesson in lessons:
-            lesson_by_start.setdefault((int(lesson["day_id"]), int(lesson["period_id"])), []).append(lesson)
+            lesson_by_start.setdefault(
+                (int(lesson["day_id"]), int(lesson["class_id"]), int(lesson["period_id"])), []
+            ).append(lesson)
         occupied = {}
         for lesson in lessons:
             start = period_index.get(int(lesson["period_id"]))
@@ -313,13 +330,15 @@ def register_timetable_builder_routes(app, get_db, get_school_obj, module_page):
                 continue
             for offset in range(1, int(lesson["duration_periods"] or 1)):
                 if start + offset < len(periods):
-                    occupied.setdefault((int(lesson["day_id"]), int(periods[start+offset]["id"])), []).append(lesson)
+                    occupied.setdefault(
+                        (int(lesson["day_id"]), int(lesson["class_id"]), int(periods[start+offset]["id"])), []
+                    ).append(lesson)
         timeline = sorted(
             [(str(p["start_time"]), "period", p) for p in periods] +
             [(str(br["start_time"]), "break", br) for br in breaks],
             key=lambda item: (item[0], 0 if item[1] == "period" else 1),
         )
-        headers = ["<th class='tb-day-heading'>Day</th>"]
+        headers = ["<th class='tb-day-heading'>Day</th>", "<th class='tb-class-heading'>Class / Stream</th>"]
         for _, item_type, item in timeline:
             if item_type == "break":
                 headers.append(f"<th class='tb-break-heading'><b>{esc(item['label'])}</b><span>{esc(item['start_time'])}–{esc(item['end_time'])}</span></th>")
@@ -327,43 +346,51 @@ def register_timetable_builder_routes(app, get_db, get_school_obj, module_page):
                 headers.append(f"<th class='tb-period-heading'><b>{esc(item['label'])}</b><span>{esc(item['start_time'])}–{esc(item['end_time'])}</span></th>")
         rows = []
         for day in days:
-            cells = [f"<th class='tb-day-heading'>{esc(day['day_name'])}</th>"]
-            for _, item_type, item in timeline:
-                if item_type == "break":
-                    cells.append(f"<td class='tb-break-cell'><b>{esc(item['label'])}</b><span>{esc(item['start_time'])}–{esc(item['end_time'])}</span></td>")
-                    continue
-                period = item
-                key = (int(day["id"]),int(period["id"]))
-                slot_lessons = lesson_by_start.get(key, [])
-                continued_lessons = occupied.get(key, [])
-                if slot_lessons:
-                    cards = []
-                    for lesson in slot_lessons:
-                        duration = int(lesson["duration_periods"] or 1)
-                        room_label = esc(lesson["room_name"] or "Room not assigned")
-                        move_day_opts = "".join(
-                            f"<option value='{int(d['id'])}' {'selected' if int(d['id'])==int(lesson['day_id']) else ''}>{esc(d['day_name'])}</option>" for d in days
-                        )
-                        move_period_opts = "".join(
-                            f"<option value='{int(p['id'])}' {'selected' if int(p['id'])==int(lesson['period_id']) else ''}>{esc(p['label'])} ({esc(p['start_time'])})</option>" for p in periods
-                        )
-                        move_room_opts = "<option value=''>Keep current room</option>" + "".join(
-                            f"<option value='{int(r['id'])}' {'selected' if lesson['room_id'] is not None and int(r['id'])==int(lesson['room_id']) else ''}>{esc(r['name'])}</option>" for r in rooms
-                        )
-                        manage_html = ""
-                        if not read_only:
-                            manage_html = f"""<details class='tb-actions'><summary>Manage</summary><form method='post' action='/app/timetable/builder/move'><input type='hidden' name='profile_id' value='{pid}'><input type='hidden' name='lesson_id' value='{int(lesson['id'])}'><label>Move to day<select name='day_id'>{move_day_opts}</select></label><label>Start period<select name='period_id'>{move_period_opts}</select></label><label>Room<select name='room_id'>{move_room_opts}</select></label><button class='tb-small'>Move lesson</button></form><form method='post' action='/app/timetable/builder/delete' onsubmit="return confirm('Remove this lesson from the timetable?')"><input type='hidden' name='profile_id' value='{pid}'><input type='hidden' name='lesson_id' value='{int(lesson['id'])}'><button class='tb-delete'>Delete lesson</button></form></details>"""
-                        cards.append(f"""<div class='tb-lesson' draggable='{'false' if read_only else 'true'}' data-lesson-id='{int(lesson['id'])}' ondragstart='dragTimetableLesson(event)'><div class='tb-lesson-top'><b>{esc(lesson['subject_name'])}</b><span>{duration}P</span></div><div class='tb-class'>{esc(lesson['class_name'])} {esc(lesson['stream'] or '')}</div><div class='tb-meta'>{esc(lesson['teacher_name'])}</div><div class='tb-meta'>⌂ {room_label}</div>{manage_html}</div>""")
-                    cells.append(f"<td class='tb-cell tb-cell-multi' data-day-id='{int(day['id'])}' data-period-id='{int(period['id'])}' ondragover='event.preventDefault()' ondrop='dropTimetableLesson(event,this)'>{''.join(cards)}</td>")
-                elif continued_lessons:
-                    continued_html = "".join(
-                        f"<div class='tb-continued-item'>↳ {esc(item['class_name'])} {esc(item['stream'] or '')} · {esc(item['subject_name'])} continues</div>"
-                        for item in continued_lessons
+            day_class_rows = class_rows or [{"class_id": 0, "class_name": "—", "stream": ""}]
+            for class_index, class_row in enumerate(day_class_rows):
+                cells = []
+                if class_index == 0:
+                    cells.append(
+                        f"<th class='tb-day-heading' rowspan='{len(day_class_rows)}'>{esc(day['day_name'])}</th>"
                     )
-                    cells.append(f"<td class='tb-cell tb-continued' data-day-id='{int(day['id'])}' data-period-id='{int(period['id'])}' ondragover='event.preventDefault()' ondrop='dropTimetableLesson(event,this)'>{continued_html}</td>")
-                else:
-                    cells.append(f"<td class='tb-cell tb-free' data-day-id='{int(day['id'])}' data-period-id='{int(period['id'])}' ondragover='event.preventDefault()' ondrop='dropTimetableLesson(event,this)'><span>Free period</span></td>")
-            rows.append(f"<tr>{''.join(cells)}</tr>")
+                class_label = class_row["class_name"] + ((" · " + class_row["stream"]) if class_row["stream"] else "")
+                cells.append(f"<th class='tb-class-heading'>{esc(class_label)}</th>")
+                for _, item_type, item in timeline:
+                    if item_type == "break":
+                        cells.append(f"<td class='tb-break-cell'><b>{esc(item['label'])}</b><span>{esc(item['start_time'])}–{esc(item['end_time'])}</span></td>")
+                        continue
+                    period = item
+                    key = (int(day["id"]), int(class_row["class_id"]), int(period["id"]))
+                    slot_lessons = lesson_by_start.get(key, [])
+                    continued_lessons = occupied.get(key, [])
+                    if slot_lessons:
+                        cards = []
+                        for lesson in slot_lessons:
+                            duration = int(lesson["duration_periods"] or 1)
+                            room_label = esc(lesson["room_name"] or "Room not assigned")
+                            move_day_opts = "".join(
+                                f"<option value='{int(d['id'])}' {'selected' if int(d['id'])==int(lesson['day_id']) else ''}>{esc(d['day_name'])}</option>" for d in days
+                            )
+                            move_period_opts = "".join(
+                                f"<option value='{int(p['id'])}' {'selected' if int(p['id'])==int(lesson['period_id']) else ''}>{esc(p['label'])} ({esc(p['start_time'])})</option>" for p in periods
+                            )
+                            move_room_opts = "<option value=''>Keep current room</option>" + "".join(
+                                f"<option value='{int(r['id'])}' {'selected' if lesson['room_id'] is not None and int(r['id'])==int(lesson['room_id']) else ''}>{esc(r['name'])}</option>" for r in rooms
+                            )
+                            manage_html = ""
+                            if not read_only:
+                                manage_html = f"""<details class='tb-actions'><summary>Manage</summary><form method='post' action='/app/timetable/builder/move'><input type='hidden' name='profile_id' value='{pid}'><input type='hidden' name='lesson_id' value='{int(lesson['id'])}'><label>Move to day<select name='day_id'>{move_day_opts}</select></label><label>Start period<select name='period_id'>{move_period_opts}</select></label><label>Room<select name='room_id'>{move_room_opts}</select></label><button class='tb-small'>Move lesson</button></form><form method='post' action='/app/timetable/builder/delete' onsubmit="return confirm('Remove this lesson from the timetable?')"><input type='hidden' name='profile_id' value='{pid}'><input type='hidden' name='lesson_id' value='{int(lesson['id'])}'><button class='tb-delete'>Delete lesson</button></form></details>"""
+                            cards.append(f"""<div class='tb-lesson' draggable='{'false' if read_only else 'true'}' data-lesson-id='{int(lesson['id'])}' ondragstart='dragTimetableLesson(event)'><div class='tb-lesson-top'><b>{esc(lesson['subject_name'])}</b><span>{duration}P</span></div><div class='tb-meta'>{esc(lesson['teacher_name'])}</div><div class='tb-meta'>⌂ {room_label}</div>{manage_html}</div>""")
+                        cells.append(f"<td class='tb-cell tb-cell-multi' data-day-id='{int(day['id'])}' data-period-id='{int(period['id'])}' ondragover='event.preventDefault()' ondrop='dropTimetableLesson(event,this)'>{''.join(cards)}</td>")
+                    elif continued_lessons:
+                        continued_html = "".join(
+                            f"<div class='tb-continued-item'>↳ {esc(item['subject_name'])} continues</div>"
+                            for item in continued_lessons
+                        )
+                        cells.append(f"<td class='tb-cell tb-continued' data-day-id='{int(day['id'])}' data-period-id='{int(period['id'])}' ondragover='event.preventDefault()' ondrop='dropTimetableLesson(event,this)'>{continued_html}</td>")
+                    else:
+                        cells.append(f"<td class='tb-cell tb-free' data-day-id='{int(day['id'])}' data-period-id='{int(period['id'])}' ondragover='event.preventDefault()' ondrop='dropTimetableLesson(event,this)'><span>Free period</span></td>")
+                rows.append(f"<tr>{''.join(cells)}</tr>")
         grid = f"<div class='tb-grid-scroll'><table class='tb-grid'><thead><tr>{''.join(headers)}</tr></thead><tbody>{''.join(rows)}</tbody></table></div>" if days and periods else "<div class='tb-empty'>Configure at least one instructional day and one teaching period in Timetable Setup.</div>"
         add_form = (
             f"""<section class='tb-panel'><div><span class='tb-kicker'>MANUAL SCHEDULING</span><h3>Add a lesson</h3><p>Choose an existing class, subject and allocated teacher. Lesson duration follows the weekly requirement.</p></div><form method='post' action='/app/timetable/builder/add' class='tb-add-form'><input type='hidden' name='profile_id' value='{pid}'><label class='wide'>Class · subject · teacher<select name='allocation' required><option value=''>Select configured requirement</option>{allocation_options}</select></label><label>Day<select name='day_id' required><option value=''>Select day</option>{day_options}</select></label><label>Start period<select name='period_id' required><option value=''>Select period</option>{period_options}</select></label><label>Room<select name='room_id'>{room_options}</select></label><button class='tb-btn'>＋ Add lesson</button></form></section>"""
@@ -540,9 +567,9 @@ def register_timetable_builder_routes(app, get_db, get_school_obj, module_page):
         .tb-panel{{background:rgba(255,255,255,.95);border:1px solid #dce9de;border-radius:17px;padding:18px;margin-bottom:16px;box-shadow:0 6px 20px rgba(36,83,52,.05)}}.tb-panel h3{{margin:4px 0;color:#234c37;font-size:17px}}.tb-panel p{{margin:4px 0 12px;color:#687f70;font-size:12px;line-height:1.55}}
         .tb-add-form{{display:grid;grid-template-columns:2fr 1fr 1fr 1fr auto;gap:10px;align-items:end}}.tb-add-form label,.tb-actions label{{display:flex;flex-direction:column;gap:5px;font-size:11px;font-weight:800;color:#3b5946}}.tb-add-form label.wide{{grid-column:auto}}
         .tb-add-form select,.tb-actions select{{width:100%;min-width:0;padding:11px;border:1px solid #d5e4d7;border-radius:10px;background:#fbfdfb;font-size:12px;color:#234638}}.tb-add-form select:focus,.tb-actions select:focus{{outline:none;border-color:#78ad85;box-shadow:0 0 0 3px rgba(91,153,107,.12)}}
-        .tb-grid-scroll{{overflow:auto;border:1px solid #dce8de;border-radius:15px;background:white;box-shadow:0 6px 20px rgba(36,83,52,.045)}}.tb-grid{{width:100%;border-collapse:separate;border-spacing:0;min-width:850px}}
+        .tb-grid-scroll{{overflow:auto;border:1px solid #dce8de;border-radius:15px;background:white;box-shadow:0 6px 20px rgba(36,83,52,.045)}}.tb-grid{{width:100%;border-collapse:separate;border-spacing:0;min-width:995px}}
         .tb-grid thead th{{background:linear-gradient(110deg,#347b50,#286743);color:white;padding:8px 7px;text-align:center;font-size:12px;position:sticky;top:0;min-width:135px}}
-        .tb-grid .tb-day-heading{{min-width:115px;background:#edf5ee;color:#315b3e;text-align:left;position:sticky;left:0;z-index:2}}.tb-day-heading,.tb-period-heading b,.tb-period-heading span,.tb-break-heading b,.tb-break-heading span{{display:block}}.tb-period-heading span,.tb-break-heading span{{font-size:10px;color:#e4efe5;font-weight:600;margin-top:4px}}.tb-break-heading,.tb-break-cell{{background:#f1ead8!important;color:#75551d;text-align:center;min-width:115px;padding:10px 8px}}.tb-break-heading span{{color:#75551d}}.tb-break-cell span{{display:block;font-size:10px;margin-top:4px}}
+        .tb-grid .tb-day-heading{{min-width:115px;background:#edf5ee;color:#315b3e;text-align:center;vertical-align:middle;position:sticky;left:0;z-index:2}}.tb-grid .tb-class-heading{{min-width:145px;background:#f5f9f5;color:#315b3e;text-align:left;vertical-align:middle;position:sticky;left:115px;z-index:1;font-size:11px}}.tb-day-heading,.tb-period-heading b,.tb-period-heading span,.tb-break-heading b,.tb-break-heading span{{display:block}}.tb-period-heading span,.tb-break-heading span{{font-size:10px;color:#e4efe5;font-weight:600;margin-top:4px}}.tb-break-heading,.tb-break-cell{{background:#f1ead8!important;color:#75551d;text-align:center;min-width:115px;padding:10px 8px}}.tb-break-heading span{{color:#75551d}}.tb-break-cell span{{display:block;font-size:10px;margin-top:4px}}
         .tb-cell{{height:82px;min-width:125px;vertical-align:top;padding:4px;border-right:1px solid #edf2ed;border-bottom:1px solid #edf2ed;background:#fff}}.tb-cell-multi{{height:auto;min-height:82px;vertical-align:top;display:table-cell}}.tb-cell-multi .tb-lesson{{margin-bottom:4px}}.tb-cell-multi .tb-lesson:last-child{{margin-bottom:0}}.tb-continued-item{{padding:3px 2px;border-bottom:1px dashed #dce9de;font-size:9px;line-height:1.3}}.tb-continued-item:last-child{{border-bottom:0}}.tb-free{{background:#fbfdfb;text-align:center;vertical-align:middle;color:#a2b3a5;font-size:10px}}.tb-free:hover{{background:#eff8f0}}.tb-continued{{background:#f6faf6;color:#7b9480;text-align:center;vertical-align:middle;font-size:10px}}
         .tb-lesson{{background:linear-gradient(145deg,#edf7ee,#e3f1e5);border:1px solid #d6e8d9;border-left:3px solid #43845a;border-radius:8px;padding:5px;min-height:66px;color:#234638;cursor:grab;box-shadow:0 2px 7px rgba(35,83,51,.07);transition:box-shadow .16s,transform .16s}}.tb-lesson:hover{{box-shadow:0 6px 14px rgba(35,83,51,.12);transform:translateY(-1px)}}.tb-lesson:active{{cursor:grabbing}}
         .tb-lesson-top{{display:flex;justify-content:space-between;gap:4px;font-size:10px}}.tb-lesson-top span{{font-size:9px;background:#d5e9d9;border-radius:10px;padding:2px 5px;white-space:nowrap}}.tb-class{{font-size:9px;font-weight:800;margin-top:3px}}.tb-meta{{font-size:8px;color:#55705d;margin-top:2px}}
