@@ -69,6 +69,7 @@ class CpSatTimetableTests(unittest.TestCase):
         self.assertIn(result["status"], ("OPTIMAL", "FEASIBLE"))
         self.assertEqual(result["strict_status"], "INFEASIBLE")
         self.assertEqual(result["fallback_status"], "OPTIMAL")
+        self.assertIn(result["optimization_status"], ("OPTIMAL", "FEASIBLE"))
 
     def test_manual_placement_is_preserved_as_fixed_anchor(self):
         fixed = {
