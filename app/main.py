@@ -36,6 +36,13 @@ from cryptography.fernet import Fernet, InvalidToken
 
 BUILD_COMMIT = "students-save-role-fix-2026-10-04"
 
+TEACHER_TIMETABLE_PALETTE = ["#DC2626","#2563EB","#16A34A","#9333EA","#EA580C","#0891B2","#BE185D","#4F46E5","#65A30D","#C2410C","#0F766E","#7C3AED"]
+def _teacher_timetable_color(teacher_id):
+    try:
+        return TEACHER_TIMETABLE_PALETTE[(int(teacher_id)-1) % len(TEACHER_TIMETABLE_PALETTE)]
+    except Exception:
+        return TEACHER_TIMETABLE_PALETTE[0]
+
 app = FastAPI()
 # Compress larger responses to reduce transfer time on mobile connections.
 app.add_middleware(GZipMiddleware, minimum_size=700)
@@ -617,6 +624,18 @@ def init_db():
     cur.execute("CREATE TABLE IF NOT EXISTS exams (id INTEGER PRIMARY KEY, school_id INTEGER, name TEXT, term TEXT, year TEXT, exam_type TEXT)")
     cur.execute("CREATE TABLE IF NOT EXISTS terms (id INTEGER PRIMARY KEY, school_id INTEGER, term_name TEXT, year TEXT, start_date TEXT, end_date TEXT)")
     cur.execute("CREATE TABLE IF NOT EXISTS teachers (id INTEGER PRIMARY KEY, school_id INTEGER, name TEXT, email TEXT, phone TEXT, tsc_no TEXT, gender TEXT, id_no TEXT, role TEXT, employment_type TEXT)")
+    try:
+        cur.execute("ALTER TABLE teachers ADD COLUMN teacher_color TEXT DEFAULT '#2563EB'")
+    except Exception:
+        pass
+    try:
+        cur.execute("SELECT id,teacher_color FROM teachers ORDER BY id")
+        for teacher_row in cur.fetchall():
+            saved_color = str(teacher_row["teacher_color"] or "").strip()
+            if not re.fullmatch(r"#[0-9A-Fa-f]{6}", saved_color):
+                cur.execute("UPDATE teachers SET teacher_color=? WHERE id=?", (_teacher_timetable_color(teacher_row["id"]), teacher_row["id"]))
+    except Exception:
+        pass
     cur.execute("CREATE TABLE IF NOT EXISTS teacher_allocations (id INTEGER PRIMARY KEY, school_id INTEGER, teacher_id INTEGER, subject_id INTEGER, class_id INTEGER)")
     cur.execute("CREATE TABLE IF NOT EXISTS global_notices (id INTEGER PRIMARY KEY, message TEXT, created_at TEXT)")
     cur.execute("CREATE TABLE IF NOT EXISTS system_audit (id INTEGER PRIMARY KEY, school_id INTEGER, user_email TEXT, action TEXT, details TEXT, timestamp TEXT)")
@@ -879,7 +898,9 @@ def staff_manager_html(teachers, school_name, is_global=False):
     rows_html = ""
     for i, t in enumerate(teachers, 1):
         delete_url = f"/super/global-control/teachers/delete/{t['id']}" if is_global else f"/school/teachers/delete/{t['id']}"
-        rows_html += f"""<tr class='staff-row' data-role="{(t['role'] or '').lower()}" data-gender="{(t['gender'] or '').lower()}" data-employment="{(t['employment_type'] or ('teaching' if (t['role'] or '').lower() in teaching_roles else 'non-teaching')).lower()}" data-search="{(t['name'] or '').lower()} {(t['id_no'] or '').lower()} {(t['email'] or '').lower()} {(t['tsc_no'] or '').lower()}"><td style='padding:14px 12px;font-size:13px'>{i}</td><td style='padding:14px 12px;font-size:13px;font-weight:600'>{t['id_no'] or t['tsc_no'] or '—'}</td><td style='padding:14px 12px;font-size:13px;font-weight:700'>{t['name']}</td><td style='padding:14px 12px;font-size:13px'>{t['gender'] or '—'}</td><td style='padding:14px 12px;font-size:13px'><span style='background:#f1f5f9;padding:3px 8px;border-radius:12px;font-size:11px;font-weight:700'>{t['role'] or 'Teacher'}</span></td><td style='padding:14px 12px;font-size:13px'>{t['phone'] or '—'}</td><td style='padding:14px 12px;font-size:13px;color:#475569'>{t['email'] or '—'}</td><td style='padding:14px 12px'><a href='{delete_url}' style='background:#fee2e2;color:#991b1b;padding:6px 10px;border-radius:8px;text-decoration:none;font-size:12px'>🗑️</a></td></tr>"""
+        edit_action = "" if is_global else f"<a href='/school/teachers/{int(t['id'])}/edit' style='background:#eaf3ec;color:#246441;padding:6px 9px;border-radius:8px;text-decoration:none;font-size:12px;margin-right:5px'>Edit</a>"
+        teacher_color = str(t["teacher_color"] or "#2563EB")
+        rows_html += f"""<tr class='staff-row' data-role="{(t['role'] or '').lower()}" data-gender="{(t['gender'] or '').lower()}" data-employment="{(t['employment_type'] or ('teaching' if (t['role'] or '').lower() in teaching_roles else 'non-teaching')).lower()}" data-search="{(t['name'] or '').lower()} {(t['id_no'] or '').lower()} {(t['email'] or '').lower()} {(t['tsc_no'] or '').lower()}"><td style='padding:14px 12px;font-size:13px'>{i}</td><td style='padding:14px 12px;font-size:13px;font-weight:600'>{t['id_no'] or t['tsc_no'] or '—'}</td><td style='padding:14px 12px;font-size:13px;font-weight:700'><span style='display:inline-block;width:9px;height:9px;border-radius:50%;background:{teacher_color};margin-right:6px'></span>{t['name']}</td><td style='padding:14px 12px;font-size:13px'>{t['gender'] or '—'}</td><td style='padding:14px 12px;font-size:13px'><span style='background:#f1f5f9;padding:3px 8px;border-radius:12px;font-size:11px;font-weight:700'>{t['role'] or 'Teacher'}</span></td><td style='padding:14px 12px;font-size:13px'>{t['phone'] or '—'}</td><td style='padding:14px 12px;font-size:13px;color:#475569'>{t['email'] or '—'}</td><td style='padding:14px 12px'>{edit_action}<a href='{delete_url}' style='background:#fee2e2;color:#991b1b;padding:6px 10px;border-radius:8px;text-decoration:none;font-size:12px'>🗑️</a></td></tr>"""
     if not rows_html:
         rows_html = "<tr><td colspan='8' style='padding:40px;text-align:center;color:#94a3b8'>No staff yet</td></tr>"
     add_action = "/super/global-control/teachers/add" if is_global else "/school/teachers/add"
@@ -2189,7 +2210,10 @@ def add_teacher(request: Request, name: str = Form(...), tsc_no: str = Form(""),
     department=department.strip()
     allowed_departments=_staff_department_choices(role)
     if department and department not in allowed_departments: department=''
-    cur.execute("INSERT INTO teachers (school_id,name,email,phone,tsc_no,gender,id_no,role,employment_type,department) VALUES (?,?,?,?,?,?,?,?,?,?)",(school["id"],nm,em,phone.strip(),tsc_no.strip(),gender.strip(),role.strip(),employment_type.strip(),department))
+    cur.execute("INSERT INTO teachers (school_id,name,email,phone,tsc_no,gender,id_no,role,employment_type,department,teacher_color) VALUES (?,?,?,?,?,?,?,?,?,?,?)",(school["id"],nm,em,phone.strip(),tsc_no.strip(),gender.strip(),ident,role.strip(),employment_type.strip(),department,"#2563EB"))
+    created_teacher = cur.execute("SELECT id FROM teachers WHERE school_id=? AND id_no=? ORDER BY id DESC LIMIT 1",(school["id"],ident)).fetchone()
+    if created_teacher:
+        cur.execute("UPDATE teachers SET teacher_color=? WHERE id=? AND school_id=?",(_teacher_timetable_color(created_teacher["id"]),created_teacher["id"],school["id"]))
     con.commit(); con.close(); return RedirectResponse("/school/teachers",303)
 @app.get("/school/teachers/delete/{tid}")
 def del_teacher(tid: int, request: Request):
@@ -3123,7 +3147,7 @@ def school_teacher_edit(teacher_id:int, request:Request):
     current_role=(t['role'] or '').strip()
     if current_role and current_role not in role_choices: role_choices.append(current_role)
     role_options=''.join(f"<option value='{escape(r, quote=True)}' {'selected' if r==current_role else ''}>{escape(r)}</option>" for r in role_choices)
-    body=f"""<div class='card'><h2>✏️ Edit Staff Member</h2><form method='post' action='/school/teachers/{teacher_id}/edit' class='form-grid'><label>Full Name<input name='name' value='{escape(t['name'] or '', quote=True)}' required class='input-field'></label><label>TSC No<input name='tsc_no' value='{escape(t['tsc_no'] or '', quote=True)}' class='input-field'></label><label>ID No<input name='id_no' value='{escape(t['id_no'] or '', quote=True)}' class='input-field'></label><label>Gender<select name='gender' class='input-field'><option {'selected' if t['gender']=='Male' else ''}>Male</option><option {'selected' if t['gender']=='Female' else ''}>Female</option></select></label><label>Role<select name='role' id='editStaffRole' class='input-field' onchange="filterStaffDepartments('editStaffRole','editStaffDepartment')">{role_options}</select></label><label>Department<select name='department' id='editStaffDepartment' class='input-field'><option value=''>Select Department</option></select></label><label>Employment Type<select name='employment_type' class='input-field'><option value='Teaching' {'selected' if (t['employment_type'] or 'Teaching')=='Teaching' else ''}>Teaching</option><option value='Non-Teaching' {'selected' if (t['employment_type'] or '')=='Non-Teaching' else ''}>Non-Teaching</option></select></label><label>Phone<input name='phone' value='{escape(t['phone'] or '', quote=True)}' class='input-field'></label><label>Email<input name='email' type='email' value='{escape(t['email'] or '', quote=True)}' class='input-field'></label><button class='btn' style='grid-column:span 2'>💾 Save Changes</button></form></div><script>
+    body=f"""<div class='card'><h2>✏️ Edit Staff Member</h2><form method='post' action='/school/teachers/{teacher_id}/edit' class='form-grid'><label>Full Name<input name='name' value='{escape(t['name'] or '', quote=True)}' required class='input-field'></label><label>TSC No<input name='tsc_no' value='{escape(t['tsc_no'] or '', quote=True)}' class='input-field'></label><label>ID No<input name='id_no' value='{escape(t['id_no'] or '', quote=True)}' class='input-field'></label><label>Gender<select name='gender' class='input-field'><option {'selected' if t['gender']=='Male' else ''}>Male</option><option {'selected' if t['gender']=='Female' else ''}>Female</option></select></label><label>Role<select name='role' id='editStaffRole' class='input-field' onchange="filterStaffDepartments('editStaffRole','editStaffDepartment')">{role_options}</select></label><label>Department<select name='department' id='editStaffDepartment' class='input-field'><option value=''>Select Department</option></select></label><label>Employment Type<select name='employment_type' class='input-field'><option value='Teaching' {'selected' if (t['employment_type'] or 'Teaching')=='Teaching' else ''}>Teaching</option><option value='Non-Teaching' {'selected' if (t['employment_type'] or '')=='Non-Teaching' else ''}>Non-Teaching</option></select></label><label>Phone<input name='phone' value='{escape(t['phone'] or '', quote=True)}' class='input-field'></label><label>Email<input name='email' type='email' value='{escape(t['email'] or '', quote=True)}' class='input-field'></label><label>Timetable Colour<div style='display:flex;align-items:center;gap:10px'><input type='color' name='teacher_color' value='{escape(t['teacher_color'] or _teacher_timetable_color(t['id']), quote=True)}' style='width:58px;height:42px;padding:3px;border:1px solid #d5e4d7;border-radius:9px;background:white'><span style='font-size:11px;color:#64748b'>Used for all this teacher’s lesson cards</span></div></label><button class='btn' style='grid-column:span 2'>💾 Save Changes</button></form></div><script>
 function filterStaffDepartments(roleId,deptId,selected){{
  const role=(document.getElementById(roleId)?.value||'').trim().toLowerCase();
  const teaching=['teacher','classteacher','principal','deputy principal'].includes(role);
@@ -3141,13 +3165,17 @@ filterStaffDepartments('editStaffRole','editStaffDepartment',{json.dumps(t['depa
     return module_page(request,"Edit Staff","staff",body)
 
 @app.post("/school/teachers/{teacher_id}/edit")
-def school_teacher_edit_save(teacher_id:int, request:Request, name:str=Form(...), tsc_no:str=Form(""), id_no:str=Form(""), gender:str=Form(""), role:str=Form(""), department:str=Form(""), phone:str=Form(""), email:str=Form(""), employment_type:str=Form("Teaching")):
+def school_teacher_edit_save(teacher_id:int, request:Request, name:str=Form(...), tsc_no:str=Form(""), id_no:str=Form(""), gender:str=Form(""), role:str=Form(""), department:str=Form(""), phone:str=Form(""), email:str=Form(""), employment_type:str=Form("Teaching"), teacher_color:str=Form("#2563EB")):
     school=_school_user(request)
     if not school: return RedirectResponse("/",303)
     con=get_db(); department=department.strip()
     allowed_departments=_staff_department_choices(role)
     if department and department not in allowed_departments: department=''
-    con.execute("UPDATE teachers SET name=?,tsc_no=?,id_no=?,gender=?,role=?,department=?,phone=?,email=?,employment_type=? WHERE id=? AND school_id=?",(name.strip().upper(),tsc_no.strip(),id_no.strip(),gender,role.strip(),department,phone.strip(),email.strip(),employment_type.strip(),teacher_id,school["id"])); con.commit(); con.close(); return RedirectResponse("/school/teachers",303)
+    teacher_color = teacher_color.strip().upper()
+    if not re.fullmatch(r"#[0-9A-F]{6}", teacher_color):
+        con.close()
+        return HTMLResponse("Choose a valid timetable colour.",400)
+    con.execute("UPDATE teachers SET name=?,tsc_no=?,id_no=?,gender=?,role=?,department=?,phone=?,email=?,employment_type=?,teacher_color=? WHERE id=? AND school_id=?",(name.strip().upper(),tsc_no.strip(),id_no.strip(),gender,role.strip(),department,phone.strip(),email.strip(),employment_type.strip(),teacher_color,teacher_id,school["id"])); con.commit(); con.close(); return RedirectResponse("/school/teachers",303)
 
 @app.get("/school/classes/{class_id}/edit", response_class=HTMLResponse)
 def school_class_edit(class_id:int, request:Request):
