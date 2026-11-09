@@ -4,6 +4,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from bisect import bisect_left, insort
 import json
+import os
 import time
 from typing import Any
 
@@ -11,7 +12,7 @@ from app.timetable.setup import TimetableSetupError, _profile
 from app.timetable.session_engine import _validate_constraints
 
 
-ENGINE_VERSION = "10.2"
+ENGINE_VERSION = "11.0-cpsat"
 DEFAULT_NODE_LIMIT = 10_000_000
 GENERATION_TIME_LIMIT_SECONDS = 120.0
 
@@ -744,7 +745,7 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
         class_limits=class_limits,
         deadline=deadline,
         node_limit=node_limit,
-        workers=max(1, min(8, int(__import__("os").cpu_count() or 1))),
+        workers=max(1, min(8, int(os.cpu_count() or 1))),
     )
     placements = list(fixed) + list(cp_result.get("placements") or [])
     strict_nodes = int(cp_result.get("strict_branches") or 0)
@@ -880,6 +881,11 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
             "search_elapsed_seconds": round(time.monotonic() - search_started_at, 3),
             "overall_deadline_seconds": GENERATION_TIME_LIMIT_SECONDS,
             "search_limit_per_pass": int(node_limit),
+            "solver": "OR-Tools CP-SAT",
+            "solver_status": cp_status,
+            "strict_solver_status": cp_result.get("strict_status"),
+            "fallback_solver_status": cp_result.get("fallback_status"),
+            "solver_elapsed_seconds": search_elapsed,
         }
         cur.execute(
             "UPDATE ds_timetable_generation_runs SET status='failed',result_summary_json=?,finished_at=? WHERE id=? AND school_id=?",
@@ -947,6 +953,11 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
         "generated_lessons": len(generated),
         "total_scheduled_lessons": len(manual) + len(generated),
         "search_nodes": nodes,
+        "solver": "OR-Tools CP-SAT",
+        "solver_status": cp_status,
+        "strict_solver_status": cp_result.get("strict_status"),
+        "fallback_solver_status": cp_result.get("fallback_status"),
+        "solver_elapsed_seconds": search_elapsed,
         "quality_score": quality_score,
     }
     cur.execute(
