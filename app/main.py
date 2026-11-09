@@ -518,7 +518,7 @@ async def security_headers(request: Request, call_next):
 
 # Install the tab-aware SessionMiddleware outside every @app.middleware layer.
 # Request.session must exist before inactivity and role-routing middleware run.
-app.add_middleware(DaviSchoolTabSessionMiddleware, secret_key=SECRET_KEY, https_only=SESSION_HTTPS_ONLY, same_site="lax", max_age=60*60*12)
+# Tab-scoped sessions are installed once around the completed ASGI app at the end of this module.
 
 SUPER_ADMIN = os.environ.get("DAVISCHOOL_SUPER_ADMIN", "admin@davischool.com")
 DB_PATH = os.environ.get("DAVISCHOOL_DB_PATH", "davischool.db")
