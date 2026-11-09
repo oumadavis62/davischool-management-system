@@ -559,7 +559,7 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
                 <label>Max / day<input type='number' min='1' max='10' name='max_lessons_per_day' placeholder='No limit'></label>
                 <label class='tt-check'><input type='checkbox' name='allow_double' value='1'> Allow double</label>
                 <div class='wide tt-session-editor' data-session-editor>
- <div class='tt-session-editor-head'><b>Weekly session planner</b><span>Build the weekly pattern</span></div>
+ <div class='tt-session-editor-head'><b>Weekly session planner</b><span>Each save adds these sessions to the existing weekly plan</span></div><div class='tt-session-balance' data-session-balance>New sessions: 0 periods · Set the weekly target above</div>
  <div class='tt-session-filters'>
   <label>Find linking class<input type='search' data-class-filter placeholder='Search class or stream'></label>
   <label>Find co-teacher<input type='search' data-teacher-filter placeholder='Search teacher'></label>
@@ -570,7 +570,7 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
  </div>
  <div class='tt-session-list' data-session-list><div class='tt-session-row'><span class='tt-session-number'>1</span><label>Lesson type<select data-session-duration><option value='1'>Single · 1 period</option><option value='2'>Double · 2 periods</option></select></label><button type='button' data-remove-session disabled>Remove</button></div></div>
  <button type='button' class='tt-btn secondary' data-add-session>＋ Add another session</button>
- <input type='hidden' name='weekly_pattern' data-weekly-pattern >
+ <input type='hidden' name='weekly_pattern' data-weekly-pattern ><input type='hidden' name='pattern_mode' value='append'>
  <small>Choose single or double separately for each occurrence. Class and co-teacher choices are session planning controls.</small>
  </div>
                 <div class='tt-req-add-footer'><button type='button' class='tt-btn secondary' data-req-add-close>Cancel</button><button class='tt-btn' type='submit'>Save requirement</button></div>
@@ -588,7 +588,7 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
             root.querySelectorAll('[data-session-editor]').forEach(ed=>{{
               const list=ed.querySelector('[data-session-list]'), hidden=ed.querySelector('[data-weekly-pattern]');
               const makeRow=(duration)=>{{const row=document.createElement('div');row.className='tt-session-row';row.innerHTML="<span class='tt-session-number'></span><label>Lesson type<select data-session-duration><option value='1'>Single · 1 period</option><option value='2'>Double · 2 periods</option></select></label><button type='button' data-remove-session>Remove</button>";row.querySelector('select').value=duration;return row;}};
-              const sync=()=>{{const vals=[...list.querySelectorAll('[data-session-duration]')].map(x=>x.value);hidden.value=vals.join(',');[...list.children].forEach((x,i)=>x.querySelector('.tt-session-number').textContent=String(i+1));list.querySelectorAll('[data-remove-session]').forEach(x=>x.disabled=list.children.length===1);}};
+              const sync=()=>{{const vals=[...list.querySelectorAll('[data-session-duration]')].map(x=>x.value);hidden.value=vals.join(',');[...list.children].forEach((x,i)=>x.querySelector('.tt-session-number').textContent=String(i+1));list.querySelectorAll('[data-remove-session]').forEach(x=>x.disabled=list.children.length===1);const total=vals.reduce((n,v)=>n+Number(v||0),0),target=Number(ed.closest('form')?.querySelector('[name=lessons_per_week]')?.value||0);const balance=ed.querySelector('[data-session-balance]');if(balance)balance.textContent='This save adds '+total+' period(s) · Weekly target '+target+' · '+(total<=target?'Within target':'Exceeds target');}};
               const initial=(hidden.value||'').split(',').map(x=>parseInt(x.trim().split('@')[0],10)).filter(x=>x===1||x===2);
               if(initial.length){{list.innerHTML='';initial.forEach(v=>list.appendChild(makeRow(v)));}}
               ed.addEventListener('click',e=>{{if(e.target.closest('[data-add-session]')){{list.appendChild(makeRow(1));sync();}}const rm=e.target.closest('[data-remove-session]');if(rm&&!rm.disabled){{rm.closest('.tt-session-row').remove();sync();}}}});
@@ -704,7 +704,7 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
         .tt-session-filters,.tt-session-linking{{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin:9px 0}}
         .tt-session-editor label{{display:grid;gap:5px;font-size:10px;font-weight:800;color:#496451}}
         .tt-session-editor input,.tt-session-editor select{{width:100%;min-width:0;padding:9px;border:1px solid #d5e4d7;border-radius:9px;background:white;color:#234638}}
-        .tt-session-list{{display:grid;gap:7px;margin:10px 0}}
+        .tt-session-list{{display:grid;gap:7px;margin:10px 0}}.tt-session-balance{{padding:9px 11px;border-radius:9px;background:#eaf5ec;color:#286541;font-size:11px;font-weight:800}}
         .tt-session-row{{display:flex;align-items:end;gap:10px;padding:9px;background:white;border:1px solid #e1ebe2;border-radius:10px}}
         .tt-session-number{{width:25px;height:25px;display:grid;place-items:center;border-radius:8px;background:#e8f3e9;color:#2b6943;font-size:11px;font-weight:900;flex:none}}
         .tt-session-row label{{flex:1}}
@@ -1726,7 +1726,7 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
             con.close()
 
     @app.post("/app/timetable/setup/requirement")
-    def create_timetable_requirement(request: Request, profile_id: int = Form(...), allocation: str = Form(...), lessons_per_week: int = Form(...), duration_periods: int = Form(1), max_lessons_per_day: str = Form(""), allow_double: str = Form(""), weekly_pattern: str = Form("")):
+    def create_timetable_requirement(request: Request, profile_id: int = Form(...), allocation: str = Form(...), lessons_per_week: int = Form(...), duration_periods: int = Form(1), max_lessons_per_day: str = Form(""), allow_double: str = Form(""), weekly_pattern: str = Form(""), pattern_mode: str = Form("replace")):
         school = school_for(request)
         if not school: return RedirectResponse("/", 303)
         con = get_db()
@@ -1766,6 +1766,22 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
                     else:
                         duration, preferred_period_id = int(token), None
                     sessions.append({"duration_periods": duration, "preferred_period_id": preferred_period_id})
+                if pattern_mode == "append":
+                    existing = con.execute(
+                        """SELECT duration_periods,preferred_period_id FROM ds_timetable_requirement_patterns
+                           WHERE school_id=? AND profile_id=? AND requirement_id=? ORDER BY session_no""",
+                        (int(school["id"]), profile_id, int(requirement["id"])),
+                    ).fetchall()
+                    sessions = [
+                        {"duration_periods": int(row["duration_periods"]), "preferred_period_id": row["preferred_period_id"]}
+                        for row in existing
+                    ] + sessions
+                used_periods = sum(int(item["duration_periods"]) for item in sessions)
+                if used_periods > int(lessons_per_week):
+                    raise TimetableSetupError(
+                        f"These sessions use {used_periods} periods, exceeding the weekly target of {int(lessons_per_week)}. "
+                        f"{max(0, int(lessons_per_week) - sum(int(row['duration_periods']) for row in existing) if pattern_mode == 'append' else int(lessons_per_week))} periods were available before this save."
+                    )
                 save_requirement_session_pattern(con, int(school["id"]), profile_id, int(requirement["id"]), sessions)
             return redirect_setup(profile_id, "Weekly lesson requirement and lesson pattern saved.", focus="requirements")
         except (TimetableSetupError, ValueError) as exc:
