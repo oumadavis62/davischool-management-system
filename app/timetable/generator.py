@@ -772,18 +772,26 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
 
     nodes = 0
     exhausted = False
+    exhausted_reason = None
+    strict_nodes = 0
+    fallback_nodes = 0
+    strict_stop_reason = None
+    fallback_stop_reason = None
+    search_started_at = time.monotonic()
     assigned = set()
     last_rank_by_group = {}
 
     def search(fallback: bool = False) -> bool:
-        nonlocal nodes, exhausted
+        nonlocal nodes, exhausted, exhausted_reason
         if time.monotonic() >= deadline:
             exhausted = True
+            exhausted_reason = "deadline"
             return False
         if len(assigned) >= len(tasks):
             return True
         if nodes >= int(node_limit):
             exhausted = True
+            exhausted_reason = "node_limit"
             return False
 
         best_choices = None
@@ -792,6 +800,7 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
         for group_id, members in symmetry_members.items():
             if time.monotonic() >= deadline:
                 exhausted = True
+                exhausted_reason = "deadline"
                 return False
             task_index = next((index for index in members if index not in assigned), None)
             if task_index is None:
@@ -803,6 +812,7 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
             for candidate_rank, candidate in enumerate(candidate_lookup[task_index]):
                 if time.monotonic() >= deadline:
                     exhausted = True
+                    exhausted_reason = "deadline"
                     return False
                 if candidate_rank <= minimum_rank:
                     continue
@@ -811,6 +821,7 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
                 for room_id in room_ids:
                     if time.monotonic() >= deadline:
                         exhausted = True
+                        exhausted_reason = "deadline"
                         return False
                     if (task_index, candidate["day_id"], candidate["period_id"], room_id) in blocked_candidates:
                         continue
@@ -838,6 +849,7 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
             nodes += 1
             if nodes > int(node_limit):
                 exhausted = True
+                exhausted_reason = "node_limit"
                 return False
             placement = dict(candidate, room_id=room_id)
             placement.update({
@@ -869,7 +881,9 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
     # Preserve the existing policy: exhaust explicitly available slots first,
     # then retry with fallback slots only if no complete strict solution exists.
     generated = search(False)
-    if not generated:
+    strict_nodes = nodes
+    strict_stop_reason = exhausted_reason
+    if not generated and strict_stop_reason != "deadline" and time.monotonic() < deadline:
         placements[:] = list(fixed)
         class_week.clear()
         class_day_periods.clear()
@@ -881,9 +895,12 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
             index_placement(item, 1)
         nodes = 0
         exhausted = False
+        exhausted_reason = None
         assigned.clear()
         last_rank_by_group.clear()
         generated = search(True)
+        fallback_nodes = nodes
+        fallback_stop_reason = exhausted_reason
 
     snapshot = {
         "profile_id": profile_id,
@@ -915,12 +932,28 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
     if not success:
         summary = {
             "status": "failed",
-            "message": "No complete clash-free timetable was found within the search limit." if exhausted else "The configured constraints leave at least one lesson without a valid slot.",
+            "message": (
+                "No complete clash-free timetable was found before the 20-second overall processing deadline expired."
+                if exhausted and exhausted_reason == "deadline"
+                else "No complete clash-free timetable was found within the 10,000,000-node search allowance per pass."
+                if exhausted and exhausted_reason == "node_limit"
+                else "The configured constraints leave at least one lesson without a valid slot."
+            ),
             "required_lessons": total_required,
             "manual_lessons_kept": len(manual),
             "unscheduled_lessons": len(tasks),
-            "search_nodes": nodes,
-            "search_limit": int(node_limit),
+            "search_nodes": int(strict_nodes + fallback_nodes),
+            "search_nodes_by_pass": {
+                "strict": int(strict_nodes),
+                "fallback": int(fallback_nodes),
+            },
+            "search_stop_reason_by_pass": {
+                "strict": strict_stop_reason or ("completed" if strict_nodes else "not_started"),
+                "fallback": fallback_stop_reason or ("completed" if fallback_nodes else "not_started"),
+            },
+            "search_elapsed_seconds": round(time.monotonic() - search_started_at, 3),
+            "overall_deadline_seconds": GENERATION_TIME_LIMIT_SECONDS,
+            "search_limit_per_pass": int(node_limit),
         }
         cur.execute(
             "UPDATE ds_timetable_generation_runs SET status='failed',result_summary_json=?,finished_at=? WHERE id=? AND school_id=?",
