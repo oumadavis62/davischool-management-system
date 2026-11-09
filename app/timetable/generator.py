@@ -535,9 +535,27 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
                 except TimetableSetupError as constraint_error:
                     filtered("constraint: " + str(constraint_error))
                     continue
+                allowed_room_ids = []
+                for room_id in _rooms_for_task(task):
+                    try:
+                        _validate_constraints(
+                            cur, school_id, profile_id, "instructional", "lesson",
+                            task["subject_id"], task.get("class_ids", [task["class_id"]]),
+                            task.get("teacher_ids", [task["teacher_id"]]),
+                            room_id, day_id, int(period["id"]),
+                            str(span[0]["start_time"]), str(span[-1]["end_time"]), None,
+                            cache=constraint_cache,
+                        )
+                    except TimetableSetupError:
+                        continue
+                    allowed_room_ids.append(room_id)
+                if not allowed_room_ids:
+                    filtered("room_specific_constraint")
+                    continue
                 candidates.append({
                     "day_id": day_id,
                     "period_id": int(period["id"]),
+                    "allowed_room_ids": allowed_room_ids,
                     "duration": len(span),
                     "start_time": span[0]["start_time"],
                     "end_time": span[-1]["end_time"],
