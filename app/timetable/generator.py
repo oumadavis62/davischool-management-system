@@ -1837,57 +1837,100 @@ def generate_dated_advanced_sessions(connection: Any, school_id: int, profile_id
             )
         candidates.append(options)
 
-    order = sorted(range(len(tasks)), key=lambda i: (len(candidates[i]), -int(tasks[i]["pattern"]["duration_periods"] or 0), tasks[i]["requirement_id"], tasks[i]["session_no"]))
-    planned = []
-    nodes = 0
+    from collections import defaultdict
+    from ortools.sat.python import cp_model
 
-    def compatible(task, option):
-        for class_id in task["classes"]:
-            limit = limits.get(int(class_id))
-            if not limit:
-                continue
-            same_week = sum(1 for item in planned
-                            if item["task"]["week"] == task["week"]
-                            and int(class_id) in item["task"]["classes"])
-            if limit["max_lessons_per_week"] is not None and same_week >= int(limit["max_lessons_per_week"]):
-                return False
-            same_day = sum(int(item["option"]["duration"] or 1) for item in planned
-                           if item["option"]["date"] == option["date"]
-                           and int(class_id) in item["task"]["classes"])
-            if limit["max_periods_per_day"] is not None and same_day + int(option["duration"] or 1) > int(limit["max_periods_per_day"]):
-                return False
-        for item in planned:
-            other = item["option"]
-            other_task = item["task"]
-            if other["date"] != option["date"]:
-                continue
-            if not _overlap(option["start"], option["end"], other["start"], other["end"]):
-                continue
-            if (set(task["classes"]) & set(other_task["classes"])
-                or shared_teachers
-                or set(task["learners"]) & set(other_task["learners"])
-                or (option["room_id"] is not None and option["room_id"] == other["room_id"])):
-                return False
-        return True
+    model = cp_model.CpModel()
+    variables = {}
+    option_meta = {}
+    by_class_slot = defaultdict(list)
+    by_teacher_slot = defaultdict(list)
+    by_learner_slot = defaultdict(list)
+    by_room_slot = defaultdict(list)
+    by_class_week = defaultdict(list)
+    by_class_date_periods = defaultdict(list)
+    objective_terms = []
 
-    def search(position):
-        nonlocal nodes
-        if position >= len(order):
-            return True
-        index = order[position]
-        for option in candidates[index]:
-            nodes += 1
-            if nodes > int(node_limit):
-                return False
-            if compatible(tasks[index], option):
-                planned.append({"task": tasks[index], "option": option})
-                if search(position + 1):
-                    return True
-                planned.pop()
-        return False
+    for task_index, task in enumerate(tasks):
+        task_vars = []
+        for option_index, option in enumerate(candidates[task_index]):
+            date_key = str(option["date"])
+            slot_ids = [int(slot["id"]) for slot in option.get("slots", [])]
+            if not slot_ids:
+                continue
+            var = model.NewBoolVar("dated_t{}_o{}".format(task_index, option_index))
+            variables[(task_index, option_index)] = var
+            option_meta[(task_index, option_index)] = option
+            task_vars.append(var)
+            for class_id in task["classes"]:
+                for slot_id in slot_ids:
+                    by_class_slot[(int(class_id), date_key, slot_id)].append(var)
+                by_class_week[(int(class_id), str(task["week"]))].append(var)
+                by_class_date_periods[(int(class_id), date_key)].append((var, max(1, int(option["duration"] or 1))))
+            for teacher_id in task["teachers"]:
+                for slot_id in slot_ids:
+                    by_teacher_slot[(int(teacher_id), date_key, slot_id)].append(var)
+            for learner_id in task["learners"]:
+                for slot_id in slot_ids:
+                    by_learner_slot[(int(learner_id), date_key, slot_id)].append(var)
+            if option["room_id"] is not None:
+                for slot_id in slot_ids:
+                    by_room_slot[(int(option["room_id"]), date_key, slot_id)].append(var)
+            cost = int(option["period_no"] or 0) * 5
+            cost += int(option_index)
+            objective_terms.append((var, cost))
+        if not task_vars:
+            model.AddBoolOr([])
+        else:
+            model.Add(sum(task_vars) == 1)
 
-    if not search(0):
-        raise TimetableSetupError("The dated requirements cannot all fit without clashes in the selected calendar range.")
+    for buckets in (by_class_slot, by_teacher_slot, by_learner_slot, by_room_slot):
+        for bucket_vars in buckets.values():
+            if len(bucket_vars) > 1:
+                model.Add(sum(bucket_vars) <= 1)
+
+    for (class_id, week_key), class_vars in by_class_week.items():
+        limit = limits.get(class_id)
+        if limit and limit["max_lessons_per_week"] is not None:
+            model.Add(sum(class_vars) <= int(limit["max_lessons_per_week"]))
+
+    for (class_id, date_key), entries in by_class_date_periods.items():
+        limit = limits.get(class_id)
+        if limit and limit["max_periods_per_day"] is not None:
+            model.Add(
+                sum(var * duration for var, duration in entries)
+                <= int(limit["max_periods_per_day"])
+            )
+
+    model.Minimize(sum(var * cost for var, cost in objective_terms))
+    solver = cp_model.CpSolver()
+    solver.parameters.max_time_in_seconds = GENERATION_TIME_LIMIT_SECONDS
+    solver.parameters.num_search_workers = max(1, min(8, __import__("os").cpu_count() or 1))
+    solver.parameters.random_seed = 67
+    solver.parameters.log_search_progress = False
+    status = solver.Solve(model)
+    nodes = int(solver.NumBranches())
+    if status not in (cp_model.OPTIMAL, cp_model.FEASIBLE):
+        if status == cp_model.INFEASIBLE:
+            raise TimetableSetupError(
+                "CP-SAT proved that the dated requirements cannot all fit without clashes "
+                "in the selected calendar range."
+            )
+        if status == cp_model.UNKNOWN:
+            raise TimetableSetupError(
+                "CP-SAT reached the time limit before finding a complete dated schedule. "
+                "No new sessions were saved."
+            )
+        raise TimetableSetupError(
+            "CP-SAT could not solve the dated requirements: " + solver.StatusName(status)
+        )
+
+    planned = [
+        {"task": tasks[task_index], "option": option_meta[(task_index, option_index)]}
+        for (task_index, option_index), var in variables.items()
+        if solver.Value(var)
+    ]
+
 
     created = []
     try:
