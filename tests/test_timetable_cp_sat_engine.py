@@ -47,10 +47,9 @@ class CpSatTimetableTests(unittest.TestCase):
         self.assertIn(result["status"], ("OPTIMAL", "FEASIBLE"))
         chosen = result["placements"]
         self.assertEqual(len(chosen), 2)
-        self.assertNotEqual(
-            {(p["day_id"], p["start_time"], p["end_time"]) for p in chosen},
-            {(1, "08:00", "08:40")},
-        )
+        chosen_intervals = [(p["day_id"], p["start_time"], p["end_time"]) for p in chosen]
+        self.assertEqual(len(set(chosen_intervals)), 2)
+        self.assertIn((1, "08:40", "09:20"), chosen_intervals)
 
     def test_linked_classes_are_both_reserved(self):
         linked = task(1)
