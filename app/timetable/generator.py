@@ -10,15 +10,15 @@ from app.timetable.setup import TimetableSetupError, _profile
 from app.timetable.session_engine import _validate_constraints
 
 
-ENGINE_VERSION = "1.5"
-DEFAULT_NODE_LIMIT = 120000
-GENERATION_TIME_LIMIT_SECONDS = 12.0
+ENGINE_VERSION = "1.6"
+DEFAULT_NODE_LIMIT = 10_000_000
+GENERATION_TIME_LIMIT_SECONDS = 20.0
 
 
 def _check_generation_deadline(deadline: float) -> None:
     if time.monotonic() >= deadline:
         raise TimetableSetupError(
-            "Timetable generation reached its 12-second processing limit. "
+            "Timetable generation reached its 20-second processing limit. "
             "Your existing timetable was preserved. Simplify conflicting constraints or split the generation into smaller sections, then retry."
         )
 
@@ -648,7 +648,9 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
         for candidate in candidate_lookup[task_index]:
             _check_generation_deadline(deadline)
             for room_id in _rooms_for_task(task):
+                _check_generation_deadline(deadline)
                 for existing in existing_sessions:
+                    _check_generation_deadline(deadline)
                     if existing["day_id"] != int(candidate["day_id"]):
                         continue
                     if not _overlap(candidate["start_time"], candidate["end_time"],
@@ -807,6 +809,9 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
                 if not fallback and not candidate.get("explicitly_available"):
                     continue
                 for room_id in room_ids:
+                    if time.monotonic() >= deadline:
+                        exhausted = True
+                        return False
                     if (task_index, candidate["day_id"], candidate["period_id"], room_id) in blocked_candidates:
                         continue
                     placement = dict(candidate, room_id=room_id)
@@ -1247,6 +1252,7 @@ def generate_advanced_instructional_sessions(connection: Any, school_id: int,
         # task/option whose duration spans consecutive periods.
         if task.get("subject_id") is not None:
             for placed in planned:
+                _check_generation_deadline(deadline)
                 other = placed["task"]
                 if (int(placed["option"]["day_id"]) == int(option["day_id"])
                     and other.get("subject_id") is not None
@@ -1311,7 +1317,11 @@ def generate_advanced_instructional_sessions(connection: Any, school_id: int,
             if time.monotonic() >= deadline:
                 return False
             task = tasks[index]
-            viable = [option for option in candidates[index] if compatible(task, option)]
+            viable = []
+            for option in candidates[index]:
+                _check_generation_deadline(deadline)
+                if compatible(task, option):
+                    viable.append(option)
             if not viable:
                 return False
             key = (len(viable), -int(task["duration"]),
@@ -1360,12 +1370,15 @@ def generate_advanced_instructional_sessions(connection: Any, school_id: int,
             score += same_period * 18
             score += same_period_same_day * 8
             # Prefer the least-loaded day for this class/teacher combination.
-            score += sum(
-                1 for placed in planned
-                if int(placed["option"]["day_id"]) == int(option["day_id"])
-                and (task_classes & set(placed["task"]["classes"])
-                     or task_teachers & set(placed["task"]["teachers"]))
-            ) * 6
+            daily_load = 0
+            for placed in planned:
+                _check_generation_deadline(deadline)
+                if int(placed["option"]["day_id"]) == int(option["day_id"]) and (
+                    task_classes & set(placed["task"]["classes"])
+                    or task_teachers & set(placed["task"]["teachers"])
+                ):
+                    daily_load += 1
+            score += daily_load * 6
             return (
                 preference_penalty(task, option),
                 score,
