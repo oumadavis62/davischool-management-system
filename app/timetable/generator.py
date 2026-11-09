@@ -1095,6 +1095,20 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
         requirement_diagnostics.sort(
             key=lambda item: (item["candidate_slots_before_conflicts"], -sum(item["rejections"].values()))
         )
+        diagnostic_lines = []
+        for item in requirement_diagnostics[:5]:
+            rejection_text = ", ".join(
+                reason.replace("_", " ") + ": " + str(count)
+                for reason, count in sorted(item["rejections"].items(), key=lambda pair: -pair[1])[:4]
+            ) or "No direct clash was isolated before search stopped"
+            diagnostic_lines.append(
+                item["class"] + " / " + item["subject"] + " / " + item["teacher"]
+                + " (lesson " + str(item["lesson_occurrence"]) + "): "
+                + str(item["candidate_slots_before_conflicts"]) + " candidate slots; "
+                + rejection_text
+                + (", blocked by existing shared sessions: " + str(item["blocked_by_existing_shared_sessions"])
+                   if item["blocked_by_existing_shared_sessions"] else "")
+            )
         stop_reason = exhausted_reason or strict_stop_reason or fallback_stop_reason or "all_candidates_exhausted"
         if stop_reason == "deadline":
             cause = "The solver reached the 20-second time limit while exploring possible placements."
@@ -1110,7 +1124,13 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
             next_step = "Start with lessons showing zero candidate slots or the fewest candidate slots, then review the listed constraints."
         summary = {
             "status": "failed",
-            "message": "Timetable generation failed. " + cause + " " + next_step,
+            "message": (
+                "Timetable generation failed. " + cause + " " + next_step
+                + " Most constrained lessons: " + (" | ".join(diagnostic_lines) if diagnostic_lines else "No lesson-level rejection was recorded.")
+                + " Search: " + str(strict_nodes) + " strict nodes, " + str(fallback_nodes)
+                + " fallback nodes, " + str(round(time.monotonic() - search_started_at, 3)) + " seconds."
+            ),
+            "diagnostic_details": diagnostic_lines,
             "failure_cause": cause,
             "recommended_action": next_step,
             "failure_code": stop_reason,
