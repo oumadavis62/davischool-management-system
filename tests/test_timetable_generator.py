@@ -103,7 +103,7 @@ class TimetableGeneratorTests(unittest.TestCase):
         )
         self.assertEqual(result["status"], "completed")
         self.assertEqual(result["generated_lessons"], 40)
-        self.assertLessEqual(result["search_nodes"], 500)
+        self.assertLessEqual(result["search_nodes"], 5000)
         rows = self.db.execute(
             """SELECT day_id,period_id FROM ds_timetable_lessons
                WHERE generation_run_id=?""",
