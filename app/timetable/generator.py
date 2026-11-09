@@ -1228,7 +1228,62 @@ def generate_advanced_instructional_sessions(connection: Any, school_id: int,
             if best_key is None or key < best_key:
                 best_index, best_options, best_key = index, viable, key
         task = tasks[best_index]
-        for option in best_options:
+
+        def distribution_score(option):
+            # Spread each requirement's weekly occurrences across days, and
+            # avoid repeatedly assigning the same class/teacher to the same
+            # period number on different days.
+            score = 0
+            task_classes = set(task["classes"])
+            task_teachers = set(task["teachers"])
+            task_learners = set(task["learners"])
+            same_requirement_day = 0
+            class_day = 0
+            teacher_day = 0
+            same_period = 0
+            same_period_same_day = 0
+            for placed in planned:
+                other = placed["task"]
+                slot = placed["option"]
+                same_day = int(slot["day_id"]) == int(option["day_id"])
+                related_class = bool(task_classes & set(other["classes"]))
+                related_teacher = bool(task_teachers & set(other["teachers"]))
+                related_learners = bool(task_learners & set(other["learners"]))
+                same_requirement = int(task["requirement_id"]) == int(other["requirement_id"])
+                if same_requirement and same_day:
+                    same_requirement_day += 1
+                if same_day and related_class:
+                    class_day += int(slot["duration"])
+                if same_day and related_teacher:
+                    teacher_day += int(slot["duration"])
+                if int(slot["period_no"]) == int(option["period_no"]):
+                    if related_class or related_teacher or related_learners:
+                        same_period += 1
+                        if same_day:
+                            same_period_same_day += 1
+            # Strongly discourage stacking a requirement on one day; then
+            # balance daily workload and rotate recurring period positions.
+            score += same_requirement_day * 100
+            score += class_day * 12
+            score += teacher_day * 10
+            score += same_period * 18
+            score += same_period_same_day * 8
+            # Prefer the least-loaded day for this class/teacher combination.
+            score += sum(
+                1 for placed in planned
+                if int(placed["option"]["day_id"]) == int(option["day_id"])
+                and (task_classes & set(placed["task"]["classes"])
+                     or task_teachers & set(placed["task"]["teachers"]))
+            ) * 6
+            return (
+                preference_penalty(task, option),
+                score,
+                0 if task["preferred_day_id"] == option["day_id"] else 1,
+                option["period_no"],
+                option["day_id"],
+            )
+
+        for option in sorted(best_options, key=distribution_score):
             nodes += 1
             if nodes > int(node_limit):
                 return False
