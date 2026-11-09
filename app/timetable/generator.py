@@ -10,15 +10,15 @@ from app.timetable.setup import TimetableSetupError, _profile
 from app.timetable.session_engine import _validate_constraints
 
 
-ENGINE_VERSION = "10.1"
+ENGINE_VERSION = "10.2"
 DEFAULT_NODE_LIMIT = 10_000_000
-GENERATION_TIME_LIMIT_SECONDS = 20.0
+GENERATION_TIME_LIMIT_SECONDS = 120.0
 
 
 def _check_generation_deadline(deadline: float) -> None:
     if time.monotonic() >= deadline:
         raise TimetableSetupError(
-            "Timetable generation reached its 20-second processing limit. "
+            "Timetable generation reached its 120-second processing limit. "
             "Your existing timetable was preserved. Simplify conflicting constraints or split the generation into smaller sections, then retry."
         )
 
@@ -1145,7 +1145,7 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
             )
         stop_reason = exhausted_reason or strict_stop_reason or fallback_stop_reason or "all_candidates_exhausted"
         if stop_reason == "deadline":
-            cause = "The solver reached the 20-second time limit while exploring possible placements."
+            cause = "The solver reached the 120-second time limit while exploring possible placements."
             next_step = "Review the most constrained lessons below, then check teacher availability, class limits, room use and manual placements."
         elif stop_reason == "node_limit":
             cause = "The solver reached its configured search-node limit before finding a complete arrangement."
