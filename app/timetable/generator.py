@@ -784,6 +784,9 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
         best_task_index = None
         best_rank_key = None
         for group_id, members in symmetry_members.items():
+            if time.monotonic() >= deadline:
+                exhausted = True
+                return False
             task_index = next((index for index in members if index not in assigned), None)
             if task_index is None:
                 continue
@@ -1197,6 +1200,7 @@ def generate_advanced_instructional_sessions(connection: Any, school_id: int,
                 if unavailable:
                     continue
                 for room_id in room_ids_for_task:
+                    _check_generation_deadline(deadline)
                     if _validate_constraints:
                         try:
                             _validate_constraints(cur, school_id, profile_id, "instructional", "lesson",
