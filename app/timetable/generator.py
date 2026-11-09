@@ -331,20 +331,21 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
             )
         expected_periods = weekly * duration
         pattern_periods = sum(int(x["duration_periods"] or 1) for x in configured_pattern)
-        if configured_pattern and pattern_periods > expected_periods:
-            raise TimetableSetupError("The saved lesson pattern exceeds this subject's weekly duration allocation. Edit the pattern before generating.")
+        if configured_pattern and pattern_periods != expected_periods:
+            raise TimetableSetupError(
+                "The saved lesson mix for class ID " + str(key[0]) + ", subject ID " + str(key[1])
+                + " currently uses " + str(pattern_periods) + " of " + str(expected_periods)
+                + " required weekly periods. Add the remaining single/double sessions before generating."
+            )
         if configured_pattern:
+            # A saved pattern is the exact list of lesson sessions. The weekly
+            # target is measured in occupied periods, so a double plus three
+            # singles fulfils a five-period allocation in four sessions.
             planned_sessions = [
                 {"duration": int(x["duration_periods"]), "preferred_period_id": int(x["preferred_period_id"]) if x["preferred_period_id"] is not None else None}
                 for x in configured_pattern
             ]
-            # lessons_per_week counts lesson occurrences, not occupied periods.
-            # A double-period pattern still fulfils only one weekly lesson;
-            # retain the remaining occurrences as ordinary single-period lessons.
-            planned_sessions.extend(
-                {"duration": 1, "preferred_period_id": None}
-                for _ in range(max(0, weekly - len(planned_sessions)))
-            )
+            remaining = len(planned_sessions)
         else:
             # Start with the non-manual weekly occurrences; shared sessions
             # are removed from this list immediately below.
