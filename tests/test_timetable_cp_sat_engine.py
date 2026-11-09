@@ -86,6 +86,24 @@ class CpSatTimetableTests(unittest.TestCase):
         self.assertIn(result["status"], ("OPTIMAL", "FEASIBLE"))
         self.assertEqual(result["placements"][0]["period_no"], 2)
 
+    def test_shared_learner_cannot_be_scheduled_twice(self):
+        first = task(1, teacher_id=1, subject_id=10)
+        second = task(2, teacher_id=2, subject_id=11)
+        first["learner_ids"] = [900]
+        second["learner_ids"] = [900]
+        slot = candidate(1, 1, "08:00", "08:40")
+        result = solve([first, second], [[slot], [slot]])
+        self.assertEqual(result["status"], "INFEASIBLE")
+
+    def test_same_room_cannot_host_two_simultaneous_lessons(self):
+        slot_a = dict(candidate(1, 1, "08:00", "08:40"), room_id=7)
+        slot_b = dict(candidate(1, 1, "08:00", "08:40"), room_id=7)
+        result = solve(
+            [task(1, teacher_id=1), task(2, teacher_id=2, subject_id=11)],
+            [[slot_a], [slot_b]],
+        )
+        self.assertEqual(result["status"], "INFEASIBLE")
+
     def test_class_daily_period_limit_respects_double_duration(self):
         result = solve(
             [task(1, duration=2)],
