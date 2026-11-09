@@ -11,7 +11,7 @@ from app.timetable.setup import TimetableSetupError, _profile
 from app.timetable.session_engine import _validate_constraints
 
 
-ENGINE_VERSION = "10.2"
+ENGINE_VERSION = "11.0-cpsat"
 DEFAULT_NODE_LIMIT = 10_000_000
 GENERATION_TIME_LIMIT_SECONDS = 120.0
 
@@ -678,6 +678,7 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
     fixed_subject_days = set()
     fixed_class_week = {}
     fixed_class_day_periods = {}
+    fixed_teacher_day_periods = {}
     fixed_subject_day_count = {}
     fixed_teacher_day_count = {}
     for item in fixed:
@@ -692,6 +693,7 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
         fixed_subject_days.add((class_id, subject_id, day_id))
         fixed_subject_day_count[(class_id, subject_id, teacher_id, day_id)] = fixed_subject_day_count.get((class_id, subject_id, teacher_id, day_id), 0) + 1
         fixed_class_day_periods[(class_id, day_id)] = fixed_class_day_periods.get((class_id, day_id), 0) + len(period_ids)
+        fixed_teacher_day_periods[(teacher_id, day_id)] = fixed_teacher_day_periods.get((teacher_id, day_id), 0) + len(period_ids)
         for pid in period_ids:
             fixed_class_periods.add((class_id, day_id, pid))
             fixed_teacher_periods.add((teacher_id, day_id, pid))
@@ -729,6 +731,9 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
                     for teacher_id in session["teachers"]:
                         cap_key = (int(class_id), int(session["subject_id"]), int(teacher_id), day_id)
                         fixed_subject_day_count[cap_key] = fixed_subject_day_count.get(cap_key, 0) + 1
+            for teacher_id in session["teachers"]:
+                teacher_key = (int(teacher_id), day_id)
+                fixed_teacher_day_periods[teacher_key] = fixed_teacher_day_periods.get(teacher_key, 0) + len(session_periods)
 
     def build_cp_model(allow_fallback: bool):
         model = cp_model.CpModel()
@@ -740,6 +745,7 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
         by_subject_day = defaultdict(list)
         by_subject_teacher_day = defaultdict(list)
         by_class_day_periods = defaultdict(list)
+        by_teacher_day_periods = defaultdict(list)
         by_class_week = defaultdict(list)
         by_task = defaultdict(list)
         rank_terms_by_task = defaultdict(list)
@@ -792,6 +798,7 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
                     for tid in teacher_ids:
                         for pid in period_ids:
                             by_teacher_period[(tid, day_id, pid)].append(var)
+                        by_teacher_day_periods[(tid, day_id)].append((var, len(period_ids)))
                     if room_id is not None:
                         for pid in period_ids:
                             by_room_period[(int(room_id), day_id, pid)].append(var)
@@ -856,6 +863,57 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
                     + int(fixed_class_day_periods.get((class_id, day_id), 0))
                     <= int(limit["max_periods_per_day"])
                 )
+
+        # Balance daily teaching loads across the week. These are soft costs:
+        # class, teacher, availability and room constraints remain hard.
+        instructional_day_ids = [int(day["id"]) for day in days]
+        class_ids_for_balance = {
+            int(class_id) for task in tasks
+            for class_id in task.get("class_ids", [task["class_id"]])
+        } | {int(class_id) for class_id, _day in fixed_class_day_periods}
+        for class_id in class_ids_for_balance:
+            weekly_periods = sum(
+                int(task["duration"]) for task in tasks
+                if class_id in {int(v) for v in task.get("class_ids", [task["class_id"]])}
+            ) + sum(
+                value for (fixed_class_id, _day), value in fixed_class_day_periods.items()
+                if fixed_class_id == class_id
+            )
+            if not weekly_periods:
+                continue
+            target = weekly_periods // max(1, len(instructional_day_ids))
+            for day_id in instructional_day_ids:
+                entries = by_class_day_periods.get((class_id, day_id), [])
+                fixed_load = int(fixed_class_day_periods.get((class_id, day_id), 0))
+                load = model.NewIntVar(0, weekly_periods, "class{}_day{}_load".format(class_id, day_id))
+                model.Add(load == fixed_load + sum(var * duration for var, duration in entries))
+                deviation = model.NewIntVar(0, weekly_periods, "class{}_day{}_balance".format(class_id, day_id))
+                model.AddAbsEquality(deviation, load - target)
+                objective_terms.append((deviation, 35))
+
+        teacher_ids_for_balance = {
+            int(teacher_id) for task in tasks
+            for teacher_id in task.get("teacher_ids", [task["teacher_id"]])
+        } | {int(teacher_id) for teacher_id, _day in fixed_teacher_day_periods}
+        for teacher_id in teacher_ids_for_balance:
+            weekly_periods = sum(
+                int(task["duration"]) for task in tasks
+                if teacher_id in {int(v) for v in task.get("teacher_ids", [task["teacher_id"]])}
+            ) + sum(
+                value for (fixed_teacher_id, _day), value in fixed_teacher_day_periods.items()
+                if fixed_teacher_id == teacher_id
+            )
+            if not weekly_periods:
+                continue
+            target = weekly_periods // max(1, len(instructional_day_ids))
+            for day_id in instructional_day_ids:
+                entries = by_teacher_day_periods.get((teacher_id, day_id), [])
+                fixed_load = int(fixed_teacher_day_periods.get((teacher_id, day_id), 0))
+                load = model.NewIntVar(0, weekly_periods, "teacher{}_day{}_load".format(teacher_id, day_id))
+                model.Add(load == fixed_load + sum(var * duration for var, duration in entries))
+                deviation = model.NewIntVar(0, weekly_periods, "teacher{}_day{}_balance".format(teacher_id, day_id))
+                model.AddAbsEquality(deviation, load - target)
+                objective_terms.append((deviation, 20))
 
         # Keep fallback availability as a last resort, not as an equal choice.
         return model, variables, variable_meta, objective_terms
