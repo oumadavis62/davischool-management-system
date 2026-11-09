@@ -742,8 +742,7 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
                         break
 
     # All database-backed inputs and conflict checks are now materialised.
-    # End the read transaction before CPU-heavy recursive backtracking so this
-    # solver does not hold AccessShare locks on school tables for minutes.
+    # End the read transaction before CP-SAT builds and solves the in-memory model.
     connection.commit()
 
     # CP-SAT replaces recursive Python backtracking for ordinary weekly lessons.
@@ -768,7 +767,7 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
     placements = list(fixed) + list(cp_result.get("placements") or [])
     strict_nodes = int(cp_result.get("strict_branches") or 0)
     fallback_nodes = int(cp_result.get("fallback_branches") or 0)
-    nodes = strict_nodes + fallback_nodes
+    nodes = int(cp_result.get("branches") or 0)
     strict_stop_reason = str(cp_result.get("strict_status") or "UNKNOWN").lower()
     fallback_stop_reason = str(cp_result.get("fallback_status") or "NOT_RUN").lower()
     search_elapsed = float(cp_result.get("elapsed_seconds") or (time.monotonic() - search_started_at))
