@@ -46,15 +46,12 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
             parts.append("message=" + quote(str(message)))
         if error:
             parts.append("error=1")
-        if focus:
-            parts.append("focus=" + quote(str(focus)))
         if request is not None:
             tab_id = str(request.scope.get("davischool_tab_id") or request.query_params.get("ds_tab") or "").strip()
             if tab_id:
                 parts.append("ds_tab=" + quote(tab_id, safe=""))
         suffix = ("?" + "&".join(parts)) if parts else ""
-        anchor = "#tt-subject-requirements" if focus == "requirements" else ""
-        return RedirectResponse("/app/timetable/setup" + suffix + anchor, 303)
+        return RedirectResponse("/app/timetable/setup" + suffix, 303)
 
     @app.get("/app/timetable", response_class=HTMLResponse)
     def timetable_home(request: Request, profile_id: int = 0):
@@ -162,9 +159,6 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
 
     @app.get("/app/timetable/setup", response_class=HTMLResponse)
     def timetable_setup_page(request: Request, profile_id: int = 0, message: str = "", error: int = 0, class_id: int = 0, focus: str = "", tab: str = ""):
-        # Legacy tab=requirements links are normalized to the focused workspace.
-        if tab == "requirements":
-            focus = "requirements"
         school = school_for(request)
         if not school:
             return RedirectResponse("/", 303)
@@ -494,7 +488,7 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
                 for item in sorted(group["subjects"], key=lambda x: x["subject"].lower())
             )
             modal_id = f"tt-subject-breakdown-{cid}"
-            allocation_editor_url = f"/app/timetable/setup?focus=requirements&profile_id={pid}&class_id={int(cid)}"
+            allocation_editor_url = f"/app/timetable/setup?profile_id={pid}&class_id={int(cid)}"
             current_tab_id = str(request.scope.get("davischool_tab_id") or "")
             if current_tab_id:
                 allocation_editor_url += "&ds_tab=" + quote(current_tab_id, safe="")
@@ -678,8 +672,6 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
         body = f"""
         <style>
         .tt-wrap{{max-width:1500px;margin:auto;padding:22px;color:#234638}}
-        .tt-wrap.tt-requirements-focus>:not(.tt-requirements-section){{display:none!important}}
-        .tt-wrap.tt-requirements-focus>.tt-requirements-section{{display:block;margin-top:0}} 
         .tt-requirements-section{{padding:0!important;overflow:hidden}}
         .tt-req-page-head{{display:flex;justify-content:space-between;align-items:center;gap:18px;flex-wrap:wrap;padding:24px 26px;background:linear-gradient(115deg,#e5f2e7,#f6faf6);border-bottom:1px solid #dce9de}}
         .tt-req-page-head h2{{margin:5px 0 6px;color:#204b34;font-size:25px;letter-spacing:-.5px}}
@@ -881,7 +873,7 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
            .tt-section-content{{padding-top:13px}}
          }}
         </style>
-        <div class='tt-wrap{' tt-requirements-focus' if focus == 'requirements' else ''}'>{notice}{selector}{profile_summary}{read_only_html}{create_profile_html if not has_draft_profile else ""}{sections}</div>
+        <div class='tt-wrap'>{notice}{selector}{profile_summary}{read_only_html}{create_profile_html if not has_draft_profile else ""}{sections}</div>
         <script>
         (function(){{
           const root=document.querySelector('.tt-wrap'); if(!root) return;
@@ -1687,11 +1679,10 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
             return redirect_setup(
                 profile_id,
                 f"Subject requirements applied: {selected} subject(s), {created} class/teacher requirements added; {preserved} existing customized requirements preserved.",
-                focus="requirements",
                 request=request,
             )
         except (TimetableSetupError, ValueError) as exc:
-            return redirect_setup(profile_id, str(exc), True, focus="requirements", request=request)
+            return redirect_setup(profile_id, str(exc), True, request=request)
         finally:
             con.close()
 
@@ -1806,7 +1797,7 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
                         f"{max(0, int(lessons_per_week) - sum(int(row['duration_periods']) for row in existing) if pattern_mode == 'append' else int(lessons_per_week))} periods were available before this save."
                     )
                 save_requirement_session_pattern(con, int(school["id"]), profile_id, int(requirement["id"]), sessions)
-            return redirect_setup(profile_id, "Weekly lesson requirement and lesson pattern saved.", focus="requirements", request=request)
+            return redirect_setup(profile_id, "Weekly lesson requirement and lesson pattern saved.", request=request)
         except (TimetableSetupError, ValueError) as exc:
             con.rollback()
             return redirect_setup(profile_id, str(exc), True, focus="requirements", request=request)
