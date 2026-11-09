@@ -431,7 +431,7 @@ def register_timetable_builder_routes(app, get_db, get_school_obj, module_page):
                         cells.append(f"<td class='tb-cell tb-cell-multi {'tb-cell-double' if cell_span > 1 else ''}' colspan='{cell_span}' data-day-id='{int(day['id'])}' data-period-id='{int(period['id'])}' ondragover='event.preventDefault()' ondrop='dropTimetableLesson(event,this)'>{''.join(cards)}</td>")
                     elif continued_lessons:
                         continued_html = "".join(
-                            f"<div class='tb-continued-item' style='--teacher-color:{safe_teacher_color(item['teacher_color'])}' title='{esc(item['subject_name'])} · {esc(item['teacher_name'])}'>↳ {esc(str(item['subject_initial'] or '').strip().upper() or '—')} continues · {esc(item['teacher_name'])}</div>"
+                            f"<div class='tb-continued-item' style='--teacher-color:{safe_teacher_color(item['teacher_color'])}' title='{esc(item['subject_name'])} · {esc(item['teacher_name'])}'>↳ {esc(str(item['subject_initial'] or '').strip().upper() or '—')} continues <b class='tb-teacher-initials'>{esc(str(item.get('teacher_initials') or '').strip().upper() or '—')}</b></div>"
                             for item in continued_lessons
                         )
                         cells.append(f"<td class='tb-cell tb-continued' data-day-id='{int(day['id'])}' data-period-id='{int(period['id'])}' ondragover='event.preventDefault()' ondrop='dropTimetableLesson(event,this)'>{continued_html}</td>")
