@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 import json
+import time
 from typing import Any
 
 from app.timetable.setup import TimetableSetupError, _profile
@@ -10,7 +11,16 @@ from app.timetable.session_engine import _validate_constraints
 
 
 ENGINE_VERSION = "1.4"
-DEFAULT_NODE_LIMIT = 100000
+DEFAULT_NODE_LIMIT = 30000
+GENERATION_TIME_LIMIT_SECONDS = 12.0
+
+
+def _check_generation_deadline(deadline: float) -> None:
+    if time.monotonic() >= deadline:
+        raise TimetableSetupError(
+            "Timetable generation reached its 12-second processing limit. "
+            "Your existing timetable was preserved. Simplify conflicting constraints or split the generation into smaller sections, then retry."
+        )
 
 
 def _now() -> str:
@@ -118,7 +128,8 @@ def _score(task, candidate, placements) -> float:
     return score
 
 
-def generate_timetable(connection: Any, school_id: int, profile_id: int, created_by: str = "", node_limit: int = DEFAULT_NODE_LIMIT, normalized_run_id: int | None = None) -> dict:
+def generate_timetable(connection: Any, school_id: int, profile_id: int, created_by: str = "", node_limit: int = DEFAULT_NODE_LIMIT, normalized_run_id: int | None = None, deadline: float | None = None) -> dict:
+    deadline = deadline if deadline is not None else time.monotonic() + GENERATION_TIME_LIMIT_SECONDS
     cur = connection.cursor()
     profile = _profile(cur, school_id, profile_id)
     active_run_sql = """SELECT id FROM ds_timetable_generation_runs
@@ -629,7 +640,9 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
             item["teachers"].add(int(row["teacher_id"]))
     existing_sessions = list(existing_by_id.values())
     for task_index, task in enumerate(tasks):
+        _check_generation_deadline(deadline)
         for candidate in candidate_lookup[task_index]:
+            _check_generation_deadline(deadline)
             for room_id in _rooms_for_task(task):
                 for existing in existing_sessions:
                     if existing["day_id"] != int(candidate["day_id"]):
@@ -758,6 +771,9 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
 
     def search(fallback: bool = False) -> bool:
         nonlocal nodes, exhausted
+        if time.monotonic() >= deadline:
+            exhausted = True
+            return False
         if len(assigned) >= len(tasks):
             return True
         if nodes >= int(node_limit):
@@ -971,7 +987,8 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
 def generate_advanced_instructional_sessions(connection: Any, school_id: int,
                                              profile_id: int, created_by: str = "",
                                              node_limit: int = DEFAULT_NODE_LIMIT,
-                                             defer_replacement: bool = False) -> dict:
+                                             defer_replacement: bool = False,
+                                             deadline: float | None = None) -> dict:
     """Place normalized multi-class/team-teaching requirements using the shared engine.
 
     This deliberately writes to ds_timetable_sessions; legacy single-class rows
@@ -979,6 +996,7 @@ def generate_advanced_instructional_sessions(connection: Any, school_id: int,
     """
     from app.timetable.session_engine import create_scheduled_session, find_session_conflicts
 
+    deadline = deadline if deadline is not None else time.monotonic() + GENERATION_TIME_LIMIT_SECONDS
     cur = connection.cursor()
     _profile(cur, school_id, profile_id)
     requirements = cur.execute(
@@ -1016,6 +1034,7 @@ def generate_advanced_instructional_sessions(connection: Any, school_id: int,
     ).fetchall()
     tasks = []
     for req in requirements:
+        _check_generation_deadline(deadline)
         rid = int(req["id"])
         classes = [int(x["class_id"]) for x in cur.execute(
             "SELECT class_id FROM ds_timetable_scheduling_requirement_classes WHERE school_id=? AND profile_id=? AND requirement_id=? ORDER BY class_id",
@@ -1113,6 +1132,7 @@ def generate_advanced_instructional_sessions(connection: Any, school_id: int,
 
     candidates = []
     for task in tasks:
+        _check_generation_deadline(deadline)
         options = []
         class_key = (tuple(sorted(task["classes"])), tuple(sorted(task["learners"])))
         if class_key not in enrolment_cache:
@@ -1148,8 +1168,10 @@ def generate_advanced_instructional_sessions(connection: Any, school_id: int,
             room_ids_for_task = [None]
 
         for day in days:
+            _check_generation_deadline(deadline)
             day_id = int(day["id"])
             for index, period in enumerate(periods):
+                _check_generation_deadline(deadline)
                 span = span_for(index, task["duration"])
                 if not span:
                     continue
@@ -1267,12 +1289,16 @@ def generate_advanced_instructional_sessions(connection: Any, school_id: int,
 
     def search():
         nonlocal nodes
+        if time.monotonic() >= deadline:
+            return False
         if not remaining:
             return True
         best_index = None
         best_options = None
         best_key = None
         for index in sorted(remaining):
+            if time.monotonic() >= deadline:
+                return False
             task = tasks[index]
             viable = [option for option in candidates[index] if compatible(task, option)]
             if not viable:
@@ -1338,6 +1364,8 @@ def generate_advanced_instructional_sessions(connection: Any, school_id: int,
             )
 
         for option in sorted(best_options, key=distribution_score):
+            if time.monotonic() >= deadline:
+                return False
             nodes += 1
             if nodes > int(node_limit):
                 return False
