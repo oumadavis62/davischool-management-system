@@ -10,3 +10,4 @@ itsdangerous==2.2.0
 psycopg[pool,binary]==3.3.6
 psycopg-pool==3.3.3
 cryptography==46.0.4
+ortools==9.14.6206

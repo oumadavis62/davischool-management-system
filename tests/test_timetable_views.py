@@ -14,17 +14,17 @@ class TimetableViewTests(unittest.TestCase):
         self.db.row_factory = sqlite3.Row
         ensure_timetable_schema(self.db)
         self.db.executescript("""
-            CREATE TABLE teachers (id INTEGER PRIMARY KEY, school_id INTEGER, name TEXT);
+            CREATE TABLE teachers (id INTEGER PRIMARY KEY, school_id INTEGER, name TEXT, teacher_color TEXT, teacher_initials TEXT);
             CREATE TABLE classes (id INTEGER PRIMARY KEY, school_id INTEGER, name TEXT, stream TEXT);
-            CREATE TABLE subjects (id INTEGER PRIMARY KEY, school_id INTEGER, name TEXT);
+            CREATE TABLE subjects (id INTEGER PRIMARY KEY, school_id INTEGER, name TEXT, initial TEXT);
             CREATE TABLE teacher_allocations (
                 id INTEGER PRIMARY KEY, school_id INTEGER, teacher_id INTEGER,
                 subject_id INTEGER, class_id INTEGER
             );
         """)
-        self.db.executemany("INSERT INTO teachers VALUES(?,?,?)", [(10,1,"Teacher A"),(11,1,"Teacher B")])
+        self.db.executemany("INSERT INTO teachers (id,school_id,name,teacher_color,teacher_initials) VALUES(?,?,?,?,?)", [(10,1,"Teacher A","#2563eb","TA"),(11,1,"Teacher B","#16a34a","TB")])
         self.db.executemany("INSERT INTO classes VALUES(?,?,?,?)", [(20,1,"Grade 7","Blue"),(21,1,"Grade 8","Green")])
-        self.db.executemany("INSERT INTO subjects VALUES(?,?,?)", [(30,1,"Mathematics"),(31,1,"English")])
+        self.db.executemany("INSERT INTO subjects (id,school_id,name,initial) VALUES(?,?,?,?)", [(30,1,"Mathematics","M"),(31,1,"English","E")])
         self.db.executemany(
             "INSERT INTO teacher_allocations VALUES(?,?,?,?,?)",
             [(1,1,10,30,20),(2,1,11,31,21)],

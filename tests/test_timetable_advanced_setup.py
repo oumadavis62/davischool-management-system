@@ -103,7 +103,7 @@ class AdvancedTimetableSetupTests(unittest.TestCase):
         )
 
 
-    def test_weekly_pattern_must_exactly_match_allocated_periods(self):
+    def test_weekly_pattern_rejects_overallocation_and_preserves_existing_mix(self):
         self.db.execute(
             """INSERT INTO ds_timetable_class_requirements
                (school_id,profile_id,class_id,subject_id,teacher_id,lessons_per_week)
@@ -132,7 +132,7 @@ class AdvancedTimetableSetupTests(unittest.TestCase):
         with self.assertRaises(TimetableSetupError):
             save_requirement_session_pattern(
                 self.db, 12, self.profile_id, requirement_id,
-                [{"duration_periods": 2}, {"duration_periods": 2}],
+                [{"duration_periods": 3}, {"duration_periods": 3}],
             )
         preserved = self.db.execute(
             "SELECT COUNT(*) AS n FROM ds_timetable_requirement_patterns WHERE requirement_id=?",
