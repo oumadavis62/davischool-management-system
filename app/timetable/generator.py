@@ -47,6 +47,17 @@ def _gaps(placements, field: str, value: int, day_id: int) -> int:
 
 
 def _can_place(task, candidate, placements) -> bool:
+    # A class may receive a subject only once per day. A configured double
+    # lesson is represented by one candidate with duration > 1, not by two
+    # separate placements, so it remains valid while repeated sessions do not.
+    if any(
+        int(p["class_id"]) == int(task["class_id"])
+        and int(p["subject_id"]) == int(task["subject_id"])
+        and int(p["day_id"]) == int(candidate["day_id"])
+        for p in placements
+    ):
+        return False
+
     max_per_day = task.get("max_lessons_per_day")
     if max_per_day:
         same_subject_day = sum(
@@ -1181,6 +1192,18 @@ def generate_advanced_instructional_sessions(connection: Any, school_id: int,
         return a["day_id"] == b["day_id"] and a["start"] < b["end"] and a["end"] > b["start"]
 
     def compatible(task, option):
+        # Prevent separate sessions of the same subject from being placed
+        # on the same day for any shared class. A double lesson is a single
+        # task/option whose duration spans consecutive periods.
+        if task.get("subject_id") is not None:
+            for placed in planned:
+                other = placed["task"]
+                if (int(placed["option"]["day_id"]) == int(option["day_id"])
+                    and other.get("subject_id") is not None
+                    and int(other["subject_id"]) == int(task["subject_id"])
+                    and set(task["classes"]) & set(other["classes"])):
+                    return False
+
         for class_id in task["classes"]:
             limit = class_limits.get(int(class_id))
             if not limit:
