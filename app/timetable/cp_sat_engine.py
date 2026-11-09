@@ -328,14 +328,18 @@ def solve_timetable(
         }
     started = time.monotonic()
     remaining = max(0.1, deadline - started)
-    strict_budget = max(0.1, remaining * 0.55)
+    needs_fallback = any(
+        not candidate.get("explicitly_available")
+        for domain in candidate_lookup.values() for candidate in domain
+    )
+    strict_budget = max(0.1, remaining * (0.45 if needs_fallback else 0.60))
     strict = _build_and_solve(
         tasks, candidate_lookup, rooms_for_task, fixed, blocked_candidates,
         class_limits, strict_budget, node_limit, workers, False, optimize=False,
     )
     fallback = None
     feasible = strict
-    if strict["status"] not in ("OPTIMAL", "FEASIBLE") and time.monotonic() < deadline:
+    if needs_fallback and strict["status"] not in ("OPTIMAL", "FEASIBLE") and time.monotonic() < deadline:
         fallback_budget = max(0.1, deadline - time.monotonic())
         fallback = _build_and_solve(
             tasks, candidate_lookup, rooms_for_task, fixed, blocked_candidates,
