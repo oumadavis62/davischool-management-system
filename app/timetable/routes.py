@@ -401,16 +401,22 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
             for p in periods if str(p["period_type"] or "lesson") == "lesson"
         )
         requirement_pattern_values = {}
+        requirement_links_values = {}
         requirement_pattern_display = {}
         for req in requirements:
             saved_pattern = cur.execute(
-                """SELECT rp.duration_periods,p.period_no
+                """SELECT rp.duration_periods,p.period_no,rp.linked_class_ids_json,rp.co_teacher_ids_json
                    FROM ds_timetable_requirement_patterns rp
                    LEFT JOIN ds_timetable_periods p ON p.id=rp.preferred_period_id
                    WHERE rp.school_id=? AND rp.profile_id=? AND rp.requirement_id=?
                    ORDER BY rp.session_no""",
                 (school_id, pid, int(req["id"])),
             ).fetchall()
+            requirement_links_values[int(req["id"])] = json.dumps([
+                {"classes": json.loads(item["linked_class_ids_json"] or "[]"),
+                 "teachers": json.loads(item["co_teacher_ids_json"] or "[]")}
+                for item in saved_pattern
+            ])
             requirement_pattern_values[int(req["id"])] = ", ".join(
                 str(int(item["duration_periods"])) +
                 (("@" + str(int(item["period_no"]))) if item["period_no"] is not None else "")
@@ -619,7 +625,7 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
               const makeRow=(duration,periodNo,classes=[],teachers=[])=>{{const row=document.createElement('div');row.className='tt-session-row';row.innerHTML="<span class='tt-session-number'></span><label>Lesson type<select data-session-duration><option value='1'>Single · 1 period</option><option value='2'>Double · 2 periods</option><option value='3'>Triple · 3 periods</option><option value='4'>Quadruple · 4 periods</option></select></label><label>Start period<select data-session-period>"+periodOptions+"</select></label><label>Share class<select multiple data-session-classes>{class_group_options}</select></label><label>Co-teacher<select multiple data-session-teachers>{teacher_group_options}</select></label><small data-session-span>Auto placement</small><button type='button' data-remove-session>Remove</button>";row.querySelector('[data-session-duration]').value=duration;row.querySelector('[data-session-period]').value=periodNo||'';classes.forEach(v=>{{const o=row.querySelector('[data-session-classes] option[value=\"'+v+'\"]');if(o)o.selected=true;}});teachers.forEach(v=>{{const o=row.querySelector('[data-session-teachers] option[value=\"'+v+'\"]');if(o)o.selected=true;}});return row;}};
               const sync=()=>{{const vals=[...list.querySelectorAll('.tt-session-row')].map(row=>{{const duration=row.querySelector('[data-session-duration]').value,period=row.querySelector('[data-session-period]').value,span=row.querySelector('[data-session-span]');span.textContent=period?'Starts P'+period+' · occupies P'+period+(Number(duration)>1?'–P'+(Number(period)+Number(duration)-1):''):'Auto placement'+(Number(duration)>1?' · '+duration+' consecutive periods':'');return {{pattern:duration+(period?'@'+period:''),classes:[...row.querySelectorAll('[data-session-classes] option:checked')].map(o=>o.value),teachers:[...row.querySelectorAll('[data-session-teachers] option:checked')].map(o=>o.value)}};}});hidden.value=vals.map(v=>v.pattern).join(',');const linkField=ed.querySelector('[name=weekly_links]');if(linkField)linkField.value=JSON.stringify(vals.map(v=>({{classes:v.classes,teachers:v.teachers}})));[...list.children].forEach((x,i)=>x.querySelector('.tt-session-number').textContent=String(i+1));list.querySelectorAll('[data-remove-session]').forEach(x=>x.disabled=list.children.length===1);const total=vals.reduce((n,v)=>n+Number(v.pattern.split('@')[0]||0),0),target=Number(ed.closest('form')?.querySelector('[name=lessons_per_week]')?.value||0);const balance=ed.querySelector('[data-session-balance]');if(balance)balance.textContent='This save adds '+total+' period(s) · Weekly target '+target+' · '+(total<=target?'Within target':'Exceeds target');}};
               const linkField=ed.querySelector('[name=weekly_links]');let savedLinks=[];try{{savedLinks=JSON.parse(linkField?.value||'[]');}}catch(e){{savedLinks=[];}}const initial=(hidden.value||'').split(',').map((x,i)=>{{const bits=x.trim().split('@'),links=savedLinks[i]||{{}};return {{duration:parseInt(bits[0],10),period:bits[1]||'',classes:links.classes||[],teachers:links.teachers||[]}};}}).filter(x=>x.duration>=1&&x.duration<=4);
-              if(initial.length){{list.innerHTML='';initial.forEach(v=>list.appendChild(makeRow(v.duration,v.period,v.classes,v.teachers));}}
+              if(initial.length){{list.innerHTML='';initial.forEach(v=>list.appendChild(makeRow(v.duration,v.period,v.classes,v.teachers)));}}
               ed.addEventListener('click',e=>{{if(e.target.closest('[data-add-session]')){{list.appendChild(makeRow(1));sync();}}const rm=e.target.closest('[data-remove-session]');if(rm&&!rm.disabled){{rm.closest('.tt-session-row').remove();sync();}}}});
               ed.addEventListener('change',e=>{{if(e.target.matches('[data-session-duration],[data-session-period],[data-session-classes],[data-session-teachers]'))sync();}});
               const filter=()=>{{const c=(ed.querySelector('[data-class-filter]')?.value||'').toLowerCase(),t=(ed.querySelector('[data-teacher-filter]')?.value||'').toLowerCase();[...ed.querySelectorAll('[data-link-class] option')].forEach((o,i)=>{{if(i)o.hidden=!!(c&&!o.text.toLowerCase().includes(c));}});[...ed.querySelectorAll('[data-link-teacher] option')].forEach((o,i)=>{{if(i)o.hidden=!!(t&&!o.text.toLowerCase().includes(t));}});}};
