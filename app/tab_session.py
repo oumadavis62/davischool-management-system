@@ -407,35 +407,53 @@ class DaviSchoolTabSessionMiddleware:
             "",
         )
 
-        selected_cookie_present = any(
-            part.strip().split("=", 1)[0] == session_cookie
+        cookie_pairs = [
+            (part.strip().split("=", 1)[0], part.strip().split("=", 1)[1])
             for part in cookie_header.split(";")
             if "=" in part
-        )
+        ]
+        selected_cookie_value = next((value for name, value in cookie_pairs if name == session_cookie), None)
+        legacy_value = next((value for name, value in cookie_pairs if name == "session"), None)
+        selected_cookie_present = selected_cookie_value is not None
+
+        def cookie_has_authenticated_session(value):
+            if not value:
+                return False
+            try:
+                signed = TimestampSigner(str(self.secret_key)).unsign(
+                    value.encode("utf-8"), max_age=self.max_age
+                )
+                payload = json.loads(base64.b64decode(signed).decode("utf-8"))
+                return bool(payload.get("email"))
+            except (BadSignature, ValueError, TypeError, UnicodeDecodeError, json.JSONDecodeError):
+                return False
+
         migrated_legacy_session = False
-        if tab_id and not selected_cookie_present:
-            legacy_value = next(
-                (
-                    part.strip().split("=", 1)[1]
-                    for part in cookie_header.split(";")
-                    if "=" in part and part.strip().split("=", 1)[0] == "session"
-                ),
-                None,
-            )
-            if legacy_value is not None:
-                preserved = [
-                    part.strip()
-                    for part in cookie_header.split(";")
-                    if "=" in part and part.strip().split("=", 1)[0] != "session"
-                ]
-                preserved.append(session_cookie + "=" + legacy_value)
-                rewritten_cookie = "; ".join(preserved).encode("latin-1", "ignore")
-                scope["headers"] = [
-                    (name, rewritten_cookie if name.lower() == b"cookie" else value)
-                    for name, value in scope.get("headers", [])
-                ]
-                selected_cookie_present = True
-                migrated_legacy_session = True
+        # A tab cookie may already exist but contain an empty session created
+        # during an earlier anonymous page load. In that case, the old
+        # authenticated "session" cookie must still be copied into this tab.
+        # Only do this when the selected tab cookie is not authenticated, so
+        # an already-authenticated, tab-isolated session is never overwritten.
+        should_migrate_legacy = bool(
+            tab_id
+            and legacy_value
+            and cookie_has_authenticated_session(legacy_value)
+            and not cookie_has_authenticated_session(selected_cookie_value)
+        )
+        if should_migrate_legacy:
+            preserved = [
+                part.strip()
+                for part in cookie_header.split(";")
+                if "=" in part and part.strip().split("=", 1)[0] not in {"session", session_cookie}
+            ]
+            preserved.append(session_cookie + "=" + legacy_value)
+            rewritten_cookie = "; ".join(preserved).encode("latin-1", "ignore")
+            scope["headers"] = [
+                (name, rewritten_cookie if name.lower() == b"cookie" else value)
+                for name, value in scope.get("headers", [])
+            ]
+            selected_cookie_present = True
+            migrated_legacy_session = True
         if is_student_save:
             query = scope.get("query_string", b"").decode("utf-8", "ignore")
             referer = next(
