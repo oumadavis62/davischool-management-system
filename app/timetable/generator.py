@@ -908,6 +908,7 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
             "solver_status": cp_status,
             "strict_solver_status": cp_result.get("strict_status"),
             "fallback_solver_status": cp_result.get("fallback_status"),
+            "optimization_solver_status": cp_result.get("optimization_status"),
             "solver_elapsed_seconds": search_elapsed,
         }
         cur.execute(
@@ -980,6 +981,7 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
         "solver_status": cp_status,
         "strict_solver_status": cp_result.get("strict_status"),
         "fallback_solver_status": cp_result.get("fallback_status"),
+        "optimization_solver_status": cp_result.get("optimization_status"),
         "solver_elapsed_seconds": search_elapsed,
         "quality_score": quality_score,
     }
@@ -1356,6 +1358,12 @@ def generate_advanced_instructional_sessions(connection: Any, school_id: int,
             "status": "completed",
             "generated_sessions": len(created),
             "search_nodes": nodes,
+            "solver": "OR-Tools CP-SAT",
+            "solver_status": cp_result.get("status"),
+            "strict_solver_status": cp_result.get("strict_status"),
+            "fallback_solver_status": cp_result.get("fallback_status"),
+            "optimization_solver_status": cp_result.get("optimization_status"),
+            "solver_elapsed_seconds": cp_result.get("elapsed_seconds"),
             "message": "Advanced instructional sessions generated with combined-class, team-teaching and shared conflict validation.",
         }
         cur.execute(
