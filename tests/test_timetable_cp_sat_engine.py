@@ -220,6 +220,20 @@ class CpSatTimetableTests(unittest.TestCase):
                     if class_id in item.get("class_ids", [item["class_id"]])),
                 {1: 40, 2: 37, 5: 38, 6: 37}[class_id],
             )
+        for index, first in enumerate(combined):
+            first_classes = set(first.get("class_ids", [first.get("class_id")])) - {None}
+            first_teachers = set(first.get("teacher_ids", [first.get("teacher_id")])) - {None}
+            for second in combined[index + 1:]:
+                if first["day_id"] != second["day_id"]:
+                    continue
+                overlaps = (first["start_time"] < second["end_time"]
+                            and first["end_time"] > second["start_time"])
+                if not overlaps:
+                    continue
+                second_classes = set(second.get("class_ids", [second.get("class_id")])) - {None}
+                second_teachers = set(second.get("teacher_ids", [second.get("teacher_id")])) - {None}
+                self.assertFalse(first_classes & second_classes)
+                self.assertFalse(first_teachers & second_teachers)
 
     def test_class_daily_period_limit_respects_double_duration(self):
         result = solve(
