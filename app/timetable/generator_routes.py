@@ -99,6 +99,11 @@ def register_timetable_generator_routes(app, get_db, get_school_obj, module_page
             job_progress_html = f"<section class='ag-result' id='tt-job-progress'><span class='ag-kicker'>BACKGROUND GENERATION · JOB #{int(job_id)}</span><h3 id='tt-job-title'>Checking generation status…</h3><p id='tt-job-message'>The timetable is being generated in the background. You can safely leave this page.</p><div id='tt-job-stage' class='ag-state'>QUEUED</div></section>"
         generator_script = """<script>
         const ttTabSessionId = TT_TAB_SESSION_ID || new URL(window.location.href).searchParams.get('ds_tab') || '';
+        // A restored back-forward-cache copy can contain an obsolete form
+        // action. Reload it from the server so the tab-bound action is current.
+        window.addEventListener('pageshow', function(event) {
+            if (event.persisted) window.location.reload();
+        });
         function ttBindTabSession(form) {
             // This inline submit hook runs synchronously, even if the deferred
             // global tab-session controller has not loaded yet. Without it a
@@ -308,7 +313,15 @@ def register_timetable_generator_routes(app, get_db, get_school_obj, module_page
         {action_html}
                 </section>{job_progress_html}{result_html}<section class='ag-history'><span class='ag-kicker'>AUDITABLE GENERATION HISTORY</span><h3>Previous runs</h3><div class='ag-table-scroll'><table><tr><th>Run</th><th>Created</th><th>Status</th><th>Engine</th><th>Result</th><th>Actions</th></tr>{run_rows}</table></div></section></div>{generator_script}
         """
-        return module_page(request, "Automatic Timetabling", "timetable", body)
+        response = module_page(request, "Automatic Timetabling", "timetable", body)
+        # The generator form contains a per-tab session ID in its action URL.
+        # Never let a browser/proxy reuse an older HTML page whose form posts
+        # to the legacy action without that ID; bfcache restores are reloaded
+        # by the inline pageshow guard below.
+        response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+        response.headers["Pragma"] = "no-cache"
+        response.headers["Expires"] = "0"
+        return response
 
     @app.post("/app/timetable/automatic/generate-advanced")
     def run_advanced_generation(request: Request, profile_id: int = Form(...)):
