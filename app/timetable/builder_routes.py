@@ -273,7 +273,8 @@ def register_timetable_builder_routes(app, get_db, get_school_obj, module_page):
 
         esc = lambda value: escape(str(value if value is not None else ""))
         def subject_initials(value):
-            words = [word for word in re.findall(r"[A-Za-z0-9]+", str(value or "")) if word.lower() not in {"and", "of", "the"}]
+            words = ["".join(char for char in part if char.isalnum()) for part in str(value or "").split()]
+            words = [word for word in words if word and word.lower() not in {"and", "of", "the"}]
             if not words:
                 return "SUB"
             if len(words) == 1:
