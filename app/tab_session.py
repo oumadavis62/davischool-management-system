@@ -423,15 +423,27 @@ class DaviSchoolTabSessionMiddleware:
             except (BadSignature, ValueError, TypeError, UnicodeDecodeError, json.JSONDecodeError):
                 return False
 
-        if not tab_id:
-            authenticated_tab_ids = []
-            for name, value in early_cookie_pairs:
-                prefix = "davischool_session_"
-                candidate = name[len(prefix):] if name.startswith(prefix) else ""
-                if _TAB_RE.fullmatch(candidate or "") and cookie_has_authenticated_session(value):
-                    authenticated_tab_ids.append(candidate)
-            if len(authenticated_tab_ids) == 1:
-                tab_id = authenticated_tab_ids[0]
+        authenticated_tab_ids = []
+        for name, value in early_cookie_pairs:
+            prefix = "davischool_session_"
+            candidate = name[len(prefix):] if name.startswith(prefix) else ""
+            if _TAB_RE.fullmatch(candidate or "") and cookie_has_authenticated_session(value):
+                authenticated_tab_ids.append(candidate)
+
+        # A cached page can submit with a stale ds_tab value even though the
+        # browser still has one valid authenticated tab cookie. Recover only
+        # when the cookie is unambiguous and the selected tab cookie is not
+        # authenticated; never switch between multiple authenticated tabs.
+        selected_name = self._cookie_name(tab_id) if tab_id else "session"
+        selected_value = next(
+            (value for name, value in early_cookie_pairs if name == selected_name),
+            None,
+        )
+        if (
+            len(authenticated_tab_ids) == 1
+            and not cookie_has_authenticated_session(selected_value)
+        ):
+            tab_id = authenticated_tab_ids[0]
 
         scope["davischool_tab_id"] = tab_id
 
