@@ -122,6 +122,8 @@ def register_timetable_view_routes(app, get_db, get_school_obj, module_page):
             class_rows = sorted(class_rows_by_id.values(), key=lambda item: (
                 item["class_name"].casefold(), item["stream"].casefold()
             ))
+            if view_type == "teacher":
+                class_rows = [{"class_id": 0, "class_name": "", "stream": ""}]
             if not class_rows:
                 class_rows = [{"class_id": 0, "class_name": "—", "stream": ""}]
             lesson_by_start = {}
@@ -144,7 +146,10 @@ def register_timetable_view_routes(app, get_db, get_school_obj, module_page):
                 for position, (_, item_type, item) in enumerate(timeline)
                 if item_type == "period"
             }
-            headers = ["<th class='tb-day-heading'>Day</th>", "<th class='tb-class-heading'>Class / Stream</th>"]
+            show_class_column = view_type in ("school", "room")
+            headers = ["<th class='tb-day-heading'>Day</th>"]
+            if show_class_column:
+                headers.append("<th class='tb-class-heading'>Class / Stream</th>")
             for _, item_type, item in timeline:
                 if item_type == "break":
                     headers.append(f"<th class='tb-break-heading'><b>{esc(item['label'])}</b><span>{esc(item['start_time'])}–{esc(item['end_time'])}</span></th>")
@@ -157,9 +162,10 @@ def register_timetable_view_routes(app, get_db, get_school_obj, module_page):
                     cells = []
                     if class_index == 0:
                         cells.append(f"<th class='tb-day-heading' rowspan='{len(day_class_rows)}'>{esc(day['day_name'])}</th>")
-                    class_name_html = f"<b class='tb-class-name'>{esc(class_row['class_name'])}</b>"
-                    stream_html = f"<span class='tb-stream-name'>{esc(class_row['stream'])}</span>" if class_row["stream"] else ""
-                    cells.append(f"<th class='tb-class-heading'>{class_name_html}{stream_html}</th>")
+                    if show_class_column:
+                        class_name_html = f"<b class='tb-class-name'>{esc(class_row['class_name'])}</b>"
+                        stream_html = f"<span class='tb-stream-name'>{esc(class_row['stream'])}</span>" if class_row["stream"] else ""
+                        cells.append(f"<th class='tb-class-heading'>{class_name_html}{stream_html}</th>")
                     merged_period_ids = set()
                     for timeline_position, (_, item_type, item) in enumerate(timeline):
                         if item_type == "break":
@@ -169,8 +175,12 @@ def register_timetable_view_routes(app, get_db, get_school_obj, module_page):
                         if int(period["id"]) in merged_period_ids:
                             continue
                         key = (int(day["id"]), int(class_row["class_id"]), int(period["id"]))
-                        slot_lessons = lesson_by_start.get(key, [])
-                        continued_lessons = occupied.get(key, [])
+                        if view_type == "teacher":
+                            slot_lessons = [lesson for lesson in lessons if int(lesson["day_id"]) == int(day["id"]) and int(lesson["period_id"]) == int(period["id"])]
+                            continued_lessons = [lesson for lesson in lessons if int(lesson["day_id"]) == int(day["id"]) and (int(day["id"]), int(lesson["class_id"]), int(period["id"])) in occupied and lesson in occupied[(int(day["id"]), int(lesson["class_id"]), int(period["id"]))]]
+                        else:
+                            slot_lessons = lesson_by_start.get(key, [])
+                            continued_lessons = occupied.get(key, [])
                         if slot_lessons:
                             cards = []
                             cell_span = 1
@@ -201,10 +211,12 @@ def register_timetable_view_routes(app, get_db, get_school_obj, module_page):
                                     teacher_initials = "".join(part[0] for part in (name_parts[:1] + (name_parts[-1:] if len(name_parts) > 1 else []))).upper()[:4] or "—"
                                 subject_initial = str(lesson["subject_initial"] or "").strip().upper() or "—"
                                 room_label = esc(lesson["room_name"] or "Room not assigned")
+                                class_label = esc(str(lesson["class_name"]) + ((" · " + str(lesson["stream"])) if lesson["stream"] else ""))
+                                class_line = f"<div class='tb-meta tb-class-label'>{class_label}</div>" if view_type == "teacher" else ""
                                 cards.append(
                                     f"<div class='tb-lesson {'tb-lesson-double' if duration > 1 else ''}' style='--teacher-color:{teacher_color}' title='{esc(lesson['subject_name'])} · {esc(lesson['teacher_name'])}'>"
                                     f"<div class='tb-lesson-top'><b class='tb-subject-initials'>{esc(subject_initial)}</b><span>{duration}P</span></div>"
-                                    f"<div class='tb-meta tb-room-label'>⌂ {room_label}</div>"
+                                    f"{class_line}<div class='tb-meta tb-room-label'>⌂ {room_label}</div>"
                                     f"<div class='tb-lesson-footer'><span class='tb-teacher-initials' title='{esc(lesson['teacher_name'])}'>{esc(teacher_initials)}</span></div></div>"
                                 )
                             cells.append(f"<td class='tb-cell tb-cell-multi {'tb-cell-double' if cell_span > 1 else ''}' colspan='{cell_span}'>{''.join(cards)}</td>")
@@ -291,6 +303,7 @@ def register_timetable_view_routes(app, get_db, get_school_obj, module_page):
         .tv-wrap .tb-grid .tb-subject-initials{{font-size:12px;letter-spacing:.5px;font-weight:900}}
         .tv-wrap .tb-grid .tb-meta{{font-size:8px;color:#55705d;margin-top:2px}}
         .tv-wrap .tb-grid .tb-room-label{{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}}
+        .tv-wrap .tb-grid .tb-class-label{{font-size:9px;font-weight:850;color:#315f43;line-height:1.15;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}}
         .tv-wrap .tb-grid .tb-lesson-footer{{display:flex;align-items:center;justify-content:flex-end;width:100%;min-height:14px;margin-top:auto}}
         .tv-wrap .tb-grid .tb-teacher-initials{{display:inline-flex;align-items:center;justify-content:center;min-width:20px;height:16px;padding:0 4px;box-sizing:border-box;border-radius:5px;background:color-mix(in srgb,var(--teacher-color) 78%,#173b29);color:#fff;text-shadow:0 1px 1px rgba(0,0,0,.22);font-size:8px;font-weight:950;letter-spacing:.04em;line-height:1}}
         .tv-wrap .tv-hero{{display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:12px;padding:12px 16px;border:1px solid #d1e3d4;border-radius:18px;background:linear-gradient(118deg,#dceede,#c9e2ce 53%,#edf5eb)}}
