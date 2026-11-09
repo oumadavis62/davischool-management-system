@@ -523,8 +523,7 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
             + hidden
             + "<p class='wide'>Set the weekly period ceiling for each selected subject. This bulk action creates a default single-period requirement; use Manage to save the exact mix of doubles and singles for each class/teacher allocation. Existing customized requirements are preserved.</p>"
             + "<div class='wide'><b>Subjects to include</b><div style='display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:8px;margin-top:8px'>" + subject_opts + "</div></div>"
-            + "<label>Lessons per week<input name='lessons_per_week' type='number' min='1' max='30' value='5' required></label>"
-            + "<label>Lesson duration<select name='duration_periods'><option value='1'>Single period</option><option value='2'>Double period</option><option value='3'>Triple period</option><option value='4'>Four periods</option></select></label>"
+            + "<label>Weekly period target<input name='lessons_per_week' type='number' min='1' max='30' value='5' required></label>"
             + "<label>Maximum lessons per day<input name='max_lessons_per_day' type='number' min='1' max='10' placeholder='No limit'></label>"
             + "<label class='tt-check'><input type='checkbox' name='allow_double' value='1'> Allow double lessons</label>"
             + "<button class='tt-btn' type='submit'>Apply subject requirements to all classes</button></form>"
