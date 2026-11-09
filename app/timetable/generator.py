@@ -10,8 +10,8 @@ from app.timetable.setup import TimetableSetupError, _profile
 from app.timetable.session_engine import _validate_constraints
 
 
-ENGINE_VERSION = "1.4"
-DEFAULT_NODE_LIMIT = 30000
+ENGINE_VERSION = "1.5"
+DEFAULT_NODE_LIMIT = 120000
 GENERATION_TIME_LIMIT_SECONDS = 12.0
 
 
@@ -799,6 +799,9 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
             choices = []
             room_ids = _rooms_for_task(task)
             for candidate_rank, candidate in enumerate(candidate_lookup[task_index]):
+                if time.monotonic() >= deadline:
+                    exhausted = True
+                    return False
                 if candidate_rank <= minimum_rank:
                     continue
                 if not fallback and not candidate.get("explicitly_available"):
