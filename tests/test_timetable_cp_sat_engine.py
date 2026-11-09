@@ -137,26 +137,40 @@ class CpSatTimetableTests(unittest.TestCase):
             ("11:30", "12:10"), ("12:10", "12:50"),
             ("14:00", "14:40"), ("14:40", "15:20"),
         ]
+        fixed_specs = [
+            (1, 2, 9, 1, 2), (1, 1, 6, 1, 3),
+            (5, 3, 3, 2, 2), (5, 1, 6, 2, 3),
+        ]
         fixed = []
-        fixed_subjects = {(1, 1), (2, 1), (5, 1), (6, 1)}
-        for class_id, subject_id, teacher_id, _weekly, _pattern in requirements:
-            if (class_id, subject_id) not in fixed_subjects:
-                continue
-            period_no = 2 if class_id == 5 else 1
+        fixed_counts = {}
+        for class_id, subject_id, teacher_id, day_id, period_no in fixed_specs:
             start, end = periods[period_no - 1]
             fixed.append({
                 "class_id": class_id, "subject_id": subject_id,
-                "teacher_id": teacher_id, "day_id": 1,
+                "teacher_id": teacher_id, "day_id": day_id,
                 "period_id": period_no, "period_no": period_no,
                 "start_time": start, "end_time": end,
                 "duration": 1, "room_id": None,
             })
+            fixed_counts[(class_id, subject_id)] = fixed_counts.get((class_id, subject_id), 0) + 1
+
+        # These are the live profile's 43 subject-unavailable cells,
+        # converted from its period IDs 9-16 to period numbers 1-8.
+        unavailable = {
+            (1,1,6),(1,1,7),(1,1,8),(1,2,6),(1,2,7),(1,2,8),
+            (1,3,6),(1,3,7),(1,4,6),(1,4,7),(1,4,8),(1,5,6),(1,5,7),(1,5,8),
+            (2,1,7),(2,1,8),(2,2,7),(2,2,8),(2,3,7),(2,3,8),(2,4,7),(2,5,7),(2,5,8),
+            (4,1,8),(4,2,8),(4,3,8),(4,4,8),(4,5,8),
+            (6,1,1),(6,1,2),(6,1,3),(6,2,1),(6,2,2),(6,2,3),
+            (6,3,1),(6,3,2),(6,3,3),(6,4,1),(6,4,2),(6,4,3),
+            (6,5,1),(6,5,2),(6,5,3),
+        }
 
         solver_tasks = []
         candidate_lookup = {}
         for class_id, subject_id, teacher_id, weekly, pattern in requirements:
             durations = list(pattern) if pattern else [1] * weekly
-            if (class_id, subject_id) in fixed_subjects:
+            for _ in range(fixed_counts.get((class_id, subject_id), 0)):
                 durations.remove(1)
             for duration in durations:
                 task_index = len(solver_tasks)
@@ -175,6 +189,9 @@ class CpSatTimetableTests(unittest.TestCase):
                 for day in range(1, 6):
                     for period_no in starts:
                         end_period = period_no + duration - 1
+                        if any((subject_id, day, occupied) in unavailable
+                               for occupied in range(period_no, end_period + 1)):
+                            continue
                         start_time = periods[period_no - 1][0]
                         end_time = periods[end_period - 1][1]
                         domain.append({
