@@ -1800,5 +1800,5 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
             return redirect_setup(profile_id, "Weekly lesson requirement and lesson pattern saved.", request=request)
         except (TimetableSetupError, ValueError) as exc:
             con.rollback()
-            return redirect_setup(profile_id, str(exc), True, focus="requirements", request=request)
+            return redirect_setup(profile_id, str(exc), True, request=request)
         finally: con.close()
