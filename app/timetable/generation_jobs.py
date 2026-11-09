@@ -12,6 +12,7 @@ import time
 from typing import Callable
 
 from app.timetable.generator import (
+    GENERATION_TIME_LIMIT_SECONDS,
     generate_timetable,
     generate_advanced_instructional_sessions,
 )
@@ -135,8 +136,9 @@ def _execute_job(get_db, job):
     profile_id = int(job["profile_id"])
     email = str(job["requested_by"] or "")
     # One shared wall-clock budget covers normalized sessions, ordinary
-    # lessons, and their database-backed candidate preparation.
-    deadline = time.monotonic() + 20.0
+    # lessons, and their database-backed candidate preparation. Keep this
+    # aligned with the solver's advertised 120-second generation limit.
+    deadline = time.monotonic() + GENERATION_TIME_LIMIT_SECONDS
     con = get_db()
     advanced_result = None
     created_advanced_ids = []
