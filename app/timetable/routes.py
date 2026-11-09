@@ -1057,6 +1057,15 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
               if(!form||!form.matches||!form.matches('form[method="post" i]')) return;
               const action=new URL(form.getAttribute('action')||window.location.href,window.location.origin);
               const endpoint=action.pathname;
+              const isRequirementSave=endpoint==='/app/timetable/setup/requirement';
+              const isRequirementDelete=endpoint==='/app/timetable/setup/row-delete'&&form.querySelector('input[name="kind"]')?.value==='requirement';
+              // Requirement saves must perform a real document navigation. The
+              // setup AJAX replacement only swaps .tt-wrap, while the two-tab
+              // Teaching Requirements navigation lives outside that element;
+              // using AJAX therefore leaves the old full-setup tab state in place.
+              // A normal POST follows the server's tab=requirements redirect and
+              // rebuilds the complete two-tab workspace with the correct state.
+              if(isRequirementSave||isRequirementDelete) return;
               const isSetupWrite=endpoint.startsWith('/app/timetable/setup/')&&new Set(['day','period','break','calendar-event','room','availability','availability-matrix','subject-availability-matrix','requirement','bulk','class-limits','row-delete','break-gap']).has(endpoint.split('/').pop());
               if(!isSetupWrite) return;
               event.preventDefault();
