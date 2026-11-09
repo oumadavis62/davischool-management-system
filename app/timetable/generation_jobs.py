@@ -136,7 +136,7 @@ def _execute_job(get_db, job):
     email = str(job["requested_by"] or "")
     # One shared wall-clock budget covers normalized sessions, ordinary
     # lessons, and their database-backed candidate preparation.
-    deadline = time.monotonic() + 12.0
+    deadline = time.monotonic() + 20.0
     con = get_db()
     advanced_result = None
     created_advanced_ids = []
