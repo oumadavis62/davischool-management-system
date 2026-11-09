@@ -8,7 +8,7 @@ from fastapi import Form, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 
 from app.timetable.setup import TimetableSetupError
-from app.timetable.builder import place_lesson, move_lesson, delete_lesson, place_advanced_requirement_session, place_dated_advanced_requirement_session
+from app.timetable.builder import place_lesson, move_lesson, swap_lesson_positions, delete_lesson, place_advanced_requirement_session, place_dated_advanced_requirement_session
 from app.timetable.session_engine import create_teaching_group
 from app.timetable.advanced_setup import create_scheduling_requirement, save_scheduling_pattern
 from app.timetable.advanced_setup import resolve_calendar_occurrence
@@ -418,9 +418,13 @@ def register_timetable_builder_routes(app, get_db, get_school_obj, module_page):
                             move_room_opts = "<option value=''>Keep current room</option>" + "".join(
                                 f"<option value='{int(r['id'])}' {'selected' if lesson['room_id'] is not None and int(r['id'])==int(lesson['room_id']) else ''}>{esc(r['name'])}</option>" for r in rooms
                             )
+                            swap_lesson_opts = "<option value=''>Choose another lesson…</option>" + "".join(
+                                f"<option value='{int(other['id'])}'>{esc(other['day_name'])} · {esc(other['period_label'])} · {esc(other['class_name'])}{(' ' + esc(other['stream'])) if other['stream'] else ''} · {esc(other['subject_name'])} ({int(other['duration_periods'] or 1)}P)</option>"
+                                for other in lessons if int(other["id"]) != int(lesson["id"])
+                            )
                             manage_html = ""
                             if not read_only:
-                                manage_html = f"""<details class='tb-actions'><summary>Manage</summary><form method='post' action='/app/timetable/builder/move'><input type='hidden' name='profile_id' value='{pid}'><input type='hidden' name='lesson_id' value='{int(lesson['id'])}'><label>Move to day<select name='day_id'>{move_day_opts}</select></label><label>Start period<select name='period_id'>{move_period_opts}</select></label><label>Room<select name='room_id'>{move_room_opts}</select></label><button class='tb-small'>Move lesson</button></form><form method='post' action='/app/timetable/builder/delete' onsubmit="return confirm('Remove this lesson from the timetable?')"><input type='hidden' name='profile_id' value='{pid}'><input type='hidden' name='lesson_id' value='{int(lesson['id'])}'><button class='tb-delete'>Delete lesson</button></form></details>"""
+                                manage_html = f"""<details class='tb-actions'><summary>Manage</summary><form method='post' action='/app/timetable/builder/move'><input type='hidden' name='profile_id' value='{pid}'><input type='hidden' name='lesson_id' value='{int(lesson['id'])}'><label>Move to day<select name='day_id'>{move_day_opts}</select></label><label>Start period<select name='period_id'>{move_period_opts}</select></label><label>Room<select name='room_id'>{move_room_opts}</select></label><button class='tb-small'>Move lesson</button></form><form method='post' action='/app/timetable/builder/swap' onsubmit="return confirm('Swap the positions of these two lessons?')"><input type='hidden' name='profile_id' value='{pid}'><input type='hidden' name='first_lesson_id' value='{int(lesson['id'])}'><label>Swap with<select name='second_lesson_id' required>{swap_lesson_opts}</select></label><button class='tb-small'>Swap positions</button></form><form method='post' action='/app/timetable/builder/delete' onsubmit="return confirm('Remove this lesson from the timetable?')"><input type='hidden' name='profile_id' value='{pid}'><input type='hidden' name='lesson_id' value='{int(lesson['id'])}'><button class='tb-delete'>Delete lesson</button></form></details>"""
                             teacher_color = safe_teacher_color(lesson["teacher_color"])
                             teacher_name_color = teacher_name_text_color(teacher_color)
                             teacher_initials = str(lesson["teacher_initials"] or "").strip().upper()
@@ -932,6 +936,25 @@ def register_timetable_builder_routes(app, get_db, get_school_obj, module_page):
         except (TimetableSetupError, ValueError) as exc:
             return redirect_builder(profile_id, str(exc), True)
         finally: con.close()
+
+
+    @app.post("/app/timetable/builder/swap")
+    def timetable_builder_swap(request: Request, profile_id: int = Form(...),
+                               first_lesson_id: int = Form(...), second_lesson_id: int = Form(...)):
+        school = school_for(request)
+        if not school: return RedirectResponse("/", 303)
+        con = get_db()
+        try:
+            swap_lesson_positions(
+                con, int(school["id"]), profile_id, first_lesson_id, second_lesson_id,
+                request.session.get("email", ""),
+            )
+            return redirect_builder(profile_id, "Lesson positions swapped successfully.")
+        except (TimetableSetupError, ValueError) as exc:
+            con.rollback()
+            return redirect_builder(profile_id, str(exc), True)
+        finally:
+            con.close()
 
     @app.post("/app/timetable/builder/delete")
     def timetable_builder_delete(request: Request, profile_id: int = Form(...), lesson_id: int = Form(...)):
