@@ -195,7 +195,7 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
 
             calendar_events = cur.execute("SELECT * FROM ds_timetable_calendar_exceptions WHERE school_id=? AND profile_id=? ORDER BY exception_date,label", (school_id,pid)).fetchall()
             rooms = cur.execute("SELECT * FROM ds_timetable_rooms WHERE school_id=? AND is_active=1 ORDER BY name", (school_id,)).fetchall()
-            teachers = cur.execute("SELECT id,name,teacher_color FROM teachers WHERE school_id=? ORDER BY name", (school_id,)).fetchall()
+            teachers = cur.execute("SELECT id,name,teacher_color,teacher_initials FROM teachers WHERE school_id=? ORDER BY name", (school_id,)).fetchall()
             class_records = cur.execute("SELECT id,name,stream FROM classes WHERE school_id=? ORDER BY name,stream", (school_id,)).fetchall()
             allocations = cur.execute(
                 """SELECT DISTINCT ta.class_id,ta.subject_id,ta.teacher_id,c.name class_name,c.stream,
@@ -418,14 +418,14 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
         )
         class_limit_form = f"""<section class='tt-section'><div class='tt-section-title'><div><span class='tt-kicker'>08 · CLASS WORKLOAD LIMITS</span><h3>Maximum weekly lessons and daily periods</h3><p>Set a ceiling independently for each class or stream. Double and triple lessons count by their actual period duration toward the daily period ceiling.</p></div></div><div class='tt-split'><form method='post' data-native-post='true' action='/app/timetable/setup/class-limits' class='tt-form compact'>{hidden}<label class='wide'>Class / stream<select name='class_id' required><option value=''>Select class or stream</option>{class_limit_class_opts}</select></label><label>Maximum lessons per week<input name='max_lessons_per_week' type='number' min='1' max='100' placeholder='No limit'></label><label>Maximum periods per day<input name='max_periods_per_day' type='number' min='1' max='30' placeholder='No limit'></label><label class='wide'>Notes<input name='notes' maxlength='180' placeholder='Optional workload guidance'></label><button class='tt-btn'>Save class workload limits</button></form><div class='tt-table'><table><tr><th>Class / stream</th><th>Max lessons / week</th><th>Max periods / day</th><th>Notes</th><th>Actions</th></tr>{class_limit_rows}</table></div></div></section>"""
         teacher_color_rows = "".join(
-            f"<tr><td><b>{esc(t['name'])}</b></td><td><form method='post' data-native-post='true' action='/app/timetable/setup/teacher-color' class='tt-teacher-color-form'>{hidden}{teacher_color_tab_field}<input type='hidden' name='teacher_id' value='{int(t['id'])}'><input aria-label='Colour for {esc(t['name'])}' type='color' name='teacher_color' value='{esc(t['teacher_color'] or '#2563EB')}' required><span class='tt-teacher-color-code'>{esc(t['teacher_color'] or '#2563EB')}</span><button class='tt-btn'>Save colour</button></form></td></tr>"
+            f"<tr><td><b>{esc(t['name'])}</b></td><td><form method='post' data-native-post='true' action='/app/timetable/setup/teacher-color' class='tt-teacher-color-form'>{hidden}{teacher_color_tab_field}<input type='hidden' name='teacher_id' value='{int(t['id'])}'><label class='tt-teacher-initials-field'>Initials<input name='teacher_initials' value='{esc(t['teacher_initials'] or '')}' maxlength='4' pattern='[A-Za-z]{1,4}' placeholder='e.g. JM' required></label><label class='tt-teacher-colour-field'>Colour<input aria-label='Colour for {esc(t['name'])}' type='color' name='teacher_color' value='{esc(t['teacher_color'] or '#2563EB')}' required></label><span class='tt-teacher-color-code'>{esc(t['teacher_color'] or '#2563EB')}</span><button class='tt-btn'>Save</button></form></td></tr>"
             for t in teachers
         ) or "<tr><td colspan='2' class='tt-muted'>No teachers are registered yet.</td></tr>"
         teacher_colour_section = f"""
         <section class='tt-section tt-teacher-colours'>
-          <div class='tt-section-title'><div><span class='tt-kicker'>09 · TIMETABLE APPEARANCE</span><h3>Teacher colours</h3><p>Choose a colour for each teacher. Every lesson card assigned to that teacher uses the same colour across the timetable.</p></div></div>
-          <style>.tt-teacher-colours .tt-teacher-color-form{{display:flex;align-items:center;gap:10px;flex-wrap:wrap}}.tt-teacher-colours input[type=color]{{width:52px;height:38px;padding:2px;border:1px solid #d5e4d7;border-radius:9px;background:#fff;cursor:pointer}}.tt-teacher-color-code{{font:700 11px ui-monospace,monospace;color:#607669;min-width:65px}}.tt-teacher-colours table{{min-width:360px}}</style>
-          <div class='tt-table'><table><thead><tr><th>Teacher</th><th>Lesson card colour</th></tr></thead><tbody>{teacher_color_rows}</tbody></table></div>
+          <div class='tt-section-title'><div><span class='tt-kicker'>09 · TIMETABLE APPEARANCE</span><h3>Teacher colours</h3><p>Set each teacher’s short initials and colour. The initials appear at the bottom-right of their lesson cells.</p></div></div>
+          <style>.tt-teacher-colours .tt-teacher-color-form{{display:flex;align-items:end;gap:10px;flex-wrap:wrap}}.tt-teacher-initials-field,.tt-teacher-colour-field{{display:grid;gap:4px;font-size:10px;font-weight:800;color:#55705d}}.tt-teacher-initials-field input{{width:72px;height:36px;box-sizing:border-box;border:1px solid #d5e4d7;border-radius:8px;padding:6px;text-transform:uppercase;font-weight:900;letter-spacing:.08em}}.tt-teacher-colours input[type=color]{{width:52px;height:38px;padding:2px;border:1px solid #d5e4d7;border-radius:9px;background:#fff;cursor:pointer}}.tt-teacher-color-code{{font:700 11px ui-monospace,monospace;color:#607669;min-width:65px}}.tt-teacher-colours table{{min-width:360px}}</style>
+          <div class='tt-table'><table><thead><tr><th>Teacher</th><th>Timetable label & colour</th></tr></thead><tbody>{teacher_color_rows}</tbody></table></div>
         </section>"""
         # Current allocation monitor: compare the weekly lessons configured for each
         # allocated class/stream with its own workload ceiling before generation.
@@ -1522,18 +1522,22 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
         profile_id: int = Form(0),
         teacher_id: int = Form(...),
         teacher_color: str = Form(...),
+        teacher_initials: str = Form(...),
     ):
         school = school_for(request)
         if not school:
             return RedirectResponse("/", 303)
         color = teacher_color.strip().upper()
+        initials = teacher_initials.strip().upper()
+        if not re.fullmatch(r"[A-Z]{1,4}", initials):
+            return redirect_setup(profile_id, "Enter 1–4 letters for teacher initials.", True)
         if len(color) != 7 or not color.startswith("#") or not all(ch in "0123456789ABCDEF" for ch in color[1:]):
             return redirect_setup(profile_id, "Choose a valid teacher colour.", True)
         con = get_db()
         try:
             result = con.execute(
-                "UPDATE teachers SET teacher_color=? WHERE id=? AND school_id=?",
-                (color, teacher_id, int(school["id"])),
+                "UPDATE teachers SET teacher_color=?,teacher_initials=? WHERE id=? AND school_id=?",
+                (color, initials, teacher_id, int(school["id"])),
             )
             if result.rowcount != 1:
                 raise TimetableSetupError("The selected teacher could not be found.")
