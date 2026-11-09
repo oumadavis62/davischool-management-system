@@ -776,7 +776,11 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
     generated = cp_status in ("OPTIMAL", "FEASIBLE")
     exhausted_reason = (
         None if generated
-        else ("deadline" if cp_status == "UNKNOWN" else "infeasible")
+        else (
+            "deadline" if cp_status == "UNKNOWN" and search_elapsed >= GENERATION_TIME_LIMIT_SECONDS * 0.95
+            else "node_limit" if cp_status == "UNKNOWN"
+            else "infeasible"
+        )
     )
     exhausted = not generated
     snapshot = {
@@ -859,7 +863,7 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
             cause = "The solver reached the 120-second time limit while exploring possible placements."
             next_step = "Review the most constrained lessons below, then check teacher availability, class limits, room use and manual placements."
         elif stop_reason == "node_limit":
-            cause = "The solver reached its configured search-node limit before finding a complete arrangement."
+            cause = "The solver reached its configured CP-SAT conflict limit before finding a complete arrangement."
             next_step = "Review the most constrained lessons below; if the inputs are valid, the search strategy may need further optimization."
         elif stop_reason == "strict_pass_budget":
             cause = "The strict search pass used its allocated time; the fallback pass did not complete a full solution."
@@ -899,6 +903,7 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
             "search_elapsed_seconds": round(time.monotonic() - search_started_at, 3),
             "overall_deadline_seconds": GENERATION_TIME_LIMIT_SECONDS,
             "search_limit_per_pass": int(node_limit),
+            "search_conflict_limit_per_pass": int(node_limit),
             "solver": "OR-Tools CP-SAT",
             "solver_status": cp_status,
             "strict_solver_status": cp_result.get("strict_status"),
