@@ -432,7 +432,7 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
             cid = int(r["class_id"])
             class_label = str(r["class_name"]) + (" " + str(r["stream"] or "")).rstrip()
             search_text = (class_label + " " + str(r["subject_name"]) + " " + str(r["teacher_name"])).lower()
-            manage_editor = f"<details><summary>Manage</summary><div class='tt-req-manage'><form method='post' data-native-post='true' action='/app/timetable/setup/requirement' class='tt-form compact'>{hidden}<input type='hidden' name='allocation' value='{int(r['class_id'])}|{int(r['subject_id'])}|{int(r['teacher_id'])}'><label>Weekly period target<input type='number' min='1' max='30' name='lessons_per_week' value='{int(r['lessons_per_week'])}' required></label><label>Duration<input type='number' min='1' max='4' name='duration_periods' value='{int(r['duration_periods'])}' required></label><label>Max / day<input type='number' min='1' max='10' name='max_lessons_per_day' value='{esc(r['max_lessons_per_day'] or '')}'></label><label class='tt-check'><input type='checkbox' name='allow_double' value='1' {'checked' if r['allow_double'] else ''}> Allow double</label><div class='wide tt-session-editor' data-session-editor> <div class='tt-session-editor-head'><b>Weekly session planner</b><span>Edit every weekly occurrence independently</span></div> <div class='tt-session-linking'> <label>Link another class<select data-link-class><option value=''>Choose class to link</option>{class_group_options}</select></label> <label>Add co-teacher<select data-link-teacher><option value=''>Choose additional teacher</option>{teacher_group_options}</select></label> </div> <div class='tt-session-list' data-session-list><div class='tt-session-row'><span class='tt-session-number'>1</span><label>Lesson type<select data-session-duration><option value='1'>Single · 1 period</option><option value='2'>Double · 2 periods</option><option value='3'>Triple · 3 periods</option><option value='4'>Quadruple · 4 periods</option></select></label><button type='button' data-remove-session disabled>Remove</button></div></div> <button type='button' class='tt-btn secondary' data-add-session>＋ Add another session</button> <input type='hidden' name='weekly_pattern' data-weekly-pattern value='{esc(requirement_pattern_values.get(int(r['id']), ''))}'> <small>Choose single or double separately for each occurrence. Class and co-teacher choices are session planning controls.</small> </div><button class='tt-btn'>Save changes</button></form><form method='post' data-native-post='true' action='/app/timetable/setup/row-delete' onsubmit='return confirm(&quot;Delete this subject requirement?&quot;)'>{hidden}<input type='hidden' name='kind' value='requirement'><input type='hidden' name='row_id' value='{int(r['id'])}'><button class='tt-btn danger'>Delete requirement</button></form></div></details>"
+            manage_editor = f"<button type='button' class='tt-req-manage-button' data-req-manage-open='tt-req-manage-{int(r['id'])}'>Manage</button><div class='tt-modal tt-req-manage-modal' id='tt-req-manage-{int(r['id'])}' role='dialog' aria-modal='true' aria-labelledby='tt-req-manage-title-{int(r['id'])}'><div class='tt-modal-dialog tt-req-manage-dialog'><div class='tt-modal-head'><div><span class='tt-kicker'>SUBJECT REQUIREMENT</span><h3 id='tt-req-manage-title-{int(r['id'])}'>Manage {esc(r['subject_name'])}</h3><p>{esc(class_label)} · {esc(r['teacher_name'])}</p></div><button type='button' class='tt-modal-close' data-req-manage-close aria-label='Close'>&times;</button></div><div class='tt-req-manage-content'> </div></div></div>"
             card = (
                 f"<article class='tt-req-card' data-requirement-row data-class='{cid}' "
                 f"data-subject='{int(r['subject_id'])}' data-teacher='{int(r['teacher_id'])}' "
@@ -621,10 +621,16 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
             }});
             const close=()=>{{modal.hidden=true;document.body.classList.remove('tt-modal-scroll-locked');}};
             root.addEventListener('click',event=>{{
+              const manageOpen=event.target.closest('[data-req-manage-open]');
+              if(manageOpen){{const target=root.querySelector('#'+manageOpen.dataset.reqManageOpen);if(target){{target.classList.add('is-open');document.body.classList.add('tt-modal-scroll-locked');target.querySelector('input,select,button')?.focus();}}return;}}
+              const manageClose=event.target.closest('[data-req-manage-close]');
+              if(manageClose){{const target=manageClose.closest('.tt-req-manage-modal');target?.classList.remove('is-open');if(!root.querySelector('.tt-modal.is-open'))document.body.classList.remove('tt-modal-scroll-locked');return;}}
+              const manageBackdrop=event.target.classList.contains('tt-req-manage-modal')?event.target:null;
+              if(manageBackdrop){{manageBackdrop.classList.remove('is-open');if(!root.querySelector('.tt-modal.is-open'))document.body.classList.remove('tt-modal-scroll-locked');return;}}
               if(event.target.closest('[data-req-add-open]')){{open();return;}}
               if(event.target.closest('[data-req-add-close]')||event.target===modal)close();
             }});
-            root.addEventListener('keydown',event=>{{if(event.key==='Escape'&&!modal.hidden)close();}});
+            root.addEventListener('keydown',event=>{{if(event.key==='Escape'){{const active=root.querySelector('.tt-req-manage-modal.is-open');if(active){{active.classList.remove('is-open');if(!root.querySelector('.tt-modal.is-open'))document.body.classList.remove('tt-modal-scroll-locked');}}else if(!modal.hidden)close();}}}});
           }})();
           </script>
         """
@@ -719,6 +725,16 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
         .tt-req-card-teacher{{font-size:10px;color:#718477}}
         .tt-req-card-load{{min-width:0}}
         .tt-req-card-action{{display:flex;justify-content:flex-end}}
+        .tt-req-manage-button{{border:1px solid #d7e6da;background:#f8fcf8;color:#286443;border-radius:9px;padding:9px 13px;font-size:11px;font-weight:850;white-space:nowrap;cursor:pointer}}
+        .tt-req-manage-button:hover{{background:#eaf5ec;border-color:#a9cbb0}}
+        .tt-req-manage-dialog{{width:min(820px,100%);}}
+        .tt-req-manage-content{{max-height:calc(88vh - 115px);overflow:auto;padding-right:3px}}
+        .tt-req-manage-content .tt-form{{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}}
+        .tt-req-manage-content .tt-form label.wide{{grid-column:1/-1}}
+        .tt-req-manage-content .tt-form button{{grid-column:1/-1}}
+        .tt-req-manage-content form+form{{margin-top:12px;padding-top:12px;border-top:1px solid #e2ebe3}}
+        .tt-req-manage-content form+form button{{width:auto}}
+        @media(max-width:600px){{.tt-req-manage-dialog{{width:100%;max-height:94vh;padding:18px 14px}}.tt-req-manage-content .tt-form{{grid-template-columns:1fr}}.tt-req-manage-content .tt-form label.wide{{grid-column:auto}}}}
         .tt-req-card-action>details{{position:relative}}
         .tt-req-card-action>details>summary{{list-style:none;cursor:pointer;border:1px solid #d7e6da;background:#f8fcf8;color:#286443;border-radius:9px;padding:9px 13px;font-size:11px;font-weight:850;white-space:nowrap}}
         .tt-req-card-action>details>summary::-webkit-details-marker{{display:none}}
