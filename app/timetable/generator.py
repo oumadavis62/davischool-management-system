@@ -1121,6 +1121,7 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
                 "teacher_id": key[2],
                 "lesson_occurrence": int(task["occurrence"]),
                 "lesson_duration_periods": int(task["duration"]),
+                "configured_subject_daily_limit": task.get("max_lessons_per_day"),
                 "candidate_slots_before_conflicts": len(candidate_lookup[task_index]),
                 "candidate_filter_rejections": candidate_filter_diagnostics.get(task_index, {}),
                 "blocked_by_existing_shared_sessions": int(blocked_candidate_counts.get(task_index, 0)),
@@ -1136,9 +1137,11 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
                 for reason, count in sorted(item["rejections"].items(), key=lambda pair: -pair[1])[:4]
             ) or "No direct clash was isolated before search stopped"
             diagnostic_lines.append(
-                item["class"] + " / " + item["subject"] + " / " + item["teacher"]
+                item["class"] + " (class ID " + str(item["class_id"]) + ") / " + item["subject"] + " / " + item["teacher"]
                 + " (lesson " + str(item["lesson_occurrence"]) + "): "
                 + str(item["candidate_slots_before_conflicts"]) + " candidate slots; "
+                + ("subject daily cap " + str(item["configured_subject_daily_limit"]) + "/day; "
+                   if item["configured_subject_daily_limit"] is not None else "")
                 + rejection_text
                 + (", blocked by existing shared sessions: " + str(item["blocked_by_existing_shared_sessions"])
                    if item["blocked_by_existing_shared_sessions"] else "")
@@ -1172,7 +1175,7 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
             "constraint_rejection_totals": rejection_counts,
             "candidate_slot_count_min": min((x["candidate_slots_before_conflicts"] for x in requirement_diagnostics), default=0),
             "candidate_slot_count_max": max((x["candidate_slots_before_conflicts"] for x in requirement_diagnostics), default=0),
-            "diagnostic_note": "Rejection totals count solver checks, not unique timetable cells. A timeout identifies the search limit reached, not proof that the timetable is mathematically impossible.",
+            "diagnostic_note": "Rejection totals count repeated solver checks, not unique timetable cells. Counts are aggregated across occurrences sharing the same class/subject/teacher requirement. A timeout identifies the search limit reached, not proof that the timetable is mathematically impossible.",
             "required_lessons": total_required,
             "manual_lessons_kept": len(manual),
             "unscheduled_lessons": len(tasks),
