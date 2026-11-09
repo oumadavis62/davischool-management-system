@@ -351,14 +351,8 @@ class TimetableSchoolSnapshotIntegrationTests(unittest.TestCase):
         save_day(self.db, 1, self.profile_id, "TUE", "Tuesday", 2)
         for code, name, order in (("WED", "Wednesday", 3), ("THU", "Thursday", 4), ("FRI", "Friday", 5)):
             save_day(self.db, 1, self.profile_id, code, name, order)
-        self.db.execute(
-            "UPDATE ds_timetable_periods SET start_time='08:20',end_time='09:00' WHERE profile_id=? AND period_no=1",
-            (self.profile_id,),
-        )
-        self.db.execute(
-            "UPDATE ds_timetable_periods SET start_time='09:00',end_time='09:40' WHERE profile_id=? AND period_no=2",
-            (self.profile_id,),
-        )
+        save_period(self.db, 1, self.profile_id, 1, "Period 1", "08:20", "09:00")
+        save_period(self.db, 1, self.profile_id, 2, "Period 2", "09:00", "09:40")
         period_times = (
             (3, "09:50", "10:30"), (4, "10:30", "11:10"),
             (5, "11:30", "12:10"), (6, "12:10", "12:50"),
