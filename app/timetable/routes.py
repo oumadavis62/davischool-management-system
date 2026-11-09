@@ -38,7 +38,7 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
             return None
         return get_school_obj(request)
 
-    def redirect_setup(profile_id=0, message="", error=False):
+    def redirect_setup(profile_id=0, message="", error=False, focus=""):
         parts = []
         if profile_id:
             parts.append("profile_id=" + str(int(profile_id)))
@@ -46,7 +46,11 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
             parts.append("message=" + quote(str(message)))
         if error:
             parts.append("error=1")
-        return RedirectResponse("/app/timetable/setup" + (("?" + "&".join(parts)) if parts else ""), 303)
+        if focus:
+            parts.append("focus=" + quote(str(focus)))
+        suffix = ("?" + "&".join(parts)) if parts else ""
+        anchor = "#tt-subject-requirements" if focus == "requirements" else ""
+        return RedirectResponse("/app/timetable/setup" + suffix + anchor, 303)
 
     @app.get("/app/timetable", response_class=HTMLResponse)
     def timetable_home(request: Request, profile_id: int = 0):
@@ -153,7 +157,7 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
         return module_page(request, "Smart Timetable", "timetable", body)
 
     @app.get("/app/timetable/setup", response_class=HTMLResponse)
-    def timetable_setup_page(request: Request, profile_id: int = 0, message: str = "", error: int = 0, class_id: int = 0):
+    def timetable_setup_page(request: Request, profile_id: int = 0, message: str = "", error: int = 0, class_id: int = 0, focus: str = ""):
         school = school_for(request)
         if not school:
             return RedirectResponse("/", 303)
@@ -550,11 +554,14 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
             {teacher_colour_section}
             {allocation_monitor_section}
             <section class='tt-section'><div class='tt-section-title'><div><span class='tt-kicker'>07 · SUBJECT AVAILABILITY</span><h3>Subject availability</h3><p>All subjects are available in every configured lesson period by default. Add a subject only when you need to make certain periods fallback-only or completely unavailable.</p></div></div><div class='tt-availability-editor'><form method='post' data-native-post='true' action='/app/timetable/setup/subject-availability-matrix' class='tt-form compact'>{hidden}<label>Subject<select name='subject_id' id='tt-subject-availability' required>{''.join(f"<option value='{int(x['id'])}'>{esc(x['name'])}</option>" for x in subjects)}</select></label><div class='tt-availability-legend'><span><b>✓</b> Available first</span><span><b>Blank</b> Fallback only</span><span><b>X</b> Never schedule</span></div><div class='tt-table tt-availability-grid'><table><thead><tr><th>Day / Period</th>{subject_matrix_period_headers}</tr></thead><tbody>{subject_matrix_day_rows}</tbody></table></div><p class='tt-muted'>Every cell starts ticked. Tap to cycle: ✓ available → blank (fallback only) → X (never schedule). The generator tries ticked periods first and uses blank periods only when needed to complete the timetable.</p><button class='tt-btn'>Save subject availability</button></form><div class='tt-availability-summary'><label class='tt-summary-search'>Search subjects<input type='search' data-availability-search='subject' placeholder='Find subject…'></label><div class='tt-table'><h4>Subject restrictions</h4><table><thead><tr><th>Subject</th><th title='Total restricted cells'>#</th><th title='Available'>✓</th><th title='Fallback only'>—</th><th title='Unavailable'>X</th><th>Actions</th></tr></thead><tbody>{subject_availability_rows}</tbody></table></div></div></div></section>
-            <section class='tt-section'><div class='tt-section-title'><div><span class='tt-kicker'>08 · WEEKLY LESSON LOAD</span><h3>Subject requirements</h3><p>Set the maximum weekly period allocation for each class and subject. Save a double first, then reopen the same requirement to add singles until the weekly period limit is reached. Teacher allocations are matched automatically.</p></div></div><div class='tt-split'><div>{bulk_requirement_form}</div><div class='tt-req-workspace'><div class='tt-req-toolbar'><label class='tt-req-search'><span>Search requirements</span><input type='search' id='tt-req-search' placeholder='Search class, subject or teacher…'></label><details class='tt-req-filter'><summary>⚙ Filters <span id='tt-req-filter-count'>All</span></summary><div class='tt-req-filter-panel'><div class='tt-req-filter-head'><strong>Filter requirements</strong><button type='button' class='tt-req-filter-close' aria-label='Close filters' title='Close filters'>×</button></div><label>Class / stream<select id='tt-req-class'><option value=''>All classes</option>{requirement_class_filters}</select></label><label>Subject<select id='tt-req-subject'><option value=''>All subjects</option>{requirement_subject_filters}</select></label><label>Teacher<select id='tt-req-teacher'><option value=''>All teachers</option>{requirement_teacher_filters}</select></label><button type='button' class='tt-btn secondary' id='tt-req-reset'>Clear filters</button></div></details><span class='tt-req-count' id='tt-req-count'></span></div><div class='tt-table tt-req-table'><table><thead><tr><th>Class / stream</th><th>Subject</th><th>Weekly requirement</th><th>Teacher</th><th>Manage</th></tr></thead><tbody>{requirement_rows}</tbody></table></div><div class='tt-req-pagination'><span id='tt-req-page-info'></span><div><button type='button' class='tt-btn secondary' id='tt-req-prev'>← Previous</button><button type='button' class='tt-btn secondary' id='tt-req-next'>Next →</button></div></div></div></div></section>
+            <section class='tt-section tt-requirements-section' id='tt-subject-requirements'><div class='tt-section-title'><div><span class='tt-kicker'>08 · WEEKLY LESSON LOAD</span><h3>Subject requirements</h3><p>Set the maximum weekly period allocation for each class and subject. Save a double first, then reopen the same requirement to add singles until the weekly period limit is reached. Teacher allocations are matched automatically.</p></div></div><div class='tt-split'><div>{bulk_requirement_form}</div><div class='tt-req-workspace'><div class='tt-req-toolbar'><label class='tt-req-search'><span>Search requirements</span><input type='search' id='tt-req-search' placeholder='Search class, subject or teacher…'></label><details class='tt-req-filter'><summary>⚙ Filters <span id='tt-req-filter-count'>All</span></summary><div class='tt-req-filter-panel'><div class='tt-req-filter-head'><strong>Filter requirements</strong><button type='button' class='tt-req-filter-close' aria-label='Close filters' title='Close filters'>×</button></div><label>Class / stream<select id='tt-req-class'><option value=''>All classes</option>{requirement_class_filters}</select></label><label>Subject<select id='tt-req-subject'><option value=''>All subjects</option>{requirement_subject_filters}</select></label><label>Teacher<select id='tt-req-teacher'><option value=''>All teachers</option>{requirement_teacher_filters}</select></label><button type='button' class='tt-btn secondary' id='tt-req-reset'>Clear filters</button></div></details><span class='tt-req-count' id='tt-req-count'></span></div><div class='tt-table tt-req-table'><table><thead><tr><th>Class / stream</th><th>Subject</th><th>Weekly requirement</th><th>Teacher</th><th>Manage</th></tr></thead><tbody>{requirement_rows}</tbody></table></div><div class='tt-req-pagination'><span id='tt-req-page-info'></span><div><button type='button' class='tt-btn secondary' id='tt-req-prev'>← Previous</button><button type='button' class='tt-btn secondary' id='tt-req-next'>Next →</button></div></div></div></div></section>
             """
         body = f"""
         <style>
         .tt-wrap{{max-width:1500px;margin:auto;padding:22px;color:#234638}}
+        .tt-wrap.tt-requirements-focus>.tt-section:not(.tt-requirements-section){{display:none}}
+        .tt-wrap.tt-requirements-focus>.tt-hero,.tt-wrap.tt-requirements-focus>.tt-profile,.tt-wrap.tt-requirements-focus>.tt-alert{{display:none}}
+        .tt-wrap.tt-requirements-focus>.tt-requirements-section{{margin-top:0}}
         .tt-wrap *{{box-sizing:border-box}}
         .tt-wrap{{background:linear-gradient(145deg,#edf6ef 0%,#e4f0e6 42%,#f7faf7 100%);border-radius:26px;padding:24px}}
         .tt-hero{{position:relative;overflow:hidden;display:flex;justify-content:space-between;align-items:center;gap:18px;flex-wrap:wrap;margin-bottom:18px;padding:28px 30px;border:1px solid #d1e3d4;border-radius:23px;background:linear-gradient(118deg,#dceede 0%,#c9e2ce 52%,#eaf4e9 100%);box-shadow:0 14px 32px rgba(39,91,57,.09)}}
@@ -686,7 +693,7 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
            .tt-section-content{{padding-top:13px}}
          }}
         </style>
-        <div class='tt-wrap'>{notice}{selector}{profile_summary}{read_only_html}{create_profile_html if not has_draft_profile else ""}{sections}</div>
+        <div class='tt-wrap{' tt-requirements-focus' if focus == 'requirements' else ''}'>{notice}{selector}{profile_summary}{read_only_html}{create_profile_html if not has_draft_profile else ""}{sections}</div>
         <script>
         (function(){{
           const root=document.querySelector('.tt-wrap'); if(!root) return;
@@ -1590,8 +1597,8 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
                         duration, preferred_period_id = int(token), None
                     sessions.append({"duration_periods": duration, "preferred_period_id": preferred_period_id})
                 save_requirement_session_pattern(con, int(school["id"]), profile_id, int(requirement["id"]), sessions)
-            return redirect_setup(profile_id, "Weekly lesson requirement and lesson pattern saved.")
+            return redirect_setup(profile_id, "Weekly lesson requirement and lesson pattern saved.", focus="requirements")
         except (TimetableSetupError, ValueError) as exc:
             con.rollback()
-            return redirect_setup(profile_id, str(exc), True)
+            return redirect_setup(profile_id, str(exc), True, focus="requirements")
         finally: con.close()
