@@ -1686,10 +1686,11 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
             return redirect_setup(
                 profile_id,
                 f"Subject requirements applied: {selected} subject(s), {created} class/teacher requirements added; {preserved} existing customized requirements preserved.",
+                focus="requirements",
                 request=request,
             )
         except (TimetableSetupError, ValueError) as exc:
-            return redirect_setup(profile_id, str(exc), True, request=request)
+            return redirect_setup(profile_id, str(exc), True, focus="requirements", request=request)
         finally:
             con.close()
 
@@ -1804,8 +1805,8 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
                         f"{max(0, int(lessons_per_week) - sum(int(row['duration_periods']) for row in existing) if pattern_mode == 'append' else int(lessons_per_week))} periods were available before this save."
                     )
                 save_requirement_session_pattern(con, int(school["id"]), profile_id, int(requirement["id"]), sessions)
-            return redirect_setup(profile_id, "Weekly lesson requirement and lesson pattern saved.", request=request)
+            return redirect_setup(profile_id, "Weekly lesson requirement and lesson pattern saved.", focus="requirements", request=request)
         except (TimetableSetupError, ValueError) as exc:
             con.rollback()
-            return redirect_setup(profile_id, str(exc), True, request=request)
+            return redirect_setup(profile_id, str(exc), True, focus="requirements", request=request)
         finally: con.close()
