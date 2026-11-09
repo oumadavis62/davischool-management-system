@@ -37,7 +37,7 @@ def _interval_list_overlaps(intervals, start: str, end: str) -> bool:
     position = bisect_left(intervals, (str(start), ""))
     index = position - 1
     while index >= 0:
-        prior_start, prior_end = intervals[index]
+        prior_start, prior_end = intervals[index][0], intervals[index][1]
         if str(prior_end) <= str(start):
             break
         if _overlap(start, end, prior_start, prior_end):
