@@ -641,13 +641,92 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
             {teacher_colour_section}
             {allocation_monitor_section}
             <section class='tt-section'><div class='tt-section-title'><div><span class='tt-kicker'>07 · SUBJECT AVAILABILITY</span><h3>Subject availability</h3><p>All subjects are available in every configured lesson period by default. Add a subject only when you need to make certain periods fallback-only or completely unavailable.</p></div></div><div class='tt-availability-editor'><form method='post' data-native-post='true' action='/app/timetable/setup/subject-availability-matrix' class='tt-form compact'>{hidden}<label>Subject<select name='subject_id' id='tt-subject-availability' required>{''.join(f"<option value='{int(x['id'])}'>{esc(x['name'])}</option>" for x in subjects)}</select></label><div class='tt-availability-legend'><span><b>✓</b> Available first</span><span><b>Blank</b> Fallback only</span><span><b>X</b> Never schedule</span></div><div class='tt-table tt-availability-grid'><table><thead><tr><th>Day / Period</th>{subject_matrix_period_headers}</tr></thead><tbody>{subject_matrix_day_rows}</tbody></table></div><p class='tt-muted'>Every cell starts ticked. Tap to cycle: ✓ available → blank (fallback only) → X (never schedule). The generator tries ticked periods first and uses blank periods only when needed to complete the timetable.</p><button class='tt-btn'>Save subject availability</button></form><div class='tt-availability-summary'><label class='tt-summary-search'>Search subjects<input type='search' data-availability-search='subject' placeholder='Find subject…'></label><div class='tt-table'><h4>Subject restrictions</h4><table><thead><tr><th>Subject</th><th title='Total restricted cells'>#</th><th title='Available'>✓</th><th title='Fallback only'>—</th><th title='Unavailable'>X</th><th>Actions</th></tr></thead><tbody>{subject_availability_rows}</tbody></table></div></div></div></section>
-            <section class='tt-section tt-requirements-section' id='tt-subject-requirements'><div class='tt-section-title'><div><span class='tt-kicker'>08 · WEEKLY LESSON LOAD</span><h3>Subject requirements</h3><p>Set the maximum weekly period allocation for each class and subject. Save a double first, then reopen the same requirement to add singles until the weekly period limit is reached. Teacher allocations are matched automatically.</p></div></div><div class='tt-split'><div>{bulk_requirement_form}</div><div class='tt-req-workspace'><div class='tt-req-toolbar'><label class='tt-req-search'><span>Search requirements</span><input type='search' id='tt-req-search' placeholder='Search class, subject or teacher…'></label><details class='tt-req-filter'><summary>⚙ Filters <span id='tt-req-filter-count'>All</span></summary><div class='tt-req-filter-panel'><div class='tt-req-filter-head'><strong>Filter requirements</strong><button type='button' class='tt-req-filter-close' aria-label='Close filters' title='Close filters'>×</button></div><label>Class / stream<select id='tt-req-class'><option value=''>All classes</option>{requirement_class_filters}</select></label><label>Subject<select id='tt-req-subject'><option value=''>All subjects</option>{requirement_subject_filters}</select></label><label>Teacher<select id='tt-req-teacher'><option value=''>All teachers</option>{requirement_teacher_filters}</select></label><button type='button' class='tt-btn secondary' id='tt-req-reset'>Clear filters</button></div></details><span class='tt-req-count' id='tt-req-count'></span></div><div class='tt-table tt-req-table'><table><thead><tr><th>Class / stream</th><th>Subject</th><th>Weekly requirement</th><th>Teacher</th><th>Manage</th></tr></thead><tbody>{requirement_rows}</tbody></table></div><div class='tt-req-pagination'><span id='tt-req-page-info'></span><div><button type='button' class='tt-btn secondary' id='tt-req-prev'>← Previous</button><button type='button' class='tt-btn secondary' id='tt-req-next'>Next →</button></div></div></div></div></section>
+            <section class='tt-section tt-requirements-section' id='tt-subject-requirements'>
+ <div class='tt-req-page-head'>
+  <div><span class='tt-kicker'>WEEKLY LESSON PLANNING</span><h2>Subject requirements</h2><p>Set each class-subject weekly workload, define its single and double sessions, and review teacher allocations before timetable generation.</p></div>
+  <div class='tt-req-head-actions'><button type='button' class='tt-btn' data-req-add-open>＋ Add subject requirement</button></div>
+ </div>
+ <div class='tt-req-overview'>
+  <div><span>Configured requirements</span><b>{len(requirements)}</b><small>Class · subject allocations</small></div>
+  <div><span>Allocated classes</span><b>{len(set(int(x['class_id']) for x in requirements))}</b><small>With weekly requirements</small></div>
+  <div><span>Weekly periods</span><b>{sum(int(x['lessons_per_week'] or 0)*int(x['duration_periods'] or 1) for x in requirements)}</b><small>Configured period load</small></div>
+  <div><span>Teachers involved</span><b>{len(set(int(x['teacher_id']) for x in requirements))}</b><small>Lead allocations</small></div>
+ </div>
+ <div class='tt-req-main-layout'>
+  <aside class='tt-req-side'>
+   <div class='tt-req-side-head'><span class='tt-kicker'>SETUP ACTIONS</span><h3>Manage requirements</h3><p>Configure one allocation or apply defaults in bulk.</p></div>
+   {bulk_requirement_form}
+  </aside>
+  <div class='tt-req-workspace'>
+   <div class='tt-req-toolbar'>
+    <label class='tt-req-search'><span>Search requirements</span><input type='search' id='tt-req-search' placeholder='Search class, subject or teacher…'></label>
+    <details class='tt-req-filter'><summary>⚙ Filters <span id='tt-req-filter-count'>All</span></summary><div class='tt-req-filter-panel'><div class='tt-req-filter-head'><strong>Filter requirements</strong><button type='button' class='tt-req-filter-close' aria-label='Close filters' title='Close filters'>×</button></div><label>Class / stream<select id='tt-req-class'><option value=''>All classes</option>{requirement_class_filters}</select></label><label>Subject<select id='tt-req-subject'><option value=''>All subjects</option>{requirement_subject_filters}</select></label><label>Teacher<select id='tt-req-teacher'><option value=''>All teachers</option>{requirement_teacher_filters}</select></label><button type='button' class='tt-btn secondary' id='tt-req-reset'>Clear filters</button></div></details>
+    <span class='tt-req-count' id='tt-req-count'></span>
+   </div>
+   <div class='tt-req-results-head'><div><h3>Configured weekly requirements</h3><p>Open Manage to edit the weekly target and session pattern.</p></div><span class='tt-req-results-total'>{len(requirements)} records</span></div>
+   <div class='tt-table tt-req-table'><table><thead><tr><th>Class / stream</th><th>Subject</th><th>Weekly requirement</th><th>Lead teacher</th><th>Actions</th></tr></thead><tbody>{requirement_rows}</tbody></table></div>
+   <div class='tt-req-pagination'><span id='tt-req-page-info'></span><div><button type='button' class='tt-btn secondary' id='tt-req-prev'>← Previous</button><button type='button' class='tt-btn secondary' id='tt-req-next'>Next →</button></div></div>
+  </div>
+ </div>
+</section>
             """
         body = f"""
         <style>
         .tt-wrap{{max-width:1500px;margin:auto;padding:22px;color:#234638}}
         .tt-wrap.tt-requirements-focus>:not(.tt-requirements-section){{display:none!important}}
-        .tt-wrap.tt-requirements-focus>.tt-requirements-section{{display:block;margin-top:0}}
+        .tt-wrap.tt-requirements-focus>.tt-requirements-section{{display:block;margin-top:0}} 
+        .tt-requirements-section{{padding:0!important;overflow:hidden}}
+        .tt-req-page-head{{display:flex;justify-content:space-between;align-items:center;gap:18px;flex-wrap:wrap;padding:24px 26px;background:linear-gradient(115deg,#e5f2e7,#f6faf6);border-bottom:1px solid #dce9de}}
+        .tt-req-page-head h2{{margin:5px 0 6px;color:#204b34;font-size:25px;letter-spacing:-.5px}}
+        .tt-req-page-head p{{max-width:720px;color:#637b6a;font-size:12px;line-height:1.6;margin:0}}
+        .tt-req-head-actions{{display:flex;gap:8px;align-items:center}}
+        .tt-req-overview{{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;padding:15px 20px;background:#fff;border-bottom:1px solid #e5eee6}}
+        .tt-req-overview>div{{padding:12px 14px;border:1px solid #e1ece2;border-radius:12px;background:#fbfdfb;min-width:0}}
+        .tt-req-overview span,.tt-req-overview small{{display:block;color:#718477;font-size:10px;font-weight:700}}
+        .tt-req-overview b{{display:block;color:#286443;font-size:23px;line-height:1.35;margin:2px 0}}
+        .tt-req-main-layout{{display:grid;grid-template-columns:minmax(235px,.72fr) minmax(0,2fr);gap:0;align-items:stretch}}
+        .tt-req-side{{padding:20px;background:#f6faf6;border-right:1px solid #e1ece2;min-width:0}}
+        .tt-req-side-head h3,.tt-req-results-head h3{{font-size:15px;color:#254d36;margin:4px 0}}
+        .tt-req-side-head p,.tt-req-results-head p{{font-size:11px;color:#718477;line-height:1.5;margin:0 0 14px}}
+        .tt-req-side .tt-req-add-actions{{display:grid;gap:12px}}
+        .tt-req-side .tt-req-add-actions>[data-req-add-open]{{width:100%;min-height:48px}}
+        .tt-req-side .tt-req-bulk-details{{border:1px solid #dce9de;border-radius:12px;background:#fff;padding:12px}}
+        .tt-req-side .tt-req-bulk-details>summary{{cursor:pointer;color:#315f42;font-size:12px;font-weight:850;list-style:none}}
+        .tt-req-side .tt-req-bulk-details>summary::-webkit-details-marker{{display:none}}
+        .tt-req-side .tt-form{{margin-top:12px;grid-template-columns:1fr}}
+        .tt-req-side .tt-form .wide{{grid-column:auto}}
+        .tt-req-workspace{{padding:20px;min-width:0}}
+        .tt-req-toolbar{{margin-bottom:14px}}
+        .tt-req-results-head{{display:flex;justify-content:space-between;align-items:center;gap:12px;margin:8px 0 12px}}
+        .tt-req-results-total{{white-space:nowrap;padding:6px 9px;border-radius:20px;background:#edf6ee;color:#316b45;font-size:10px;font-weight:800}}
+        .tt-req-table{{border:1px solid #e0eae1;border-radius:13px;overflow-x:auto;background:#fff}}
+        .tt-req-table table{{min-width:680px}}
+        .tt-req-table thead th{{background:#f1f7f2;color:#486651;font-size:10px;text-transform:uppercase;letter-spacing:.04em;padding:12px}}
+        .tt-req-table tbody td{{padding:12px;font-size:12px;vertical-align:middle}}
+        .tt-req-table tbody tr:nth-child(even){{background:#fbfdfb}}
+        .tt-req-table tbody tr:hover{{background:#f2f8f3}}
+        .tt-req-table .tt-req-subline{{display:block;color:#7a8c7f;font-size:10px;margin-top:4px}}
+        .tt-req-pagination{{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;padding-top:13px}}
+        .tt-req-pagination>div{{display:flex;gap:7px}}
+        .tt-req-filter-panel{{z-index:30}}
+        .tt-req-add-modal{{position:fixed;inset:0;z-index:10000;background:rgba(18,42,27,.48);display:flex;align-items:center;justify-content:center;padding:18px}}
+        .tt-req-add-modal[hidden]{{display:none}}
+        .tt-req-add-dialog{{width:min(760px,100%);max-height:92vh;overflow:auto;background:#fff;border-radius:20px;box-shadow:0 24px 80px rgba(12,37,21,.25)}}
+        .tt-session-editor{{grid-column:1/-1;border:1px solid #dce9de;border-radius:13px;padding:13px;background:#f8fbf8}}
+        .tt-session-editor-head{{display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:10px;color:#28543a;font-size:12px}}
+        .tt-session-editor-head span{{font-size:10px;color:#728477}}
+        .tt-session-filters,.tt-session-linking{{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin:9px 0}}
+        .tt-session-editor label{{display:grid;gap:5px;font-size:10px;font-weight:800;color:#496451}}
+        .tt-session-editor input,.tt-session-editor select{{width:100%;min-width:0;padding:9px;border:1px solid #d5e4d7;border-radius:9px;background:white;color:#234638}}
+        .tt-session-list{{display:grid;gap:7px;margin:10px 0}}
+        .tt-session-row{{display:flex;align-items:end;gap:10px;padding:9px;background:white;border:1px solid #e1ebe2;border-radius:10px}}
+        .tt-session-number{{width:25px;height:25px;display:grid;place-items:center;border-radius:8px;background:#e8f3e9;color:#2b6943;font-size:11px;font-weight:900;flex:none}}
+        .tt-session-row label{{flex:1}}
+        .tt-session-row button{{border:1px solid #ead6d4;border-radius:8px;padding:8px 10px;background:#fff5f4;color:#9d4842;font-weight:800}}
+        .tt-session-row button:disabled{{opacity:.45}}
+        @media(max-width:900px){{.tt-req-main-layout{{grid-template-columns:1fr}}.tt-req-side{{border-right:0;border-bottom:1px solid #e1ece2}}}}
+        @media(max-width:600px){{.tt-req-overview{{grid-template-columns:repeat(2,minmax(0,1fr));padding:12px}}.tt-req-page-head,.tt-req-workspace,.tt-req-side{{padding:15px}}.tt-session-filters,.tt-session-linking{{grid-template-columns:1fr}}.tt-req-pagination .tt-btn{{padding:9px}}}}
+
         .tt-wrap *{{box-sizing:border-box}}
         .tt-wrap{{background:linear-gradient(145deg,#edf6ef 0%,#e4f0e6 42%,#f7faf7 100%);border-radius:26px;padding:24px}}
         .tt-hero{{position:relative;overflow:hidden;display:flex;justify-content:space-between;align-items:center;gap:18px;flex-wrap:wrap;margin-bottom:18px;padding:28px 30px;border:1px solid #d1e3d4;border-radius:23px;background:linear-gradient(118deg,#dceede 0%,#c9e2ce 52%,#eaf4e9 100%);box-shadow:0 14px 32px rgba(39,91,57,.09)}}
