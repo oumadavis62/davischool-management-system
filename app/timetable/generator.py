@@ -620,6 +620,7 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
 
     candidate_lookup = {i: list(values) for i, values in candidates_by_task}
     candidate_filter_diagnostics = candidate_filter_diagnostics
+    blocked_candidates = set()
     blocked_candidate_counts = {}
     rejection_counts = {}
     rejection_by_requirement = {}
@@ -765,6 +766,8 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
                     variables[key] = var
                     variable_meta[key] = (task, candidate, room_id, period_ids)
                     by_task[task_index].append(var)
+                    if any((cid, int(task["subject_id"]), day_id) in fixed_subject_days for cid in class_ids):
+                        continue
                     for cid in class_ids:
                         for pid in period_ids:
                             by_class_period[(cid, day_id, pid)].append(var)
@@ -820,12 +823,11 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
                 )
 
         # Keep fallback availability as a last resort, not as an equal choice.
-        model.Minimize(sum(var * cost for var, cost in objective_terms))
-        return model, variables, variable_meta
+        return model, variables, variable_meta, objective_terms
 
     remaining_seconds = max(0.1, deadline - time.monotonic())
     strict_budget = max(0.1, remaining_seconds * 0.55)
-    model, variables, variable_meta = build_cp_model(False)
+    model, variables, variable_meta, objective_terms = build_cp_model(False)
     solver = cp_model.CpSolver()
     solver.parameters.max_time_in_seconds = strict_budget
     solver.parameters.num_search_workers = max(1, min(8, __import__("os").cpu_count() or 1))
@@ -843,7 +845,7 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
     else:
         remaining_seconds = max(0.1, deadline - time.monotonic())
         if remaining_seconds > 0.15:
-            model, variables, variable_meta = build_cp_model(True)
+            model, variables, variable_meta, objective_terms = build_cp_model(True)
             fallback_solver = cp_model.CpSolver()
             fallback_solver.parameters.max_time_in_seconds = remaining_seconds
             fallback_solver.parameters.num_search_workers = max(1, min(8, __import__("os").cpu_count() or 1))
@@ -867,6 +869,7 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
         remaining_seconds = deadline - time.monotonic()
         if remaining_seconds > 0.25:
             try:
+                solution_model.Minimize(sum(var * cost for var, cost in objective_terms))
                 for key, var in solution_variables.items():
                     solution_model.AddHint(var, solution_values.get(key, 0))
                 optimiser = cp_model.CpSolver()
