@@ -49,6 +49,7 @@ def _build_and_solve(
     fixed_by_class = defaultdict(list)
     fixed_by_teacher = defaultdict(list)
     fixed_by_room = defaultdict(list)
+    fixed_by_learner = defaultdict(list)
     fixed_week = defaultdict(int)
     fixed_day_periods = defaultdict(int)
     fixed_subject_day = set()
@@ -62,6 +63,8 @@ def _build_and_solve(
             fixed_subject_day.add((class_id, int(item["subject_id"]), day))
         for teacher_id in _resource_ids(item, "teacher_ids", "teacher_id"):
             fixed_by_teacher[(teacher_id, day)].append(item)
+        for learner_id in _resource_ids(item, "learner_ids", "learner_id"):
+            fixed_by_learner[(learner_id, day)].append(item)
         if item.get("room_id") is not None:
             fixed_by_room[(int(item["room_id"]), day)].append(item)
 
@@ -85,7 +88,13 @@ def _build_and_solve(
                 for teacher_id in teacher_ids for placed in fixed_by_teacher[(teacher_id, day)]
             ):
                 continue
-            room_ids = rooms_for_task(task)
+            learner_ids = _resource_ids(task, "learner_ids", "learner_id")
+            if any(
+                _overlap(candidate, placed)
+                for learner_id in learner_ids for placed in fixed_by_learner[(learner_id, day)]
+            ):
+                continue
+            room_ids = [candidate["room_id"]] if "room_id" in candidate else rooms_for_task(task)
             for room_id in room_ids:
                 if (task_index, day, int(candidate["period_id"]), room_id) in blocked_candidates:
                     continue
@@ -130,6 +139,8 @@ def _build_and_solve(
                 resource_buckets[("class", class_id, day)].append((var, placement))
             for teacher_id in _resource_ids(task, "teacher_ids", "teacher_id"):
                 resource_buckets[("teacher", teacher_id, day)].append((var, placement))
+            for learner_id in _resource_ids(task, "learner_ids", "learner_id"):
+                resource_buckets[("learner", learner_id, day)].append((var, placement))
             if room_id is not None:
                 resource_buckets[("room", int(room_id), day)].append((var, placement))
 
