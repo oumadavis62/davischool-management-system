@@ -367,6 +367,10 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
                     + ". Align the shared session and subject lesson durations."
                 )
             planned_sessions.pop(match)
+        if configured_pattern:
+            # Shared sessions are already placed elsewhere, so only the
+            # remaining configured sessions become solver tasks.
+            remaining = len(planned_sessions)
         if len(planned_sessions) > remaining:
             raise TimetableSetupError(
                 "The configured lesson pattern contains more weekly sessions than the remaining lesson requirement for class ID "
