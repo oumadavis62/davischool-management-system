@@ -265,6 +265,7 @@ def validate_timetable_for_publication(connection: Any, school_id: int, profile_
         placements.append({
             "class_id":key[0],"subject_id":key[1],"teacher_id":key[2],"room_id":room_id,
             "day_id":day_id,"start_time":str(span[0]["start_time"]),"end_time":str(span[-1]["end_time"]),
+            "start_index":start_index,"end_index":start_index + duration - 1,
         })
 
     for key, requirement in requirement_map.items():
@@ -292,6 +293,15 @@ def validate_timetable_for_publication(connection: Any, school_id: int, profile_
                 errors.append("A teacher is assigned to overlapping lessons.")
             if first["room_id"] is not None and second["room_id"] is not None and first["room_id"] == second["room_id"]:
                 errors.append("A room is assigned to overlapping lessons.")
+        # Enforce the timetable's teacher-spacing rule across all subjects
+        # and classes. A multi-period lesson itself is not compared with
+        # itself; only separate lesson placements can trigger this check.
+        for i, first in enumerate(placements):
+            for second in placements[i+1:]:
+                if first["day_id"] != second["day_id"] or first["teacher_id"] != second["teacher_id"]:
+                    continue
+                if first["end_index"] + 1 == second["start_index"] or second["end_index"] + 1 == first["start_index"]:
+                    errors.append("A teacher is scheduled in consecutive periods across separate lessons.")
     errors = list(dict.fromkeys(errors))
     return {
         "ready": not errors,
