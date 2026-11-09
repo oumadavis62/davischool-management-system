@@ -10,7 +10,7 @@ from app.timetable.setup import TimetableSetupError, _profile
 from app.timetable.session_engine import _validate_constraints
 
 
-ENGINE_VERSION = "1.6"
+ENGINE_VERSION = "1.7"
 DEFAULT_NODE_LIMIT = 10_000_000
 GENERATION_TIME_LIMIT_SECONDS = 20.0
 
@@ -933,11 +933,17 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
         summary = {
             "status": "failed",
             "message": (
-                "No complete clash-free timetable was found before the 20-second overall processing deadline expired."
+                "No complete clash-free timetable was found before the 20-second overall processing deadline expired. "
+                + "(Strict pass: " + str(strict_nodes) + " nodes; fallback pass: " + str(fallback_nodes)
+                + " nodes; search elapsed: " + str(round(time.monotonic() - search_started_at, 3)) + "s.)"
                 if exhausted and exhausted_reason == "deadline"
-                else "No complete clash-free timetable was found within the 10,000,000-node search allowance per pass."
+                else "No complete clash-free timetable was found within the 10,000,000-node search allowance per pass. "
+                + "(Strict pass: " + str(strict_nodes) + " nodes; fallback pass: " + str(fallback_nodes)
+                + " nodes; search elapsed: " + str(round(time.monotonic() - search_started_at, 3)) + "s.)"
                 if exhausted and exhausted_reason == "node_limit"
-                else "The configured constraints leave at least one lesson without a valid slot."
+                else "The configured constraints leave at least one lesson without a valid slot. "
+                + "(Strict pass: " + str(strict_nodes) + " nodes; fallback pass: " + str(fallback_nodes)
+                + " nodes; search elapsed: " + str(round(time.monotonic() - search_started_at, 3)) + "s.)"
             ),
             "required_lessons": total_required,
             "manual_lessons_kept": len(manual),
