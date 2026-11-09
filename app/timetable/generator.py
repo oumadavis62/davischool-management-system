@@ -301,6 +301,7 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
     tasks = []
     total_required = 0
     for req in requirements:
+        _check_generation_deadline(deadline)
         key = (int(req["class_id"]), int(req["subject_id"]), int(req["teacher_id"]))
         weekly = int(req["lessons_per_week"] or 0)
         if weekly < 1:
@@ -464,10 +465,13 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
     constraint_cache = {}
     candidates_by_task = []
     for task_index, task in enumerate(tasks):
+        _check_generation_deadline(deadline)
         candidates = []
         for day in days:
+            _check_generation_deadline(deadline)
             day_id = int(day["id"])
             for start_index, period in enumerate(periods):
+                _check_generation_deadline(deadline)
                 if task.get("preferred_period_id") is not None and int(period["id"]) != int(task["preferred_period_id"]):
                     continue
                 # A single configured lesson must fit the class's daily
