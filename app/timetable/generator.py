@@ -318,7 +318,7 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
         if duration < 1 or duration > 4:
             raise TimetableSetupError("Lesson duration must be between one and four periods.")
         configured_pattern = cur.execute(
-            """SELECT duration_periods,preferred_period_id FROM ds_timetable_requirement_patterns
+            """SELECT duration_periods,preferred_period_id,linked_class_ids_json,co_teacher_ids_json FROM ds_timetable_requirement_patterns
                WHERE school_id=? AND profile_id=? AND requirement_id=(
                    SELECT id FROM ds_timetable_class_requirements
                    WHERE school_id=? AND profile_id=? AND class_id=? AND subject_id=? AND teacher_id=?
@@ -342,7 +342,9 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
             # target is measured in occupied periods, so a double plus three
             # singles fulfils a five-period allocation in four sessions.
             planned_sessions = [
-                {"duration": int(x["duration_periods"]), "preferred_period_id": int(x["preferred_period_id"]) if x["preferred_period_id"] is not None else None}
+                {"duration": int(x["duration_periods"]), "preferred_period_id": int(x["preferred_period_id"]) if x["preferred_period_id"] is not None else None,
+                 "linked_class_ids": [int(v) for v in json.loads(x["linked_class_ids_json"] or "[]") if int(v) > 0],
+                 "co_teacher_ids": [int(v) for v in json.loads(x["co_teacher_ids_json"] or "[]") if int(v) > 0]}
                 for x in configured_pattern
             ]
             remaining = len(planned_sessions)
@@ -387,6 +389,8 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
                 "class_id": key[0],
                 "subject_id": key[1],
                 "teacher_id": key[2],
+                "class_ids": sorted({key[0], *planned.get("linked_class_ids", [])}),
+                "teacher_ids": sorted({key[2], *planned.get("co_teacher_ids", [])}),
                 "duration": planned["duration"],
                 "preferred_period_id": planned["preferred_period_id"],
                 "max_lessons_per_day": int(req["max_lessons_per_day"]) if req["max_lessons_per_day"] is not None else None,
@@ -488,7 +492,7 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
                 if not span:
                     filtered("no_contiguous_teaching_period_span")
                     continue
-                if any((task["teacher_id"], day_id, int(p["id"])) in unavailable for p in span):
+                if any((teacher_id, day_id, int(p["id"])) in unavailable for teacher_id in task.get("teacher_ids", [task["teacher_id"]]) for p in span):
                     filtered("teacher_marked_unavailable")
                     continue
                 if any((task["subject_id"], day_id, int(p["id"])) in subject_unavailable for p in span):
@@ -503,7 +507,7 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
                 try:
                     _validate_constraints(
                         cur, school_id, profile_id, "instructional", "lesson",
-                        task["subject_id"], [task["class_id"]], [task["teacher_id"]],
+                        task["subject_id"], task.get("class_ids", [task["class_id"]]), task.get("teacher_ids", [task["teacher_id"]]),
                         None, day_id, int(period["id"]),
                         str(span[0]["start_time"]), str(span[-1]["end_time"]), None,
                         cache=constraint_cache,
@@ -519,9 +523,9 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
                     "end_time": span[-1]["end_time"],
                     "period_no": int(period["period_no"]),
                     "period_end_no": int(span[-1]["period_no"]),
-                    "preferred": any((task["teacher_id"], day_id, int(p["id"])) in preferred for p in span),
+                    "preferred": any((teacher_id, day_id, int(p["id"])) in preferred for teacher_id in task.get("teacher_ids", [task["teacher_id"]]) for p in span),
                     "explicitly_available": (
-                        all((task["teacher_id"], day_id, int(p["id"])) not in fallback_only for p in span)
+                        all((teacher_id, day_id, int(p["id"])) not in fallback_only for teacher_id in task.get("teacher_ids", [task["teacher_id"]]) for p in span)
                         and all((task["subject_id"], day_id, int(p["id"])) not in subject_fallback_only for p in span)
                     ),
                 })
@@ -627,7 +631,7 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
     symmetry_group_by_task = {}
     for task_index, task in enumerate(tasks):
         signature = (
-            int(task["class_id"]), int(task["subject_id"]), int(task["teacher_id"]),
+            tuple(task.get("class_ids", [task["class_id"]])), tuple(task.get("teacher_ids", [task["teacher_id"]])), int(task["subject_id"]),
             int(task["duration"]), task.get("preferred_period_id"),
             task.get("max_lessons_per_day"), task.get("max_lessons_per_week"),
             task.get("max_periods_per_day"),
@@ -745,29 +749,37 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
             counter.pop(key, None)
 
     def index_placement(item, amount):
-        class_id = int(item["class_id"])
-        teacher_id = int(item["teacher_id"])
+        class_ids = sorted({int(v) for v in item.get("class_ids", [item["class_id"]])})
+        teacher_ids = sorted({int(v) for v in item.get("teacher_ids", [item["teacher_id"]])})
         day_id = int(item["day_id"])
         duration = int(item.get("duration", 1))
-        subject_key = (class_id, int(item["subject_id"]), teacher_id, day_id)
         interval = (str(item["start_time"]), str(item["end_time"]),
                     int(item.get("period_no", 0)),
                     int(item.get("period_end_no", item.get("period_no", 0))))
-        bump(class_week, class_id, amount)
-        bump(class_day_periods, (class_id, day_id), amount * duration)
-        bump(subject_day, subject_key, amount)
-        for counter, key in (
-            (class_intervals, (class_id, day_id)),
-            (teacher_intervals, (teacher_id, day_id)),
-        ):
+        for class_id in class_ids:
+            bump(class_week, class_id, amount)
+            bump(class_day_periods, (class_id, day_id), amount * duration)
+            for teacher_id in teacher_ids:
+                bump(subject_day, (class_id, int(item["subject_id"]), teacher_id, day_id), amount)
+            key = (class_id, day_id)
             if amount > 0:
-                counter.setdefault(key, []).append(interval)
+                class_intervals.setdefault(key, []).append(interval)
             else:
-                values = counter.get(key, [])
+                values = class_intervals.get(key, [])
                 if interval in values:
                     values.remove(interval)
                 if not values:
-                    counter.pop(key, None)
+                    class_intervals.pop(key, None)
+        for teacher_id in teacher_ids:
+            key = (teacher_id, day_id)
+            if amount > 0:
+                teacher_intervals.setdefault(key, []).append(interval)
+            else:
+                values = teacher_intervals.get(key, [])
+                if interval in values:
+                    values.remove(interval)
+                if not values:
+                    teacher_intervals.pop(key, None)
         room_id = item.get("room_id")
         if room_id is not None:
             key = (int(room_id), day_id)
@@ -787,6 +799,8 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
     rejection_by_requirement = {}
 
     def indexed_can_place(task, candidate):
+        class_ids = sorted({int(v) for v in task.get("class_ids", [task["class_id"]])})
+        teacher_ids = sorted({int(v) for v in task.get("teacher_ids", [task["teacher_id"]])})
         class_id = int(task["class_id"])
         teacher_id = int(task["teacher_id"])
         subject_id = int(task["subject_id"])
@@ -812,12 +826,14 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
             if used + int(candidate.get("duration", 1)) > int(max_day_periods):
                 return reject("configured_class_daily_period_limit")
         start, end = candidate["start_time"], candidate["end_time"]
-        for interval in class_intervals.get((class_id, day_id), ()):
-            if _overlap(start, end, interval[0], interval[1]):
-                return reject("class_already_has_a_lesson")
-        for interval in teacher_intervals.get((teacher_id, day_id), ()):
-            if _overlap(start, end, interval[0], interval[1]):
-                return reject("teacher_has_an_overlapping_lesson")
+        for linked_class_id in class_ids:
+            for interval in class_intervals.get((linked_class_id, day_id), ()):
+                if _overlap(start, end, interval[0], interval[1]):
+                    return reject("linked_class_already_has_a_lesson")
+        for linked_teacher_id in teacher_ids:
+            for interval in teacher_intervals.get((linked_teacher_id, day_id), ()):
+                if _overlap(start, end, interval[0], interval[1]):
+                    return reject("lead_or_co_teacher_has_an_overlapping_lesson")
         room_id = candidate.get("room_id")
         if room_id is not None:
             for interval in room_intervals.get((int(room_id), day_id), ()):
@@ -924,6 +940,8 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
                 "class_id": task["class_id"],
                 "subject_id": task["subject_id"],
                 "teacher_id": task["teacher_id"],
+                "class_ids": list(task.get("class_ids", [task["class_id"]])),
+                "teacher_ids": list(task.get("teacher_ids", [task["teacher_id"]])),
                 "fixed": False,
                 "_symmetry_group": symmetry_group,
                 "_candidate_rank": candidate_rank,
@@ -1013,6 +1031,8 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
                         "class_id": task["class_id"],
                         "subject_id": task["subject_id"],
                         "teacher_id": task["teacher_id"],
+                        "class_ids": list(task.get("class_ids", [task["class_id"]])),
+                        "teacher_ids": list(task.get("teacher_ids", [task["teacher_id"]])),
                         "fixed": False,
                         "_symmetry_group": group_id,
                         "_candidate_rank": candidate_rank,
