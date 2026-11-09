@@ -37,6 +37,7 @@ def _build_and_solve(
     workers: int,
     allow_fallback: bool,
 ) -> dict:
+    build_started = time.monotonic()
     model = cp_model.CpModel()
     variables: dict[int, list[tuple[Any, dict, int | None]]] = defaultdict(list)
     all_vars = []
@@ -237,7 +238,8 @@ def _build_and_solve(
     )
 
     solver = cp_model.CpSolver()
-    solver.parameters.max_time_in_seconds = max(0.05, float(time_limit))
+    remaining_solver_time = float(time_limit) - (time.monotonic() - build_started)
+    solver.parameters.max_time_in_seconds = max(0.05, remaining_solver_time)
     solver.parameters.max_number_of_conflicts = max(0, int(node_limit))
     solver.parameters.num_search_workers = max(1, int(workers))
     solver.parameters.random_seed = 17
