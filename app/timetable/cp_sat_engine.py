@@ -137,6 +137,12 @@ def _build_and_solve(
     subject_day_vars = defaultdict(list)
     class_day_vars = defaultdict(list)
     class_week_vars = defaultdict(list)
+    teacher_day_vars = defaultdict(list)
+    teacher_fixed_day_periods = defaultdict(int)
+    all_days = {int(candidate["day_id"]) for domain in candidate_lookup.values() for candidate in domain}
+    for item in fixed:
+        for teacher_id in _resource_ids(item, "teacher_ids", "teacher_id"):
+            teacher_fixed_day_periods[(teacher_id, int(item["day_id"]))] += int(item.get("duration", 1))
     for task_index, entries in variables.items():
         task = tasks[task_index]
         for var, placement, _room in entries:
@@ -145,6 +151,8 @@ def _build_and_solve(
                 subject_day_vars[(class_id, int(task["subject_id"]), day)].append(var)
                 class_day_vars[(class_id, day)].append((var, int(placement["duration"])))
                 class_week_vars[class_id].append(var)
+            for teacher_id in _resource_ids(task, "teacher_ids", "teacher_id"):
+                teacher_day_vars[(teacher_id, day)].append((var, int(placement["duration"])))
 
     for key, vars_for_day in subject_day_vars.items():
         model.Add(sum(vars_for_day) <= 1)
@@ -180,8 +188,48 @@ def _build_and_solve(
                 <= int(limit["max_periods_per_day"])
             )
 
-    if objective_terms:
-        model.Minimize(sum(objective_terms))
+    # Balance occupied periods across the instructional week. This is a
+    # soft objective: it never relaxes class, teacher, room or availability rules.
+    balance_terms = []
+    all_classes = set(class_week_vars)
+    for class_id in all_classes:
+        daily_loads = []
+        upper = max(1, sum(int(task["duration"]) for task in tasks
+                           if class_id in _resource_ids(task, "class_ids", "class_id"))
+                      + sum(fixed_day_periods.get((class_id, day), 0) for day in all_days))
+        for day in all_days:
+            load = model.NewIntVar(0, upper, f"class_{class_id}_day_{day}_load")
+            model.Add(load == sum(var * duration for var, duration in class_day_vars.get((class_id, day), []))
+                      + fixed_day_periods.get((class_id, day), 0))
+            daily_loads.append(load)
+        if len(daily_loads) > 1:
+            maximum = model.NewIntVar(0, upper, f"class_{class_id}_max_day_load")
+            minimum = model.NewIntVar(0, upper, f"class_{class_id}_min_day_load")
+            model.AddMaxEquality(maximum, daily_loads)
+            model.AddMinEquality(minimum, daily_loads)
+            balance_terms.append(3 * (maximum - minimum))
+    all_teachers = set(teacher for task in tasks
+                       for teacher in _resource_ids(task, "teacher_ids", "teacher_id"))
+    for teacher_id in all_teachers:
+        daily_loads = []
+        upper = max(1, sum(int(task["duration"]) for task in tasks
+                           if teacher_id in _resource_ids(task, "teacher_ids", "teacher_id"))
+                      + sum(teacher_fixed_day_periods.get((teacher_id, day), 0) for day in all_days))
+        for day in all_days:
+            load = model.NewIntVar(0, upper, f"teacher_{teacher_id}_day_{day}_load")
+            model.Add(load == sum(var * duration for var, duration in teacher_day_vars.get((teacher_id, day), []))
+                      + teacher_fixed_day_periods.get((teacher_id, day), 0))
+            daily_loads.append(load)
+        if len(daily_loads) > 1:
+            maximum = model.NewIntVar(0, upper, f"teacher_{teacher_id}_max_day_load")
+            minimum = model.NewIntVar(0, upper, f"teacher_{teacher_id}_min_day_load")
+            model.AddMaxEquality(maximum, daily_loads)
+            model.AddMinEquality(minimum, daily_loads)
+            balance_terms.append(maximum - minimum)
+
+    objective = list(objective_terms) + balance_terms
+    if objective:
+        model.Minimize(sum(objective))
     model.AddDecisionStrategy(
         all_vars,
         cp_model.CHOOSE_FIRST,
@@ -235,6 +283,13 @@ def solve_timetable(
     workers: int = 8,
 ) -> dict:
     """Run strict-preference feasibility first, then a controlled fallback pass."""
+    if not tasks:
+        return {
+            "status": "OPTIMAL", "placements": [], "branches": 0, "conflicts": 0,
+            "wall_time": 0.0, "strict_status": "OPTIMAL",
+            "strict_branches": 0, "fallback_status": "NOT_RUN",
+            "fallback_branches": 0, "elapsed_seconds": 0.0,
+        }
     started = time.monotonic()
     remaining = max(0.1, deadline - started)
     strict_budget = max(0.1, remaining * 0.65)
