@@ -420,11 +420,13 @@ class DaviSchoolTabSessionMiddleware:
             and scope.get("path") == "/app/timetable/automatic"
         )
         if generator_post and not tab_id and captured_form_body:
-            tab_param = _TAB_PARAM.encode("ascii")
-            if tab_param not in captured_form_body:
-                encoded_body = base64.b64encode(captured_form_body).decode("ascii")
-                body_json = json.dumps(encoded_body)
-                retry_html = (
+            # An empty/malformed hidden ds_tab field is no more useful than a
+            # missing field. Recover whenever the middleware cannot resolve a
+            # valid tab identity, regardless of whether the parameter name is
+            # present in the submitted body.
+            encoded_body = base64.b64encode(captured_form_body).decode("ascii")
+            body_json = json.dumps(encoded_body)
+            retry_html = (
                     "<!doctype html><html><head><meta name='viewport' content='width=device-width,initial-scale=1'>"
                     "<title>Restoring timetable session</title></head><body style='font:15px Arial;padding:24px;color:#173d2b'>"
                     "<p id='status'>Restoring your secure timetable session…</p><script>"
@@ -440,18 +442,18 @@ class DaviSchoolTabSessionMiddleware:
                     "throw new Error('The server returned HTTP '+r.status);"
                     "}catch(e){document.getElementById('status').textContent=e.message||'Could not restore the timetable session.';}})();"
                     "</script></body></html>"
-                ).encode("utf-8")
-                await send({
-                    "type": "http.response.start",
-                    "status": 200,
-                    "headers": [
-                        (b"content-type", b"text/html; charset=utf-8"),
-                        (b"cache-control", b"no-store"),
-                        (b"content-length", str(len(retry_html)).encode("ascii")),
-                    ],
-                })
-                await send({"type": "http.response.body", "body": retry_html})
-                return
+            ).encode("utf-8")
+            await send({
+                "type": "http.response.start",
+                "status": 200,
+                "headers": [
+                    (b"content-type", b"text/html; charset=utf-8"),
+                    (b"cache-control", b"no-store"),
+                    (b"content-length", str(len(retry_html)).encode("ascii")),
+                ],
+            })
+            await send({"type": "http.response.body", "body": retry_html})
+            return
 
         # If an internal navigation arrives without ds_tab and without a usable
         # Referer, recover only when this browser request carries exactly one
