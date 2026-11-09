@@ -775,13 +775,13 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
                             break
                     if conflict:
                         continue
+                    if any((cid, int(task["subject_id"]), day_id) in fixed_subject_days for cid in class_ids):
+                        continue
                     key = (task_index, candidate_rank, room_id)
                     var = model.NewBoolVar("place_t{}_c{}_r{}".format(task_index, candidate_rank, room_id or 0))
                     variables[key] = var
                     variable_meta[key] = (task, candidate, room_id, period_ids)
                     by_task[task_index].append(var)
-                    if any((cid, int(task["subject_id"]), day_id) in fixed_subject_days for cid in class_ids):
-                        continue
                     for cid in class_ids:
                         for pid in period_ids:
                             by_class_period[(cid, day_id, pid)].append(var)
@@ -1013,8 +1013,11 @@ snapshot = {
             )
         stop_reason = exhausted_reason or strict_stop_reason or fallback_stop_reason or "all_candidates_exhausted"
         if stop_reason == "deadline":
-            cause = "The solver reached the 120-second time limit while exploring possible placements."
+            cause = "The CP-SAT solver reached the generation time limit before finding a complete feasible timetable."
             next_step = "Review the most constrained lessons below, then check teacher availability, class limits, room use and manual placements."
+        elif stop_reason == "infeasible":
+            cause = "CP-SAT proved that no complete timetable satisfies the current hard constraints and available teaching slots."
+            next_step = "Review the affected lesson domains and mandatory constraints. Preferences were not relaxed, and existing generated lessons were preserved."
         elif stop_reason == "node_limit":
             cause = "The solver reached its configured search-node limit before finding a complete arrangement."
             next_step = "Review the most constrained lessons below; if the inputs are valid, the search strategy may need further optimization."
