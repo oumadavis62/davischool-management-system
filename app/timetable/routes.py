@@ -1799,7 +1799,7 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
             con.close()
 
     @app.post("/app/timetable/setup/requirement")
-    def create_timetable_requirement(request: Request, profile_id: int = Form(...), allocation: str = Form(...), lessons_per_week: int = Form(...), duration_periods: int = Form(1), max_lessons_per_day: str = Form(""), allow_double: str = Form(""), weekly_pattern: str = Form(""), pattern_mode: str = Form("replace")):
+    def create_timetable_requirement(request: Request, profile_id: int = Form(...), allocation: str = Form(...), lessons_per_week: int = Form(...), duration_periods: int = Form(1), max_lessons_per_day: str = Form(""), allow_double: str = Form(""), weekly_pattern: str = Form(""), weekly_links: str = Form(""), pattern_mode: str = Form("replace")):
         school = school_for(request)
         if not school: return RedirectResponse("/", 303)
         con = get_db()
@@ -1822,7 +1822,13 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
                 con.commit()
             elif weekly_pattern.strip():
                 sessions = []
-                for item in weekly_pattern.split(","):
+                try:
+                    session_links = json.loads(weekly_links or "[]")
+                except (TypeError, ValueError):
+                    raise TimetableSetupError("Session links are invalid.")
+                if not isinstance(session_links, list):
+                    raise TimetableSetupError("Session links must be a list.")
+                for session_index, item in enumerate(weekly_pattern.split(",")):
                     token = item.strip()
                     if not token:
                         continue
@@ -1838,15 +1844,19 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
                         preferred_period_id = int(period["id"])
                     else:
                         duration, preferred_period_id = int(token), None
-                    sessions.append({"duration_periods": duration, "preferred_period_id": preferred_period_id})
+                    links = session_links[session_index] if session_index < len(session_links) and isinstance(session_links[session_index], dict) else {}
+                    sessions.append({"duration_periods": duration, "preferred_period_id": preferred_period_id,
+                                      "linked_class_ids": links.get("classes", []), "co_teacher_ids": links.get("teachers", [])})
                 if pattern_mode == "append":
                     existing = con.execute(
-                        """SELECT duration_periods,preferred_period_id FROM ds_timetable_requirement_patterns
+                        """SELECT duration_periods,preferred_period_id,linked_class_ids_json,co_teacher_ids_json FROM ds_timetable_requirement_patterns
                            WHERE school_id=? AND profile_id=? AND requirement_id=? ORDER BY session_no""",
                         (int(school["id"]), profile_id, int(requirement["id"])),
                     ).fetchall()
                     sessions = [
-                        {"duration_periods": int(row["duration_periods"]), "preferred_period_id": row["preferred_period_id"]}
+                        {"duration_periods": int(row["duration_periods"]), "preferred_period_id": row["preferred_period_id"],
+                         "linked_class_ids": json.loads(row["linked_class_ids_json"] or "[]"),
+                         "co_teacher_ids": json.loads(row["co_teacher_ids_json"] or "[]")}
                         for row in existing
                     ] + sessions
                 used_periods = sum(int(item["duration_periods"]) for item in sessions)
