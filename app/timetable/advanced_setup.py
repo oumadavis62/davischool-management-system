@@ -267,10 +267,12 @@ def create_learning_programme(connection: Any, school_id: int, profile_id: int,
 def save_requirement_session_pattern(connection: Any, school_id: int, profile_id: int,
                                      requirement_id: int,
                                      sessions: list[dict[str, Any]]) -> None:
-    """Replace a requirement's single/double/triple session pattern atomically.
+    """Save a partial or complete single/double/triple session mix atomically.
 
-    The sum of session durations must exactly equal the requirement's weekly
-    period allocation. Optional day and slot preferences are profile-scoped.
+    The saved duration total may not exceed the requirement's weekly period
+    allocation. The generator requires the mix to reach the full allocation
+    before it schedules the timetable. Optional day and slot preferences are
+    profile-scoped.
     """
     if not isinstance(sessions, list) or not sessions:
         raise TimetableSetupError("Add at least one lesson session to the weekly pattern.")
