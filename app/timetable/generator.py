@@ -1122,6 +1122,7 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
                 "lesson_occurrence": int(task["occurrence"]),
                 "lesson_duration_periods": int(task["duration"]),
                 "candidate_slots_before_conflicts": len(candidate_lookup[task_index]),
+                "candidate_filter_rejections": candidate_filter_diagnostics.get(task_index, {}),
                 "blocked_by_existing_shared_sessions": int(blocked_candidate_counts.get(task_index, 0)),
                 "rejections": counts,
             })
