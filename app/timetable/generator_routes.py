@@ -99,6 +99,30 @@ def register_timetable_generator_routes(app, get_db, get_school_obj, module_page
             job_progress_html = f"<section class='ag-result' id='tt-job-progress'><span class='ag-kicker'>BACKGROUND GENERATION · JOB #{int(job_id)}</span><h3 id='tt-job-title'>Checking generation status…</h3><p id='tt-job-message'>The timetable is being generated in the background. You can safely leave this page.</p><div id='tt-job-stage' class='ag-state'>QUEUED</div></section>"
         generator_script = """<script>
         const ttTabSessionId = TT_TAB_SESSION_ID || new URL(window.location.href).searchParams.get('ds_tab') || '';
+        function ttBindTabSession(form) {
+            // This inline submit hook runs synchronously, even if the deferred
+            // global tab-session controller has not loaded yet. Without it a
+            // fast click on a freshly opened page can POST before ds_tab is
+            // attached, selecting the empty legacy session cookie.
+            let id = '';
+            try { id = sessionStorage.getItem('davischool_tab_id') || ''; } catch (_) {}
+            if (!/^[A-Za-z0-9_-]{16,64}$/.test(id)) id = TT_TAB_SESSION_ID || '';
+            if (!/^[A-Za-z0-9_-]{16,64}$/.test(id)) {
+                id = (window.crypto && crypto.randomUUID)
+                    ? crypto.randomUUID().replace(/-/g, '')
+                    : Date.now().toString(36) + Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2);
+                try { sessionStorage.setItem('davischool_tab_id', id); } catch (_) {}
+            }
+            const field = form.querySelector('input[name="ds_tab"]') || document.createElement('input');
+            field.type = 'hidden';
+            field.name = 'ds_tab';
+            field.value = id;
+            if (!field.parentNode) form.appendChild(field);
+            const actionUrl = new URL(form.action, window.location.origin);
+            actionUrl.searchParams.set('ds_tab', id);
+            form.action = actionUrl.pathname + actionUrl.search + actionUrl.hash;
+            return true;
+        }
         async function ttRunGenerator(button, action, profileId, mode) {
             if (button.dataset.busy === '1') return;
             const payload = new URLSearchParams({profile_id: String(profileId)});
@@ -241,7 +265,7 @@ def register_timetable_generator_routes(app, get_db, get_school_obj, module_page
         run_rows = "".join(render_run_row(r) for r in runs) or "<tr><td colspan='6' class='ag-muted'>No generation runs yet.</td></tr>"
         ready = bool(days and periods and (requirements or advanced_instructional_requirements) and not read_only)
         action_html = (
-            f"""<form method='post' action='{esc(generate_action)}' class='ag-generate-form' onsubmit="return confirm('Generate a complete timetable using the current setup? Existing manual lessons will be preserved.');"><input type='hidden' name='profile_id' value='{pid}'>{tab_field}<button type='submit' class='ag-btn'>⚡ Generate complete timetable</button></form>"""
+            f"""<form method='post' action='{esc(generate_action)}' class='ag-generate-form' onsubmit="return ttBindTabSession(this) && confirm('Generate a complete timetable using the current setup? Existing manual lessons will be preserved.');"><input type='hidden' name='profile_id' value='{pid}'>{tab_field}<button type='submit' class='ag-btn'>⚡ Generate complete timetable</button></form>"""
             if ready else
             (f"""<div class='ag-warning'>This profile is {esc(selected['status']).replace('_',' ')} and is read-only. Create a new draft revision before generating or changing its timetable.</div><a class='ag-btn secondary' href='/app/timetable/publishing?profile_id={pid}'>Create Revision</a>""" if read_only else
              f"""<div class='ag-warning'>Complete the setup requirements first: add instructional days, teaching periods and a weekly requirement for every current class-subject-teacher allocation.</div><a class='ag-btn secondary' href='/app/timetable/setup?profile_id={pid}'>Complete Setup</a>""")
