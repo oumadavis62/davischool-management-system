@@ -920,51 +920,100 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
         last_rank_by_group.clear()
 
     def large_schedule_pass(fallback: bool) -> bool:
-        """Greedy, non-recursive pass for large school-wide schedules."""
+        """Iterative fail-first backtracking for large schedules.
+
+        Unlike the previous first-fit greedy pass, this can undo earlier
+        placements when a later lesson has no legal slot. It uses an explicit
+        stack so school-wide schedules do not hit Python's recursion limit.
+        """
         nonlocal nodes, exhausted, exhausted_reason
-        for group_id in search_group_order:
-            for task_index in symmetry_members[group_id]:
-                task = tasks[task_index]
-                placed = False
-                minimum_rank = last_rank_by_group.get(group_id, -1)
-                room_ids = _rooms_for_task(task)
-                for candidate_rank, candidate in enumerate(candidate_lookup[task_index]):
-                    if candidate_rank <= minimum_rank:
-                        continue
-                    if time.monotonic() >= active_deadline:
+        ordered_tasks = [
+            task_index
+            for group_id in search_group_order
+            for task_index in symmetry_members[group_id]
+        ]
+        frames = [{"candidate_pos": 0, "room_pos": 0} for _ in ordered_tasks]
+        depth = 0
+
+        while depth < len(ordered_tasks):
+            if time.monotonic() >= active_deadline:
+                exhausted = True
+                exhausted_reason = "deadline" if active_deadline >= deadline else "strict_pass_budget"
+                return False
+            task_index = ordered_tasks[depth]
+            task = tasks[task_index]
+            group_id = symmetry_group_by_task[task_index]
+            frame = frames[depth]
+            candidate_list = candidate_lookup[task_index]
+            room_ids = _rooms_for_task(task)
+            minimum_rank = last_rank_by_group.get(group_id, -1)
+            placed = False
+
+            while frame["candidate_pos"] < len(candidate_list):
+                candidate_rank = frame["candidate_pos"]
+                candidate = candidate_list[candidate_rank]
+                if candidate_rank <= minimum_rank or (not fallback and not candidate.get("explicitly_available")):
+                    frame["candidate_pos"] += 1
+                    frame["room_pos"] = 0
+                    continue
+                while frame["room_pos"] < len(room_ids):
+                    room_id = room_ids[frame["room_pos"]]
+                    frame["room_pos"] += 1
+                    nodes += 1
+                    if nodes > int(node_limit):
                         exhausted = True
-                        exhausted_reason = "deadline" if active_deadline >= deadline else "strict_pass_budget"
+                        exhausted_reason = "node_limit"
                         return False
-                    if not fallback and not candidate.get("explicitly_available"):
+                    if (task_index, candidate["day_id"], candidate["period_id"], room_id) in blocked_candidates:
                         continue
-                    for room_id in room_ids:
-                        nodes += 1
-                        if nodes > int(node_limit):
-                            exhausted = True
-                            exhausted_reason = "node_limit"
-                            return False
-                        if (task_index, candidate["day_id"], candidate["period_id"], room_id) in blocked_candidates:
-                            continue
-                        placement = dict(candidate, room_id=room_id)
-                        if not indexed_can_place(task, placement):
-                            continue
-                        placement.update({
-                            "class_id": task["class_id"],
-                            "subject_id": task["subject_id"],
-                            "teacher_id": task["teacher_id"],
-                            "fixed": False,
-                            "_symmetry_group": group_id,
-                            "_candidate_rank": candidate_rank,
-                        })
-                        placements.append(placement)
-                        index_placement(placement, 1)
-                        last_rank_by_group[group_id] = candidate_rank
-                        placed = True
-                        break
-                    if placed:
-                        break
-                if not placed:
-                    return False
+                    placement = dict(candidate, room_id=room_id)
+                    if not indexed_can_place(task, placement):
+                        continue
+                    placement.update({
+                        "class_id": task["class_id"],
+                        "subject_id": task["subject_id"],
+                        "teacher_id": task["teacher_id"],
+                        "fixed": False,
+                        "_symmetry_group": group_id,
+                        "_candidate_rank": candidate_rank,
+                    })
+                    placements.append(placement)
+                    index_placement(placement, 1)
+                    previous_rank = last_rank_by_group.get(group_id)
+                    last_rank_by_group[group_id] = candidate_rank
+                    frame["placed_rank"] = candidate_rank
+                    frame["previous_rank"] = previous_rank
+                    placed = True
+                    break
+                if placed:
+                    break
+                frame["candidate_pos"] += 1
+                frame["room_pos"] = 0
+
+            if placed:
+                depth += 1
+                if depth < len(ordered_tasks):
+                    frames[depth] = {"candidate_pos": 0, "room_pos": 0}
+                continue
+
+            # This task has exhausted its domain. Backtrack one placement and
+            # resume that earlier task at the next candidate/room option.
+            if depth == 0:
+                return False
+            depth -= 1
+            previous_task_index = ordered_tasks[depth]
+            previous_task = tasks[previous_task_index]
+            previous_group = symmetry_group_by_task[previous_task_index]
+            previous_frame = frames[depth]
+            previous_placement = placements.pop()
+            index_placement(previous_placement, -1)
+            if previous_frame["previous_rank"] is None:
+                last_rank_by_group.pop(previous_group, None)
+            else:
+                last_rank_by_group[previous_group] = previous_frame["previous_rank"]
+            previous_frame.pop("placed_rank", None)
+            previous_frame.pop("previous_rank", None)
+
         return True
 
     # Larger timetables use a non-recursive fail-first pass to avoid Python
