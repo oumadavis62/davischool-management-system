@@ -215,7 +215,7 @@ def register_timetable_view_routes(app, get_db, get_school_obj, module_page):
                             )
                             cells.append(f"<td class='tb-cell tb-continued'>{continued_html}</td>")
                         else:
-                            cells.append("<td class='tb-cell tb-free'><span>Free period</span></td>")
+                            cells.append("<td class='tb-cell tb-free'></td>")
                     row_class = " class='tb-day-end'" if class_index == len(day_class_rows) - 1 else ""
                     rows.append(f"<tr{row_class}>{''.join(cells)}</tr>")
             grid = "<div class='tb-grid-scroll'><table class='tb-grid'><thead><tr>" + "".join(headers) + "</tr></thead><tbody>" + "".join(rows) + "</tbody></table></div>"
