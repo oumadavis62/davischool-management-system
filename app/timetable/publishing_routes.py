@@ -144,6 +144,7 @@ def register_timetable_publishing_routes(app, get_db, get_school_obj, module_pag
           openers.forEach(button=>button.addEventListener('click',()=>document.getElementById(button.dataset.open)?.showModal()));
           document.querySelectorAll('[data-close]').forEach(button=>button.addEventListener('click',()=>document.getElementById(button.dataset.close)?.close()));
           document.querySelectorAll('.pub-dialog').forEach(dialog=>dialog.addEventListener('click',event=>{{if(event.target===dialog)dialog.close();}}));
+          if(new URLSearchParams(window.location.search).has('compare_first'))document.getElementById('pub-compare-dialog')?.showModal();
         }})();
         </script>
         """
