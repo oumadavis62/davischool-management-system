@@ -726,7 +726,6 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
                 fixed_class_day_periods[(class_id, day_id)] = fixed_class_day_periods.get((class_id, day_id), 0) + len(session_periods)
                 if session.get("subject_id") is not None:
                     subject_key = (int(class_id), int(session["subject_id"]), day_id)
-                    fixed_subject_days.add(subject_key)
                     for teacher_id in session["teachers"]:
                         cap_key = (int(class_id), int(session["subject_id"]), int(teacher_id), day_id)
                         fixed_subject_day_count[cap_key] = fixed_subject_day_count.get(cap_key, 0) + 1
@@ -876,18 +875,20 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
                 solution_meta = variable_meta
 
     nodes = strict_nodes + fallback_nodes
+    optimisation_nodes = 0
     generated = solution_values is not None
     if generated:
         # The hard-constraint feasibility pass has succeeded. Use any remaining
         # time to optimise the same feasible model; never sacrifice feasibility.
         remaining_seconds = deadline - time.monotonic()
-        if remaining_seconds > 0.25:
+        optimisation_budget = min(5.0, max(0.0, remaining_seconds * 0.20))
+        if optimisation_budget > 0.25:
             try:
                 solution_model.Minimize(sum(var * cost for var, cost in objective_terms))
                 for key, var in solution_variables.items():
                     solution_model.AddHint(var, solution_values.get(key, 0))
                 optimiser = cp_model.CpSolver()
-                optimiser.parameters.max_time_in_seconds = remaining_seconds
+                optimiser.parameters.max_time_in_seconds = optimisation_budget
                 optimiser.parameters.num_search_workers = max(1, min(8, __import__("os").cpu_count() or 1))
                 optimiser.parameters.random_seed = 41
                 optimiser.parameters.log_search_progress = False
@@ -895,7 +896,7 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
                 if optimised_status in (cp_model.OPTIMAL, cp_model.FEASIBLE):
                     solver = optimiser
                     solution_values = {key: int(solver.Value(var)) for key, var in solution_variables.items()}
-                    nodes += int(solver.NumBranches())
+                    optimisation_nodes = int(solver.NumBranches())
             except Exception:
                 # A feasible solution already exists; optimisation is best-effort.
                 pass
@@ -1016,7 +1017,7 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
             cause = "The CP-SAT solver reached the generation time limit before finding a complete feasible timetable."
             next_step = "Review the most constrained lessons below, then check teacher availability, class limits, room use and manual placements."
         elif stop_reason == "infeasible":
-            cause = "CP-SAT proved that no complete timetable satisfies the current hard constraints and available teaching slots."
+            cause = "The configured requirements cannot be placed without a valid slot: CP-SAT proved that no complete timetable satisfies the current hard constraints and available teaching slots."
             next_step = "Review the affected lesson domains and mandatory constraints. Preferences were not relaxed, and existing generated lessons were preserved."
         elif stop_reason == "node_limit":
             cause = "The solver reached its configured search-node limit before finding a complete arrangement."
@@ -1048,6 +1049,7 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
             "manual_lessons_kept": len(manual),
             "unscheduled_lessons": len(tasks),
             "search_nodes": int(strict_nodes + fallback_nodes),
+            "optimisation_nodes": int(optimisation_nodes),
             "search_nodes_by_pass": {
                 "strict": int(strict_nodes),
                 "fallback": int(fallback_nodes),
