@@ -1188,7 +1188,8 @@ def generate_advanced_instructional_sessions(connection: Any, school_id: int,
                         continue
                     options.append({"day_id": day_id, "period_id": int(period["id"]),
                         "start": start, "end": end, "room_id": room_id,
-                        "duration": task["duration"], "period_no": int(period["period_no"])})
+                        "duration": task["duration"], "period_no": int(period["period_no"]),
+                        "period_end_no": int(span[-1]["period_no"])})
         if not options:
             raise TimetableSetupError("No valid slot is available for normalized requirement '" + task["name"] + "'. Check constraints, teacher availability, rooms and period patterns.")
         options.sort(key=lambda option: (preference_penalty(task, option),
@@ -1237,13 +1238,21 @@ def generate_advanced_instructional_sessions(connection: Any, school_id: int,
             if limit["max_periods_per_day"] is not None and same_class_day_periods + int(option["duration"]) > int(limit["max_periods_per_day"]):
                 return False
         for placed in planned:
-            if not overlaps(option, placed["option"]):
-                continue
             other = placed["task"]
+            other_option = placed["option"]
+            if (set(task["teachers"]) & set(other["teachers"])
+                    and int(option["day_id"]) == int(other_option["day_id"])):
+                option_end_period = int(option.get("period_end_no", option["period_no"]))
+                other_end_period = int(other_option.get("period_end_no", other_option["period_no"]))
+                if (option_end_period + 1 == int(other_option["period_no"])
+                        or other_end_period + 1 == int(option["period_no"])):
+                    return False
+            if not overlaps(option, other_option):
+                continue
             if (set(task["classes"]) & set(other["classes"])
                 or set(task["teachers"]) & set(other["teachers"])
                 or set(task["learners"]) & set(other["learners"])
-                or (option["room_id"] is not None and option["room_id"] == placed["option"]["room_id"])):
+                or (option["room_id"] is not None and option["room_id"] == other_option["room_id"])):
                 return False
         return True
 
@@ -1651,6 +1660,8 @@ def generate_dated_advanced_sessions(connection: Any, school_id: int, profile_id
                     options.append({
                         "date": occurrence_date, "day_id": int(occurrence["day_id"]),
                         "period_id": period_id, "start": start_time, "end": end_time,
+                        "period_no": int(selected[0]["period_no"]) if selected[0]["period_no"] is not None else None,
+                        "period_end_no": int(selected[-1]["period_no"]) if selected[-1]["period_no"] is not None else None,
                         "room_id": room_id, "duration": int(task["pattern"]["duration_periods"] or 0),
                         "slots": selected,
                     })
@@ -1683,11 +1694,19 @@ def generate_dated_advanced_sessions(connection: Any, school_id: int, profile_id
                 return False
         for item in planned:
             other = item["option"]
-            if other["date"] != option["date"] or not _overlap(option["start"], option["end"], other["start"], other["end"]):
-                continue
             other_task = item["task"]
+            if other["date"] != option["date"]:
+                continue
+            shared_teachers = set(task["teachers"]) & set(other_task["teachers"])
+            if shared_teachers and option.get("period_no") is not None and other.get("period_no") is not None:
+                option_end = int(option.get("period_end_no", option["period_no"]))
+                other_end = int(other.get("period_end_no", other["period_no"]))
+                if option_end + 1 == int(other["period_no"]) or other_end + 1 == int(option["period_no"]):
+                    return False
+            if not _overlap(option["start"], option["end"], other["start"], other["end"]):
+                continue
             if (set(task["classes"]) & set(other_task["classes"])
-                or set(task["teachers"]) & set(other_task["teachers"])
+                or shared_teachers
                 or set(task["learners"]) & set(other_task["learners"])
                 or (option["room_id"] is not None and option["room_id"] == other["room_id"])):
                 return False
