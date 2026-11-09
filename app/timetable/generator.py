@@ -637,7 +637,7 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
     # Load normalized shared sessions once. These are fixed anchors for the
     # legacy lesson solver and include all linked classes and co-teachers.
     existing_by_id = {}
-    conflict_sql = """SELECT s.id,s.day_id,s.start_time,s.end_time,s.room_id,
+    conflict_sql = """SELECT s.id,s.day_id,s.start_time,s.end_time,s.room_id,s.subject_id,s.schedule_layer,
                               sc.class_id,st.teacher_id
                        FROM ds_timetable_sessions s
                        LEFT JOIN ds_timetable_session_classes sc
@@ -657,7 +657,8 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
             "day_id": int(row["day_id"]) if row["day_id"] is not None else None,
             "start_time": str(row["start_time"]), "end_time": str(row["end_time"]),
             "room_id": int(row["room_id"]) if row["room_id"] is not None else None,
-            "classes": set(), "teachers": set(),
+            "classes": set(), "teachers": set(), "subject_id": int(row["subject_id"]) if row["subject_id"] is not None else None,
+            "schedule_layer": str(row["schedule_layer"] or "instructional"),
         })
         if row["class_id"] is not None:
             item["classes"].add(int(row["class_id"]))
@@ -702,20 +703,33 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
     shared_class_periods = set()
     shared_teacher_periods = set()
     shared_room_periods = set()
+    shared_subject_days = set()
     for session in existing_sessions:
         if session["day_id"] is None:
             continue
         day_id = int(session["day_id"])
+        session_periods = []
         for period in periods:
             if _overlap(str(period["start_time"]), str(period["end_time"]),
                         session["start_time"], session["end_time"]):
                 pid = int(period["id"])
+                session_periods.append(pid)
                 for class_id in session["classes"]:
                     shared_class_periods.add((class_id, day_id, pid))
                 for teacher_id in session["teachers"]:
                     shared_teacher_periods.add((teacher_id, day_id, pid))
                 if session["room_id"] is not None:
                     shared_room_periods.add((int(session["room_id"]), day_id, pid))
+        if session.get("schedule_layer") == "instructional":
+            for class_id in session["classes"]:
+                fixed_class_week[class_id] = fixed_class_week.get(class_id, 0) + 1
+                fixed_class_day_periods[(class_id, day_id)] = fixed_class_day_periods.get((class_id, day_id), 0) + len(session_periods)
+                if session.get("subject_id") is not None:
+                    subject_key = (int(class_id), int(session["subject_id"]), day_id)
+                    fixed_subject_days.add(subject_key)
+                    for teacher_id in session["teachers"]:
+                        cap_key = (int(class_id), int(session["subject_id"]), int(teacher_id), day_id)
+                        fixed_subject_day_count[cap_key] = fixed_subject_day_count.get(cap_key, 0) + 1
 
     def build_cp_model(allow_fallback: bool):
         model = cp_model.CpModel()
