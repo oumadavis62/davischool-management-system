@@ -624,15 +624,20 @@ def init_db():
     cur.execute("CREATE TABLE IF NOT EXISTS exams (id INTEGER PRIMARY KEY, school_id INTEGER, name TEXT, term TEXT, year TEXT, exam_type TEXT)")
     cur.execute("CREATE TABLE IF NOT EXISTS terms (id INTEGER PRIMARY KEY, school_id INTEGER, term_name TEXT, year TEXT, start_date TEXT, end_date TEXT)")
     cur.execute("CREATE TABLE IF NOT EXISTS teachers (id INTEGER PRIMARY KEY, school_id INTEGER, name TEXT, email TEXT, phone TEXT, tsc_no TEXT, gender TEXT, id_no TEXT, role TEXT, employment_type TEXT)")
+    teacher_color_column_added = False
     try:
-        cur.execute("ALTER TABLE teachers ADD COLUMN teacher_color TEXT DEFAULT '#2563EB'")
+        cur.execute("SELECT * FROM teachers LIMIT 0")
+        teacher_columns = {str(col.name if hasattr(col, "name") else col[0]).lower() for col in (cur.description or [])}
+        if "teacher_color" not in teacher_columns:
+            cur.execute("ALTER TABLE teachers ADD COLUMN teacher_color TEXT DEFAULT '#2563EB'")
+            teacher_color_column_added = True
     except Exception:
         pass
     try:
         cur.execute("SELECT id,teacher_color FROM teachers ORDER BY id")
         for teacher_row in cur.fetchall():
             saved_color = str(teacher_row["teacher_color"] or "").strip()
-            if not re.fullmatch(r"#[0-9A-Fa-f]{6}", saved_color):
+            if teacher_color_column_added or not re.fullmatch(r"#[0-9A-Fa-f]{6}", saved_color):
                 cur.execute("UPDATE teachers SET teacher_color=? WHERE id=?", (_teacher_timetable_color(teacher_row["id"]), teacher_row["id"]))
     except Exception:
         pass
