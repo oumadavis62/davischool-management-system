@@ -293,15 +293,15 @@ def validate_timetable_for_publication(connection: Any, school_id: int, profile_
                 errors.append("A teacher is assigned to overlapping lessons.")
             if first["room_id"] is not None and second["room_id"] is not None and first["room_id"] == second["room_id"]:
                 errors.append("A room is assigned to overlapping lessons.")
-        # Enforce the timetable's teacher-spacing rule across all subjects
-        # and classes. A multi-period lesson itself is not compared with
-        # itself; only separate lesson placements can trigger this check.
-        for i, first in enumerate(placements):
-            for second in placements[i+1:]:
-                if first["day_id"] != second["day_id"] or first["teacher_id"] != second["teacher_id"]:
-                    continue
-                if first["end_index"] + 1 == second["start_index"] or second["end_index"] + 1 == first["start_index"]:
-                    errors.append("A teacher is scheduled in consecutive periods across separate lessons.")
+    # Enforce the timetable's teacher-spacing rule across all subjects
+    # and classes. A multi-period lesson itself is not compared with
+    # itself; only separate lesson placements can trigger this check.
+    for i, first in enumerate(placements):
+        for second in placements[i+1:]:
+            if first["day_id"] != second["day_id"] or first["teacher_id"] != second["teacher_id"]:
+                continue
+            if first["end_index"] + 1 == second["start_index"] or second["end_index"] + 1 == first["start_index"]:
+                errors.append("A teacher is scheduled in consecutive periods across separate lessons.")
     errors = list(dict.fromkeys(errors))
     return {
         "ready": not errors,
