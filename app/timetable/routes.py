@@ -42,8 +42,6 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
         parts = []
         if profile_id:
             parts.append("profile_id=" + str(int(profile_id)))
-        if focus == "requirements":
-            parts.append("tab=requirements")
         if message:
             parts.append("message=" + quote(str(message)))
         if error:
@@ -163,7 +161,10 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
         return module_page(request, "Smart Timetable", "timetable", body)
 
     @app.get("/app/timetable/setup", response_class=HTMLResponse)
-    def timetable_setup_page(request: Request, profile_id: int = 0, message: str = "", error: int = 0, class_id: int = 0, focus: str = ""):
+    def timetable_setup_page(request: Request, profile_id: int = 0, message: str = "", error: int = 0, class_id: int = 0, focus: str = "", tab: str = ""):
+        # Legacy tab=requirements links are normalized to the focused workspace.
+        if tab == "requirements":
+            focus = "requirements"
         school = school_for(request)
         if not school:
             return RedirectResponse("/", 303)
@@ -493,7 +494,7 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
                 for item in sorted(group["subjects"], key=lambda x: x["subject"].lower())
             )
             modal_id = f"tt-subject-breakdown-{cid}"
-            allocation_editor_url = f"/app/timetable/setup?tab=requirements&profile_id={pid}&class_id={int(cid)}"
+            allocation_editor_url = f"/app/timetable/setup?focus=requirements&profile_id={pid}&class_id={int(cid)}"
             current_tab_id = str(request.scope.get("davischool_tab_id") or "")
             if current_tab_id:
                 allocation_editor_url += "&ds_tab=" + quote(current_tab_id, safe="")
@@ -1023,7 +1024,7 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
               if(!form||!form.matches||!form.matches('form[method="post" i]')) return;
               const action=new URL(form.getAttribute('action')||window.location.href,window.location.origin);
               const endpoint=action.pathname;
-              const isSetupWrite=endpoint.startsWith('/app/timetable/setup/')&&new Set(['day','period','break','calendar-event','room','availability','availability-matrix','subject-availability-matrix','requirement','class-limits','row-delete','break-gap']).has(endpoint.split('/').pop());
+              const isSetupWrite=endpoint.startsWith('/app/timetable/setup/')&&new Set(['day','period','break','calendar-event','room','availability','availability-matrix','subject-availability-matrix','requirement','bulk','class-limits','row-delete','break-gap']).has(endpoint.split('/').pop());
               if(!isSetupWrite) return;
               event.preventDefault();
               if(form.dataset.ajaxBusy==='1') return;
