@@ -610,66 +610,31 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
             return {"run_id": run_id, **summary}
         candidates_by_task.append((task_index, candidates))
 
-    # Most-constrained-first reduces search. Stable ordering keeps generation
-    # deterministic and makes runs reproducible.
-    order = sorted(
-        range(len(tasks)),
-        key=lambda i: (len(candidates_by_task[i][1]), -tasks[i]["duration"], tasks[i]["class_id"], tasks[i]["subject_id"], tasks[i]["occurrence"]),
-    )
-    # Candidate ordering is static and computed once. Re-scoring every candidate
-    # at every recursive backtracking node repeatedly scans the full placement
-    # list (and recomputes gap counts), turning a bounded search into a very
-    # expensive O(nodes * candidates * placements) workload. The solver's
-    # constraints are enforced by _can_place; this ordering only guides which
-    # valid slot is tried first.
-    day_rank = {int(day["id"]): index for index, day in enumerate(days)}
-    candidate_lookup = {
-        i: sorted(
-            candidates,
-            key=lambda candidate: (
-                not bool(candidate.get("preferred")),
-                # Round-robin the weekly occurrence positions across the
-                # timetable: first diagonal (Mon P1, Tue P2, Wed P3, ...),
-                # then the neighbouring diagonals. This avoids repeatedly
-                # consuming the same early periods on every instructional day.
-                abs(int(candidate["period_no"]) - (day_rank.get(int(candidate["day_id"]), 0) + 1)),
-                day_rank.get(int(candidate["day_id"]), 0),
-                int(candidate["period_no"]),
-            ),
-        )
-        for i, candidates in candidates_by_task
-    }
-    # Identical weekly occurrences are interchangeable. Without symmetry
-    # breaking, backtracking explores every permutation of the same subject's
-    # repeated lessons (up to N! equivalent branches). Give each identical
-    # occurrence a stable candidate order and require later occurrences to use
-    # a strictly later slot. This removes equivalent permutations without
-    # removing any distinct timetable solution.
-    symmetry_groups = {}
-    next_symmetry_group = 0
-    symmetry_group_by_task = {}
-    for task_index, task in enumerate(tasks):
-        signature = (
-            tuple(task.get("class_ids", [task["class_id"]])), tuple(task.get("teacher_ids", [task["teacher_id"]])), int(task["subject_id"]),
-            int(task["duration"]), task.get("preferred_period_id"),
-            task.get("max_lessons_per_day"), task.get("max_lessons_per_week"),
-            task.get("max_periods_per_day"),
-        )
-        if signature not in symmetry_groups:
-            symmetry_groups[signature] = next_symmetry_group
-            next_symmetry_group += 1
-        symmetry_group_by_task[task_index] = symmetry_groups[signature]
+    # Build a CP-SAT model from the already validated lesson domains.
+    # The first pass searches for a solution using explicitly available slots.
+    # If that is infeasible or inconclusive, a second pass permits fallback-only
+    # slots. A final optimisation pass improves preferences without weakening
+    # any hard scheduling rule.
+    from collections import defaultdict
+    from ortools.sat.python import cp_model
 
+    candidate_lookup = {i: list(values) for i, values in candidates_by_task}
+    candidate_filter_diagnostics = candidate_filter_diagnostics
+    blocked_candidate_counts = {}
+    rejection_counts = {}
+    rejection_by_requirement = {}
     placements = list(fixed)
     nodes = 0
+    strict_nodes = 0
+    fallback_nodes = 0
     exhausted = False
+    exhausted_reason = None
+    strict_stop_reason = None
+    fallback_stop_reason = None
+    search_started_at = time.monotonic()
 
-    # Read normalized sessions once, then evaluate resource conflicts in
-    # memory. The previous implementation issued several SQL queries for every
-    # task/day/period/room combination, multiplying database round-trips.
-    from collections import defaultdict
-    blocked_candidates = set()
-    blocked_candidate_counts = {}
+    # Load normalized shared sessions once. These are fixed anchors for the
+    # legacy lesson solver and include all linked classes and co-teachers.
     existing_by_id = {}
     conflict_sql = """SELECT s.id,s.day_id,s.start_time,s.end_time,s.room_id,
                               sc.class_id,st.teacher_id
@@ -698,439 +663,263 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
         if row["teacher_id"] is not None:
             item["teachers"].add(int(row["teacher_id"]))
     existing_sessions = list(existing_by_id.values())
-    for task_index, task in enumerate(tasks):
-        _check_generation_deadline(deadline)
-        for candidate in candidate_lookup[task_index]:
-            _check_generation_deadline(deadline)
-            for room_id in _rooms_for_task(task):
-                _check_generation_deadline(deadline)
-                for existing in existing_sessions:
-                    _check_generation_deadline(deadline)
-                    if existing["day_id"] != int(candidate["day_id"]):
-                        continue
-                    if not _overlap(candidate["start_time"], candidate["end_time"],
-                                    existing["start_time"], existing["end_time"]):
-                        continue
-                    if (
-                        set(task.get("class_ids", [task["class_id"]])) & existing["classes"]
-                        or set(task.get("teacher_ids", [task["teacher_id"]])) & existing["teachers"]
-                        or (room_id is not None and existing["room_id"] == int(room_id))
-                    ):
-                        blocked_candidates.add((
-                            task_index, candidate["day_id"], candidate["period_id"], room_id
-                        ))
-                        blocked_candidate_counts[task_index] = blocked_candidate_counts.get(task_index, 0) + 1
-                        break
 
-    # All database-backed inputs and conflict checks are now materialised.
-    # End the read transaction before CPU-heavy recursive backtracking so this
-    # solver does not hold AccessShare locks on school tables for minutes.
+    # Preserve the existing database transaction boundary: all input reads
+    # finish before the CPU-intensive constraint solve begins.
     connection.commit()
 
-    # Keep interchangeable occurrences in a stable order, but choose between
-    # independent requirement groups dynamically. Resource indexes make each
-    # domain check proportional to the affected class/teacher/day rather than
-    # rescanning every placement at every search node.
-    symmetry_members = {}
-    for task_index, group_id in symmetry_group_by_task.items():
-        symmetry_members.setdefault(group_id, []).append(task_index)
-    for members in symmetry_members.values():
-        members.sort(key=lambda index: int(tasks[index]["occurrence"]))
-
-    # Rank interchangeable requirement groups once by their initial domain
-    # size. At each search node, run dynamic MRV only across a small window
-    # of the most constrained remaining groups rather than rescanning every
-    # requirement and every candidate in the timetable.
-    # Schedule multi-period sessions before singles. Within each duration
-    # tier, retain most-constrained-first ordering so doubles/triples with the
-    # fewest legal options are protected before more flexible sessions.
-    # Singles are then placed with the same fail-first strategy; the existing
-    # diagonal candidate ordering spreads them across days and periods.
-    search_group_order = sorted(
-        symmetry_members,
-        key=lambda group_id: (
-            -int(tasks[symmetry_members[group_id][0]]["duration"]),
-            len(candidate_lookup[symmetry_members[group_id][0]]),
-            int(tasks[symmetry_members[group_id][0]]["class_id"]),
-            int(tasks[symmetry_members[group_id][0]]["subject_id"]),
-        ),
-    )
-    search_mrv_window = 3
-
-    placements = list(fixed)
-    class_week = {}
-    class_day_periods = {}
-    subject_day = {}
-    class_intervals = {}
-    teacher_intervals = {}
-    room_intervals = {}
-
-    def bump(counter, key, amount):
-        value = counter.get(key, 0) + amount
-        if value:
-            counter[key] = value
-        else:
-            counter.pop(key, None)
-
-    def index_placement(item, amount):
-        class_ids = sorted({int(v) for v in item.get("class_ids", [item["class_id"]])})
-        teacher_ids = sorted({int(v) for v in item.get("teacher_ids", [item["teacher_id"]])})
-        day_id = int(item["day_id"])
-        duration = int(item.get("duration", 1))
-        interval = (str(item["start_time"]), str(item["end_time"]),
-                    int(item.get("period_no", 0)),
-                    int(item.get("period_end_no", item.get("period_no", 0))))
-        for class_id in class_ids:
-            bump(class_week, class_id, amount)
-            bump(class_day_periods, (class_id, day_id), amount * duration)
-            for teacher_id in teacher_ids:
-                bump(subject_day, (class_id, int(item["subject_id"]), teacher_id, day_id), amount)
-            key = (class_id, day_id)
-            if amount > 0:
-                insort(class_intervals.setdefault(key, []), interval)
-            else:
-                values = class_intervals.get(key, [])
-                position = bisect_left(values, interval)
-                if position < len(values) and values[position] == interval:
-                    values.pop(position)
-                if not values:
-                    class_intervals.pop(key, None)
-        for teacher_id in teacher_ids:
-            key = (teacher_id, day_id)
-            if amount > 0:
-                insort(teacher_intervals.setdefault(key, []), interval)
-            else:
-                values = teacher_intervals.get(key, [])
-                if interval in values:
-                    values.remove(interval)
-                if not values:
-                    teacher_intervals.pop(key, None)
-        room_id = item.get("room_id")
-        if room_id is not None:
-            key = (int(room_id), day_id)
-            if amount > 0:
-                insort(room_intervals.setdefault(key, []), interval)
-            else:
-                values = room_intervals.get(key, [])
-                if interval in values:
-                    values.remove(interval)
-                if not values:
-                    room_intervals.pop(key, None)
-
+    day_order = {int(day["id"]): index for index, day in enumerate(days)}
+    period_by_id = {int(period["id"]): period for period in periods}
+    fixed_class_periods = set()
+    fixed_teacher_periods = set()
+    fixed_room_periods = set()
+    fixed_subject_days = set()
+    fixed_class_week = {}
+    fixed_class_day_periods = {}
+    fixed_subject_day_count = {}
+    fixed_teacher_day_count = {}
     for item in fixed:
-        index_placement(item, 1)
+        day_id = int(item["day_id"])
+        class_id = int(item["class_id"])
+        teacher_id = int(item["teacher_id"])
+        subject_id = int(item["subject_id"])
+        start_index = period_index[int(item["period_id"])]
+        span = _period_span(periods, start_index, int(item["duration"]))
+        period_ids = [int(p["id"]) for p in span or []]
+        fixed_class_week[class_id] = fixed_class_week.get(class_id, 0) + 1
+        fixed_subject_days.add((class_id, subject_id, day_id))
+        fixed_subject_day_count[(class_id, subject_id, teacher_id, day_id)] = fixed_subject_day_count.get((class_id, subject_id, teacher_id, day_id), 0) + 1
+        fixed_class_day_periods[(class_id, day_id)] = fixed_class_day_periods.get((class_id, day_id), 0) + len(period_ids)
+        for pid in period_ids:
+            fixed_class_periods.add((class_id, day_id, pid))
+            fixed_teacher_periods.add((teacher_id, day_id, pid))
+            if item.get("room_id") is not None:
+                fixed_room_periods.add((int(item["room_id"]), day_id, pid))
 
-    rejection_counts = {}
-    rejection_by_requirement = {}
+    # Normalized sessions occupy their linked resources and periods. They are
+    # treated as fixed for this solve, never silently moved by the legacy engine.
+    shared_class_periods = set()
+    shared_teacher_periods = set()
+    shared_room_periods = set()
+    for session in existing_sessions:
+        if session["day_id"] is None:
+            continue
+        day_id = int(session["day_id"])
+        for period in periods:
+            if _overlap(str(period["start_time"]), str(period["end_time"]),
+                        session["start_time"], session["end_time"]):
+                pid = int(period["id"])
+                for class_id in session["classes"]:
+                    shared_class_periods.add((class_id, day_id, pid))
+                for teacher_id in session["teachers"]:
+                    shared_teacher_periods.add((teacher_id, day_id, pid))
+                if session["room_id"] is not None:
+                    shared_room_periods.add((int(session["room_id"]), day_id, pid))
 
-    def indexed_can_place(task, candidate):
-        class_ids = sorted({int(v) for v in task.get("class_ids", [task["class_id"]])})
-        teacher_ids = sorted({int(v) for v in task.get("teacher_ids", [task["teacher_id"]])})
-        class_id = int(task["class_id"])
-        teacher_id = int(task["teacher_id"])
-        subject_id = int(task["subject_id"])
-        day_id = int(candidate["day_id"])
-        requirement_key = (class_id, subject_id, teacher_id)
-
-        def reject(reason):
-            rejection_counts[reason] = rejection_counts.get(reason, 0) + 1
-            per_requirement = rejection_by_requirement.setdefault(requirement_key, {})
-            per_requirement[reason] = per_requirement.get(reason, 0) + 1
-            return False
-
-        if task.get("max_lessons_per_day"):
-            key = (class_id, subject_id, teacher_id, day_id)
-            if subject_day.get(key, 0) >= int(task["max_lessons_per_day"]):
-                return reject("configured_subject_daily_limit")
-        max_week = task.get("max_lessons_per_week")
-        for linked_class_id in class_ids:
-            linked_limit = class_limits.get(linked_class_id)
-            weekly_limit = (
-                int(linked_limit["max_lessons_per_week"])
-                if linked_limit is not None and linked_limit["max_lessons_per_week"] is not None
-                else (int(max_week) if max_week is not None and linked_class_id == class_id else None)
-            )
-            if weekly_limit is not None and class_week.get(linked_class_id, 0) >= weekly_limit:
-                return reject("configured_linked_class_weekly_limit")
-            daily_limit = (
-                int(linked_limit["max_periods_per_day"])
-                if linked_limit is not None and linked_limit["max_periods_per_day"] is not None
-                else (int(max_day_periods) if max_day_periods is not None and linked_class_id == class_id else None)
-            )
-            if daily_limit is not None:
-                used = class_day_periods.get((linked_class_id, day_id), 0)
-                if used + int(candidate.get("duration", 1)) > daily_limit:
-                    return reject("configured_linked_class_daily_period_limit")
-        start, end = candidate["start_time"], candidate["end_time"]
-        for linked_class_id in class_ids:
-            if _interval_list_overlaps(class_intervals.get((linked_class_id, day_id), ()), start, end):
-                return reject("linked_class_already_has_a_lesson")
-        for linked_teacher_id in teacher_ids:
-            if _interval_list_overlaps(teacher_intervals.get((linked_teacher_id, day_id), ()), start, end):
-                return reject("lead_or_co_teacher_has_an_overlapping_lesson")
-        room_id = candidate.get("room_id")
-        if room_id is not None and _interval_list_overlaps(
-            room_intervals.get((int(room_id), day_id), ()), start, end
-        ):
-            return reject("room_already_booked")
-        return True
-
-    nodes = 0
-    exhausted = False
-    exhausted_reason = None
-    strict_nodes = 0
-    fallback_nodes = 0
-    strict_stop_reason = None
-    fallback_stop_reason = None
-    search_started_at = time.monotonic()
-    assigned = set()
-    last_rank_by_group = {}
-
-    active_deadline = deadline
-
-    def search(fallback: bool = False) -> bool:
-        nonlocal nodes, exhausted, exhausted_reason
-        if time.monotonic() >= active_deadline:
-            exhausted = True
-            exhausted_reason = "deadline" if active_deadline >= deadline else "strict_pass_budget"
-            return False
-        if len(assigned) >= len(tasks):
-            return True
-        if nodes >= int(node_limit):
-            exhausted = True
-            exhausted_reason = "node_limit"
-            return False
-
-        best_choices = None
-        best_task_index = None
-        best_rank_key = None
-
-        # Keep dynamic fail-first selection, but bound its cost. The previous
-        # implementation recomputed every remaining task's full legal domain
-        # at every recursion level, making each search node increasingly
-        # expensive as the timetable grew.
-        active_groups = []
-        for group_id in search_group_order:
-            if time.monotonic() >= active_deadline:
-                exhausted = True
-                exhausted_reason = "deadline" if active_deadline >= deadline else "strict_pass_budget"
-                return False
-            task_index = next((index for index in symmetry_members[group_id] if index not in assigned), None)
-            if task_index is None:
-                continue
-            active_groups.append((group_id, task_index))
-            if len(active_groups) >= search_mrv_window:
-                break
-
-        for group_id, task_index in active_groups:
-            task = tasks[task_index]
-            minimum_rank = last_rank_by_group.get(group_id, -1)
-            choices = []
+    def build_cp_model(allow_fallback: bool):
+        model = cp_model.CpModel()
+        variables = {}
+        variable_meta = {}
+        by_class_period = defaultdict(list)
+        by_teacher_period = defaultdict(list)
+        by_room_period = defaultdict(list)
+        by_subject_day = defaultdict(list)
+        by_subject_teacher_day = defaultdict(list)
+        by_class_day_periods = defaultdict(list)
+        by_class_week = defaultdict(list)
+        by_task = defaultdict(list)
+        objective_terms = []
+        for task_index, task in enumerate(tasks):
+            class_ids = sorted({int(v) for v in task.get("class_ids", [task["class_id"]])})
+            teacher_ids = sorted({int(v) for v in task.get("teacher_ids", [task["teacher_id"]])})
             room_ids = _rooms_for_task(task)
             for candidate_rank, candidate in enumerate(candidate_lookup[task_index]):
-                if time.monotonic() >= active_deadline:
-                    exhausted = True
-                    exhausted_reason = "deadline" if active_deadline >= deadline else "strict_pass_budget"
-                    return False
-                if candidate_rank <= minimum_rank:
+                if not allow_fallback and not candidate.get("explicitly_available"):
                     continue
-                if not fallback and not candidate.get("explicitly_available"):
+                start_index = period_index.get(int(candidate["period_id"]))
+                if start_index is None:
                     continue
+                span = _period_span(periods, start_index, int(candidate["duration"]))
+                if not span:
+                    continue
+                period_ids = [int(p["id"]) for p in span]
+                day_id = int(candidate["day_id"])
                 for room_id in room_ids:
-                    if time.monotonic() >= active_deadline:
-                        exhausted = True
-                        exhausted_reason = "deadline" if active_deadline >= deadline else "strict_pass_budget"
-                        return False
-                    if (task_index, candidate["day_id"], candidate["period_id"], room_id) in blocked_candidates:
+                    if (task_index, day_id, int(candidate["period_id"]), room_id) in blocked_candidates:
                         continue
-                    placement = dict(candidate, room_id=room_id)
-                    if not indexed_can_place(task, placement):
+                    conflict = False
+                    for pid in period_ids:
+                        if any((cid, day_id, pid) in fixed_class_periods or (cid, day_id, pid) in shared_class_periods for cid in class_ids):
+                            conflict = True
+                            break
+                        if any((tid, day_id, pid) in fixed_teacher_periods or (tid, day_id, pid) in shared_teacher_periods for tid in teacher_ids):
+                            conflict = True
+                            break
+                        if room_id is not None and ((int(room_id), day_id, pid) in fixed_room_periods or (int(room_id), day_id, pid) in shared_room_periods):
+                            conflict = True
+                            break
+                    if conflict:
                         continue
-                    choices.append((candidate_rank, candidate, room_id))
-            if not choices:
-                return False
-            rank_key = (
-                len(choices), -int(task["duration"]),
-                len(candidate_lookup[task_index]),
-                int(task["class_id"]), int(task["subject_id"]),
-            )
-            if best_rank_key is None or rank_key < best_rank_key:
-                best_rank_key = rank_key
-                best_task_index = task_index
-                best_choices = choices
-
-        if best_task_index is None:
-            return True
-        task = tasks[best_task_index]
-        symmetry_group = symmetry_group_by_task[best_task_index]
-        for candidate_rank, candidate, room_id in best_choices:
-            nodes += 1
-            if nodes > int(node_limit):
-                exhausted = True
-                exhausted_reason = "node_limit"
-                return False
-            placement = dict(candidate, room_id=room_id)
-            placement.update({
-                "class_id": task["class_id"],
-                "subject_id": task["subject_id"],
-                "teacher_id": task["teacher_id"],
-                "class_ids": list(task.get("class_ids", [task["class_id"]])),
-                "teacher_ids": list(task.get("teacher_ids", [task["teacher_id"]])),
-                "fixed": False,
-                "_symmetry_group": symmetry_group,
-                "_candidate_rank": candidate_rank,
-            })
-            placements.append(placement)
-            index_placement(placement, 1)
-            assigned.add(best_task_index)
-            previous_rank = last_rank_by_group.get(symmetry_group)
-            last_rank_by_group[symmetry_group] = candidate_rank
-            if search(fallback):
-                return True
-            if previous_rank is None:
-                last_rank_by_group.pop(symmetry_group, None)
+                    key = (task_index, candidate_rank, room_id)
+                    var = model.NewBoolVar("place_t{}_c{}_r{}".format(task_index, candidate_rank, room_id or 0))
+                    variables[key] = var
+                    variable_meta[key] = (task, candidate, room_id, period_ids)
+                    by_task[task_index].append(var)
+                    for cid in class_ids:
+                        for pid in period_ids:
+                            by_class_period[(cid, day_id, pid)].append(var)
+                        by_subject_day[(cid, int(task["subject_id"]), day_id)].append(var)
+                        by_class_day_periods[(cid, day_id)].append((var, len(period_ids)))
+                        by_class_week[cid].append(var)
+                    for tid in teacher_ids:
+                        for pid in period_ids:
+                            by_teacher_period[(tid, day_id, pid)].append(var)
+                    if room_id is not None:
+                        for pid in period_ids:
+                            by_room_period[(int(room_id), day_id, pid)].append(var)
+                    by_subject_teacher_day[(int(task["class_id"]), int(task["subject_id"]), int(task["teacher_id"]), day_id)].append(var)
+                    # Soft preferences: fallback-only cells carry a substantial
+                    # penalty; preferred cells and earlier periods are favoured.
+                    cost = (0 if candidate.get("explicitly_available") else 100000)
+                    cost += (0 if candidate.get("preferred") else 500)
+                    cost += int(candidate["period_no"]) * 5
+                    cost += day_order.get(day_id, 0)
+                    if room_id is not None:
+                        cost += int(room_id) % 7
+                    objective_terms.append((var, cost))
+            if not by_task[task_index]:
+                model.AddBoolOr([])
             else:
-                last_rank_by_group[symmetry_group] = previous_rank
-            assigned.remove(best_task_index)
-            index_placement(placement, -1)
-            placements.pop()
-            if exhausted:
-                return False
-        return False
+                model.Add(sum(by_task[task_index]) == 1)
 
-    def reset_search_state():
-        placements[:] = list(fixed)
-        class_week.clear()
-        class_day_periods.clear()
-        subject_day.clear()
-        class_intervals.clear()
-        teacher_intervals.clear()
-        room_intervals.clear()
-        for fixed_item in fixed:
-            index_placement(fixed_item, 1)
-        assigned.clear()
-        last_rank_by_group.clear()
+        for group in (by_class_period, by_teacher_period, by_room_period, by_subject_day):
+            for values in group.values():
+                if len(values) > 1:
+                    model.Add(sum(values) <= 1)
 
-    def large_schedule_pass(fallback: bool) -> bool:
-        """Iterative fail-first backtracking for large schedules.
+        for key, values in by_subject_teacher_day.items():
+            class_id, subject_id, teacher_id, day_id = key
+            cap = next((int(task["max_lessons_per_day"]) for task in tasks
+                        if int(task["class_id"]) == class_id and int(task["subject_id"]) == subject_id
+                        and int(task["teacher_id"]) == teacher_id and task.get("max_lessons_per_day")), None)
+            if cap is not None:
+                model.Add(sum(values) + int(fixed_subject_day_count.get(key, 0)) <= cap)
 
-        Unlike the previous first-fit greedy pass, this can undo earlier
-        placements when a later lesson has no legal slot. It uses an explicit
-        stack so school-wide schedules do not hit Python's recursion limit.
-        """
-        nonlocal nodes, exhausted, exhausted_reason
-        ordered_tasks = [
-            task_index
-            for group_id in search_group_order
-            for task_index in symmetry_members[group_id]
-        ]
-        frames = [{"candidate_pos": 0, "room_pos": 0} for _ in ordered_tasks]
-        depth = 0
+        for class_id, values in by_class_week.items():
+            limit = class_limits.get(class_id)
+            if limit is not None and limit["max_lessons_per_week"] is not None:
+                model.Add(sum(values) + int(fixed_class_week.get(class_id, 0)) <= int(limit["max_lessons_per_week"]))
 
-        while depth < len(ordered_tasks):
-            if time.monotonic() >= active_deadline:
-                exhausted = True
-                exhausted_reason = "deadline" if active_deadline >= deadline else "strict_pass_budget"
-                return False
-            task_index = ordered_tasks[depth]
-            task = tasks[task_index]
-            group_id = symmetry_group_by_task[task_index]
-            frame = frames[depth]
-            candidate_list = candidate_lookup[task_index]
-            room_ids = _rooms_for_task(task)
-            minimum_rank = last_rank_by_group.get(group_id, -1)
-            placed = False
+        for (class_id, day_id), values in by_class_day_periods.items():
+            limit = class_limits.get(class_id)
+            if limit is not None and limit["max_periods_per_day"] is not None:
+                model.Add(
+                    sum(var * duration for var, duration in values)
+                    + int(fixed_class_day_periods.get((class_id, day_id), 0))
+                    <= int(limit["max_periods_per_day"])
+                )
 
-            while frame["candidate_pos"] < len(candidate_list):
-                candidate_rank = frame["candidate_pos"]
-                candidate = candidate_list[candidate_rank]
-                if candidate_rank <= minimum_rank or (not fallback and not candidate.get("explicitly_available")):
-                    frame["candidate_pos"] += 1
-                    frame["room_pos"] = 0
-                    continue
-                while frame["room_pos"] < len(room_ids):
-                    room_id = room_ids[frame["room_pos"]]
-                    frame["room_pos"] += 1
-                    nodes += 1
-                    if nodes > int(node_limit):
-                        exhausted = True
-                        exhausted_reason = "node_limit"
-                        return False
-                    if (task_index, candidate["day_id"], candidate["period_id"], room_id) in blocked_candidates:
-                        continue
-                    placement = dict(candidate, room_id=room_id)
-                    if not indexed_can_place(task, placement):
-                        continue
-                    placement.update({
-                        "class_id": task["class_id"],
-                        "subject_id": task["subject_id"],
-                        "teacher_id": task["teacher_id"],
-                        "class_ids": list(task.get("class_ids", [task["class_id"]])),
-                        "teacher_ids": list(task.get("teacher_ids", [task["teacher_id"]])),
-                        "fixed": False,
-                        "_symmetry_group": group_id,
-                        "_candidate_rank": candidate_rank,
-                    })
-                    placements.append(placement)
-                    index_placement(placement, 1)
-                    previous_rank = last_rank_by_group.get(group_id)
-                    last_rank_by_group[group_id] = candidate_rank
-                    frame["placed_rank"] = candidate_rank
-                    frame["previous_rank"] = previous_rank
-                    placed = True
-                    break
-                if placed:
-                    break
-                frame["candidate_pos"] += 1
-                frame["room_pos"] = 0
+        # Keep fallback availability as a last resort, not as an equal choice.
+        model.Minimize(sum(var * cost for var, cost in objective_terms))
+        return model, variables, variable_meta
 
-            if placed:
-                depth += 1
-                if depth < len(ordered_tasks):
-                    frames[depth] = {"candidate_pos": 0, "room_pos": 0}
+    remaining_seconds = max(0.1, deadline - time.monotonic())
+    strict_budget = max(0.1, remaining_seconds * 0.55)
+    model, variables, variable_meta = build_cp_model(False)
+    solver = cp_model.CpSolver()
+    solver.parameters.max_time_in_seconds = strict_budget
+    solver.parameters.num_search_workers = max(1, min(8, __import__("os").cpu_count() or 1))
+    solver.parameters.random_seed = 17
+    solver.parameters.log_search_progress = False
+    strict_status = solver.Solve(model)
+    strict_nodes = int(solver.NumBranches())
+    strict_stop_reason = solver.StatusName(strict_status).lower()
+    solution_values = None
+    solution_model = model
+    solution_variables = variables
+    solution_meta = variable_meta
+    if strict_status in (cp_model.OPTIMAL, cp_model.FEASIBLE):
+        solution_values = {key: int(solver.Value(var)) for key, var in variables.items()}
+    else:
+        remaining_seconds = max(0.1, deadline - time.monotonic())
+        if remaining_seconds > 0.15:
+            model, variables, variable_meta = build_cp_model(True)
+            fallback_solver = cp_model.CpSolver()
+            fallback_solver.parameters.max_time_in_seconds = remaining_seconds
+            fallback_solver.parameters.num_search_workers = max(1, min(8, __import__("os").cpu_count() or 1))
+            fallback_solver.parameters.random_seed = 29
+            fallback_solver.parameters.log_search_progress = False
+            fallback_status = fallback_solver.Solve(model)
+            fallback_nodes = int(fallback_solver.NumBranches())
+            fallback_stop_reason = fallback_solver.StatusName(fallback_status).lower()
+            if fallback_status in (cp_model.OPTIMAL, cp_model.FEASIBLE):
+                solver = fallback_solver
+                solution_values = {key: int(solver.Value(var)) for key, var in variables.items()}
+                solution_model = model
+                solution_variables = variables
+                solution_meta = variable_meta
+
+    nodes = strict_nodes + fallback_nodes
+    generated = solution_values is not None
+    if generated:
+        # The hard-constraint feasibility pass has succeeded. Use any remaining
+        # time to optimise the same feasible model; never sacrifice feasibility.
+        remaining_seconds = deadline - time.monotonic()
+        if remaining_seconds > 0.25:
+            try:
+                for key, var in solution_variables.items():
+                    solution_model.AddHint(var, solution_values.get(key, 0))
+                optimiser = cp_model.CpSolver()
+                optimiser.parameters.max_time_in_seconds = remaining_seconds
+                optimiser.parameters.num_search_workers = max(1, min(8, __import__("os").cpu_count() or 1))
+                optimiser.parameters.random_seed = 41
+                optimiser.parameters.log_search_progress = False
+                optimised_status = optimiser.Solve(solution_model)
+                if optimised_status in (cp_model.OPTIMAL, cp_model.FEASIBLE):
+                    solver = optimiser
+                    solution_values = {key: int(solver.Value(var)) for key, var in solution_variables.items()}
+                    nodes += int(solver.NumBranches())
+            except Exception:
+                # A feasible solution already exists; optimisation is best-effort.
+                pass
+        for key, selected in solution_values.items():
+            if not selected:
                 continue
-
-            # This task has exhausted its domain. Backtrack one placement and
-            # resume that earlier task at the next candidate/room option.
-            if depth == 0:
-                return False
-            depth -= 1
-            previous_task_index = ordered_tasks[depth]
-            previous_task = tasks[previous_task_index]
-            previous_group = symmetry_group_by_task[previous_task_index]
-            previous_frame = frames[depth]
-            previous_placement = placements.pop()
-            index_placement(previous_placement, -1)
-            if previous_frame["previous_rank"] is None:
-                last_rank_by_group.pop(previous_group, None)
-            else:
-                last_rank_by_group[previous_group] = previous_frame["previous_rank"]
-            previous_frame.pop("placed_rank", None)
-            previous_frame.pop("previous_rank", None)
-
-        return True
-
-    # Larger timetables use a non-recursive fail-first pass to avoid Python
-    # recursion depth and repeated MRV domain rescans. Smaller ones retain full backtracking.
-    strict_started_at = time.monotonic()
-    remaining_budget = max(0.0, deadline - strict_started_at)
-    active_deadline = min(deadline, strict_started_at + remaining_budget * 0.60)
-    large_schedule = len(tasks) > 700
-    generated = large_schedule_pass(False) if large_schedule else search(False)
-    strict_nodes = nodes
-    strict_stop_reason = exhausted_reason
-    strict_elapsed = round(time.monotonic() - strict_started_at, 3)
-    if not generated and time.monotonic() < deadline:
-        reset_search_state()
-        nodes = 0
-        exhausted = False
+            task, candidate, room_id, period_ids = solution_meta[key]
+            placements.append(dict(
+                candidate,
+                room_id=room_id,
+                class_id=int(task["class_id"]),
+                subject_id=int(task["subject_id"]),
+                teacher_id=int(task["teacher_id"]),
+                class_ids=list(task.get("class_ids", [task["class_id"]])),
+                teacher_ids=list(task.get("teacher_ids", [task["teacher_id"]])),
+                fixed=False,
+            ))
         exhausted_reason = None
-        active_deadline = deadline
-        generated = large_schedule_pass(True) if large_schedule else search(True)
-        fallback_nodes = nodes
-        fallback_stop_reason = exhausted_reason
+    else:
+        status_text = (fallback_stop_reason or strict_stop_reason or "unknown").upper()
+        if status_text == "INFEASIBLE":
+            exhausted_reason = "infeasible"
+        elif status_text == "UNKNOWN":
+            exhausted_reason = "deadline"
+        else:
+            exhausted_reason = "solver_" + status_text.lower()
+        # Keep the existing diagnostic shape, with candidate-domain sizes and
+        # explicit counts of candidates excluded by normalized shared sessions.
+        for task_index, task in enumerate(tasks):
+            key = (int(task["class_id"]), int(task["subject_id"]), int(task["teacher_id"]))
+            rejection_by_requirement.setdefault(key, {})
+            blocked_candidate_counts[task_index] = sum(
+                1 for candidate in candidate_lookup[task_index]
+                for room_id in _rooms_for_task(task)
+                if (task_index, int(candidate["day_id"]), int(candidate["period_id"]), room_id) in blocked_candidates
+            )
+        strict_nodes = int(strict_nodes)
+        fallback_nodes = int(fallback_nodes)
+        exhausted = True
 
-    snapshot = {
+snapshot = {
         "profile_id": profile_id,
         "engine_version": ENGINE_VERSION,
         "days": [{"id": int(d["id"]), "code": d["day_code"]} for d in days],
