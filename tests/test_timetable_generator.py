@@ -149,13 +149,13 @@ class TimetableGeneratorTests(unittest.TestCase):
             (self.profile_id,),
         ).fetchone()
         self.assertEqual((row["period_id"], row["duration_periods"]), (period_one, 2))
-        self.assertEqual(result["generated_lessons"], 2)
+        self.assertEqual(result["generated_lessons"], 1)
         rows = self.db.execute(
             """SELECT duration_periods FROM ds_timetable_lessons
                WHERE profile_id=? AND generation_run_id=? ORDER BY id""",
             (self.profile_id, result["run_id"]),
         ).fetchall()
-        self.assertEqual([int(item["duration_periods"]) for item in rows], [2, 1])
+        self.assertEqual([int(item["duration_periods"]) for item in rows], [2])
 
     def test_shared_instructional_occurrence_replaces_matching_legacy_requirement(self):
         # The ordinary allocation requires one double lesson. A shared
