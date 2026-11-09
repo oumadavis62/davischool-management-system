@@ -364,7 +364,7 @@ def save_requirement_session_pattern(connection: Any, school_id: int, profile_id
             "DELETE FROM ds_timetable_requirement_patterns WHERE school_id=? AND profile_id=? AND requirement_id=?",
             (school_id, profile_id, requirement_id),
         )
-        for session_no, duration, day_id, slot_id, period_id, label in normalized:
+        for session_no, duration, day_id, slot_id, period_id, label, linked_classes_json, co_teachers_json in normalized:
             cur.execute(
                 """INSERT INTO ds_timetable_requirement_patterns
                    (school_id,profile_id,requirement_id,session_no,duration_periods,
