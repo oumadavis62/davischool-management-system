@@ -343,9 +343,16 @@ def save_requirement_session_pattern(connection: Any, school_id: int, profile_id
                         f"A {duration}-period session starting at Period {int(period['period_no'])} must fit in consecutive teaching periods without a break."
                     )
         label = str(session.get("session_label") or "").strip()[:80] or f"Session {index}"
+        linked_classes = session.get("linked_class_ids", []) or []
+        co_teachers = session.get("co_teacher_ids", []) or []
+        if not isinstance(linked_classes, list) or not isinstance(co_teachers, list):
+            raise TimetableSetupError("Session class and co-teacher links must be lists.")
+        linked_classes = sorted({int(value) for value in linked_classes if int(value) != 0})
+        co_teachers = sorted({int(value) for value in co_teachers if int(value) != 0})
         normalized.append((index, duration, int(day_id) if day_id is not None else None,
                            int(slot_id) if slot_id is not None else None,
-                           int(period_id) if period_id is not None else None, label))
+                           int(period_id) if period_id is not None else None, label,
+                           json.dumps(linked_classes), json.dumps(co_teachers)))
         total_periods += duration
     expected = int(requirement["lessons_per_week"]) * int(requirement["duration_periods"] or 1)
     if total_periods > expected:
@@ -361,9 +368,10 @@ def save_requirement_session_pattern(connection: Any, school_id: int, profile_id
             cur.execute(
                 """INSERT INTO ds_timetable_requirement_patterns
                    (school_id,profile_id,requirement_id,session_no,duration_periods,
-                    preferred_day_id,preferred_slot_id,preferred_period_id,session_label)
-                   VALUES(?,?,?,?,?,?,?,?,?)""",
-                (school_id, profile_id, requirement_id, session_no, duration, day_id, slot_id, period_id, label),
+                    preferred_day_id,preferred_slot_id,preferred_period_id,session_label,
+                    linked_class_ids_json,co_teacher_ids_json)
+                   VALUES(?,?,?,?,?,?,?,?,?,?,?)""",
+                (school_id, profile_id, requirement_id, session_no, duration, day_id, slot_id, period_id, label, linked_classes_json, co_teachers_json),
             )
         connection.commit()
     except Exception:
