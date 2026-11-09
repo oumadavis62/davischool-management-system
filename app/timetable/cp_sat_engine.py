@@ -364,10 +364,9 @@ def solve_timetable(
     result["fallback_branches"] = fallback["branches"] if fallback else 0
     result["optimization_status"] = optimized["status"] if optimized else "NOT_RUN"
     result["optimization_branches"] = optimized["branches"] if optimized else 0
-    result["branches"] = int(result.get("branches") or 0) + (
-        int(strict["branches"]) if result is not strict else 0
-    ) + (
-        int(fallback["branches"]) if fallback and result is not fallback else 0
-    )
+    result["branches"] = (
+        int(strict.get("branches") or 0)
+        + int(fallback.get("branches") or 0) if fallback else int(strict.get("branches") or 0)
+    ) + (int(optimized.get("branches") or 0) if optimized else 0)
     result["elapsed_seconds"] = round(time.monotonic() - started, 3)
     return result
