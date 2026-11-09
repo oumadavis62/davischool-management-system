@@ -10,7 +10,7 @@ from app.timetable.setup import TimetableSetupError, _profile
 from app.timetable.session_engine import _validate_constraints
 
 
-ENGINE_VERSION = "1.8"
+ENGINE_VERSION = "1.9"
 DEFAULT_NODE_LIMIT = 10_000_000
 GENERATION_TIME_LIMIT_SECONDS = 20.0
 
@@ -681,6 +681,21 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
     for members in symmetry_members.values():
         members.sort(key=lambda index: int(tasks[index]["occurrence"]))
 
+    # Rank interchangeable requirement groups once by their initial domain
+    # size. At each search node, run dynamic MRV only across a small window
+    # of the most constrained remaining groups rather than rescanning every
+    # requirement and every candidate in the timetable.
+    search_group_order = sorted(
+        symmetry_members,
+        key=lambda group_id: (
+            len(candidate_lookup[symmetry_members[group_id][0]]),
+            -int(tasks[symmetry_members[group_id][0]]["duration"]),
+            int(tasks[symmetry_members[group_id][0]]["class_id"]),
+            int(tasks[symmetry_members[group_id][0]]["subject_id"]),
+        ),
+    )
+    search_mrv_window = 8
+
     placements = list(fixed)
     class_week = {}
     class_day_periods = {}
@@ -787,7 +802,7 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
         nonlocal nodes, exhausted, exhausted_reason
         if time.monotonic() >= active_deadline:
             exhausted = True
-            exhausted_reason = "deadline" if active_deadline >= deadline else "strict_pass_budget" if active_deadline >= deadline else "strict_pass_budget"
+            exhausted_reason = "deadline" if active_deadline >= deadline else "strict_pass_budget"
             return False
         if len(assigned) >= len(tasks):
             return True
@@ -799,14 +814,25 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
         best_choices = None
         best_task_index = None
         best_rank_key = None
-        for group_id, members in symmetry_members.items():
+
+        # Keep dynamic fail-first selection, but bound its cost. The previous
+        # implementation recomputed every remaining task's full legal domain
+        # at every recursion level, making each search node increasingly
+        # expensive as the timetable grew.
+        active_groups = []
+        for group_id in search_group_order:
             if time.monotonic() >= active_deadline:
                 exhausted = True
                 exhausted_reason = "deadline" if active_deadline >= deadline else "strict_pass_budget"
                 return False
-            task_index = next((index for index in members if index not in assigned), None)
+            task_index = next((index for index in symmetry_members[group_id] if index not in assigned), None)
             if task_index is None:
                 continue
+            active_groups.append((group_id, task_index))
+            if len(active_groups) >= search_mrv_window:
+                break
+
+        for group_id, task_index in active_groups:
             task = tasks[task_index]
             minimum_rank = last_rank_by_group.get(group_id, -1)
             choices = []
