@@ -742,6 +742,7 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
         by_class_day_periods = defaultdict(list)
         by_class_week = defaultdict(list)
         by_task = defaultdict(list)
+        rank_terms_by_task = defaultdict(list)
         objective_terms = []
         for task_index, task in enumerate(tasks):
             class_ids = sorted({int(v) for v in task.get("class_ids", [task["class_id"]])})
@@ -781,6 +782,7 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
                     variables[key] = var
                     variable_meta[key] = (task, candidate, room_id, period_ids)
                     by_task[task_index].append(var)
+                    rank_terms_by_task[task_index].append((var, candidate_rank))
                     for cid in class_ids:
                         for pid in period_ids:
                             by_class_period[(cid, day_id, pid)].append(var)
@@ -807,6 +809,26 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
                 model.AddBoolOr([])
             else:
                 model.Add(sum(by_task[task_index]) == 1)
+
+        # Break permutations of identical weekly occurrences. Their candidate
+        # domains are interchangeable, so require later occurrences to use a
+        # candidate rank no earlier than the preceding occurrence.
+        symmetry_groups = defaultdict(list)
+        for task_index, task in enumerate(tasks):
+            signature = (
+                tuple(task.get("class_ids", [task["class_id"]])),
+                tuple(task.get("teacher_ids", [task["teacher_id"]])),
+                int(task["subject_id"]), int(task["duration"]),
+                task.get("preferred_period_id"), task.get("max_lessons_per_day"),
+                task.get("max_lessons_per_week"), task.get("max_periods_per_day"),
+            )
+            symmetry_groups[signature].append(task_index)
+        for members in symmetry_groups.values():
+            members.sort(key=lambda index: int(tasks[index]["occurrence"]))
+            for previous_index, next_index in zip(members, members[1:]):
+                previous_rank = sum(rank * var for var, rank in rank_terms_by_task[previous_index])
+                next_rank = sum(rank * var for var, rank in rank_terms_by_task[next_index])
+                model.Add(previous_rank <= next_rank)
 
         for group in (by_class_period, by_teacher_period, by_room_period, by_subject_day):
             for values in group.values():
