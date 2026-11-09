@@ -223,7 +223,7 @@ def register_timetable_builder_routes(app, get_db, get_school_obj, module_page):
                 (pid,school_id),
             ).fetchall()
             lessons = cur.execute(
-                """SELECT l.*,c.name class_name,c.stream,s.name subject_name,t.name teacher_name,
+                """SELECT l.*,c.name class_name,c.stream,s.name subject_name,s.initial subject_initial,t.name teacher_name,
                           rm.name room_name,p.period_no,p.label period_label,p.start_time,p.end_time,d.day_name
                    FROM ds_timetable_lessons l
                    JOIN classes c ON c.id=l.class_id AND c.school_id=l.school_id
@@ -272,14 +272,6 @@ def register_timetable_builder_routes(app, get_db, get_school_obj, module_page):
             room_rules = []
 
         esc = lambda value: escape(str(value if value is not None else ""))
-        def subject_initials(value):
-            words = ["".join(char for char in part if char.isalnum()) for part in str(value or "").split()]
-            words = [word for word in words if word and word.lower() not in {"and", "of", "the"}]
-            if not words:
-                return "SUB"
-            if len(words) == 1:
-                return words[0][:3].upper()
-            return "".join(word[0].upper() for word in words)
         pid = int(selected["id"]) if selected else 0
         read_only = bool(selected and str(selected["status"] or "draft").strip().lower() in ("published", "archived"))
         notice = f"<div class='tb-alert {'error' if error else 'success'}'>{esc(message)}</div>" if message else ""
@@ -389,11 +381,11 @@ def register_timetable_builder_routes(app, get_db, get_school_obj, module_page):
                             manage_html = ""
                             if not read_only:
                                 manage_html = f"""<details class='tb-actions'><summary>Manage</summary><form method='post' action='/app/timetable/builder/move'><input type='hidden' name='profile_id' value='{pid}'><input type='hidden' name='lesson_id' value='{int(lesson['id'])}'><label>Move to day<select name='day_id'>{move_day_opts}</select></label><label>Start period<select name='period_id'>{move_period_opts}</select></label><label>Room<select name='room_id'>{move_room_opts}</select></label><button class='tb-small'>Move lesson</button></form><form method='post' action='/app/timetable/builder/delete' onsubmit="return confirm('Remove this lesson from the timetable?')"><input type='hidden' name='profile_id' value='{pid}'><input type='hidden' name='lesson_id' value='{int(lesson['id'])}'><button class='tb-delete'>Delete lesson</button></form></details>"""
-                            cards.append(f"""<div class='tb-lesson' title='{esc(lesson['subject_name'])}' draggable='{'false' if read_only else 'true'}' data-lesson-id='{int(lesson['id'])}' ondragstart='dragTimetableLesson(event)'><div class='tb-lesson-top'><b class='tb-subject-initials'>{esc(subject_initials(lesson['subject_name']))}</b><span>{duration}P</span></div><div class='tb-meta'>{esc(lesson['teacher_name'])}</div><div class='tb-meta'>⌂ {room_label}</div>{manage_html}</div>""")
+                            cards.append(f"""<div class='tb-lesson' title='{esc(lesson['subject_name'])}' draggable='{'false' if read_only else 'true'}' data-lesson-id='{int(lesson['id'])}' ondragstart='dragTimetableLesson(event)'><div class='tb-lesson-top'><b class='tb-subject-initials'>{esc(str(lesson['subject_initial'] or '').strip().upper() or '—')}</b><span>{duration}P</span></div><div class='tb-meta'>{esc(lesson['teacher_name'])}</div><div class='tb-meta'>⌂ {room_label}</div>{manage_html}</div>""")
                         cells.append(f"<td class='tb-cell tb-cell-multi' data-day-id='{int(day['id'])}' data-period-id='{int(period['id'])}' ondragover='event.preventDefault()' ondrop='dropTimetableLesson(event,this)'>{''.join(cards)}</td>")
                     elif continued_lessons:
                         continued_html = "".join(
-                            f"<div class='tb-continued-item' title='{esc(item['subject_name'])}'>↳ {esc(subject_initials(item['subject_name']))} continues</div>"
+                            f"<div class='tb-continued-item' title='{esc(item['subject_name'])}'>↳ {esc(str(item['subject_initial'] or '').strip().upper() or '—')} continues</div>"
                             for item in continued_lessons
                         )
                         cells.append(f"<td class='tb-cell tb-continued' data-day-id='{int(day['id'])}' data-period-id='{int(period['id'])}' ondragover='event.preventDefault()' ondrop='dropTimetableLesson(event,this)'>{continued_html}</td>")
