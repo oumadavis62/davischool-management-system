@@ -590,24 +590,21 @@ def register_timetable_builder_routes(app, get_db, get_school_obj, module_page):
             for x in advanced_sessions
         ) or "<tr><td colspan='7' class='tb-empty-cell'>No advanced sessions placed yet.</td></tr>"
         advanced_session_table = f"""<section class='tb-panel tb-data-section'><div class='tb-section-head'><div><span class='tb-kicker'>SAVED ADVANCED SESSIONS</span><h3>Combined classes and team-taught lessons</h3><p>Saved normalized sessions and dated placements.</p></div><span class='tb-count'>{len(advanced_sessions)} records</span></div><div class='tb-table-scroll'><table class='tb-data-table'><thead><tr><th>Day / date</th><th>Time</th><th>Subject / activity</th><th>Classes</th><th>Teaching team</th><th>Room</th><th>Actions</th></tr></thead><tbody>{advanced_session_rows}</tbody></table></div></section>"""
-        def swap_filter_value(value):
-            return str(value or "").strip()
-        swap_filter_specs = [
-            ("class", "Class / stream", sorted({swap_filter_value(str(x["class_name"]) + ((" " + str(x["stream"])) if x["stream"] else "")) for x in lessons if swap_filter_value(x["class_name"])} , key=str.casefold)),
-            ("subject", "Subject", sorted({swap_filter_value(x["subject_name"]) for x in lessons if swap_filter_value(x["subject_name"])}, key=str.casefold)),
-            ("teacher", "Teacher", sorted({swap_filter_value(x["teacher_name"]) for x in lessons if swap_filter_value(x["teacher_name"])}, key=str.casefold)),
-            ("day", "Day", sorted({swap_filter_value(x["day_name"]) for x in lessons if swap_filter_value(x["day_name"])}, key=str.casefold)),
-            ("period", "Period", sorted({swap_filter_value(x["period_label"]) for x in lessons if swap_filter_value(x["period_label"])}, key=str.casefold)),
-        ]
-        swap_filter_controls = "".join(
-            f"<label>{label}<select data-swap-filter='{key}'><option value=''>All {label.lower()}s</option>{''.join(f'<option value="{esc(value)}">{esc(value)}</option>' for value in values)}</select></label>"
-            for key,label,values in swap_filter_specs
-        )
-        swap_lesson_options = "<option value=''>Select a lesson</option>" + "".join(
-            f"<option value='{int(x['id'])}' data-class='{esc(str(x['class_name']) + ((' ' + str(x['stream'])) if x['stream'] else ''))}' data-subject='{esc(x['subject_name'])}' data-teacher='{esc(x['teacher_name'])}' data-day='{esc(x['day_name'])}' data-period='{esc(x['period_label'])}'>{esc(x['day_name'])} · {esc(x['period_label'])} · {esc(x['class_name'])}{(' ' + esc(x['stream'])) if x['stream'] else ''} · {esc(x['subject_name'])} · {esc(x['teacher_name'])} ({int(x['duration_periods'] or 1)}P)</option>"
+        swap_lesson_options = "<option value=''>Choose a lesson…</option>" + "".join(
+            f"<option value='{int(x['id'])}' data-class='{esc(str(x['class_name']) + ((' ' + str(x['stream'])) if x['stream'] else ''))}' data-subject='{esc(x['subject_name'])}' data-teacher='{esc(x['teacher_name'])}' data-day='{esc(x['day_name'])}' data-period='{esc(x['period_label'])}' data-duration='{int(x['duration_periods'] or 1)}'>{esc(x['day_name'])} · {esc(x['period_label'])} · {esc(x['class_name'])}{(' ' + esc(x['stream'])) if x['stream'] else ''} · {esc(x['subject_name'])} · {esc(x['teacher_name'])} ({int(x['duration_periods'] or 1)}P)</option>"
             for x in lessons
         )
-        swap_form = f"""<section class='tb-panel tb-swap-panel'><p>Filter the timetable first, then choose the two lessons to exchange. Teacher, subject and room assignments stay with each lesson.</p><div class='tb-swap-filters'>{swap_filter_controls}</div><div class='tb-swap-count' data-swap-count>{len(lessons)} lessons available</div><form method='post' action='/app/timetable/builder/swap' class='tb-add-form tb-swap-selects' onsubmit="return confirm('Swap the positions of these two lessons?')"><input type='hidden' name='profile_id' value='{pid}'><input type='hidden' name='ds_tab' value='{esc(tab_id)}'><label class='wide'>First lesson<select name='first_lesson_id' data-swap-lesson required>{swap_lesson_options}</select><span class='tb-swap-preview' data-swap-preview>Choose the first lesson to see its full details.</span></label><label class='wide'>Second lesson<select name='second_lesson_id' data-swap-lesson required>{swap_lesson_options}</select><span class='tb-swap-preview' data-swap-preview>Choose the second lesson to see its full details.</span></label><button class='tb-btn'>⇄ Swap positions</button></form></section>""" if not read_only and len(lessons) > 1 else ""
+        swap_form = f"""<section class='tb-panel tb-swap-panel'>
+          <p class='tb-swap-help'>Choose the two lessons whose time slots you want to exchange. Search by class, subject, teacher, day or period.</p>
+          <form method='post' action='/app/timetable/builder/swap' class='tb-swap-selects' onsubmit="return confirm('Swap the positions of these two lessons?')">
+            <input type='hidden' name='profile_id' value='{pid}'><input type='hidden' name='ds_tab' value='{esc(tab_id)}'>
+            <div class='tb-swap-choice'><span class='tb-swap-step'>1</span><label>First lesson<input type='search' class='tb-swap-search' data-swap-search placeholder='Search lessons…' autocomplete='off'><select name='first_lesson_id' data-swap-lesson required>{swap_lesson_options}</select><span class='tb-swap-preview' data-swap-preview>Select a lesson to view its details.</span></label></div>
+            <div class='tb-swap-direction' aria-hidden='true'>⇅</div>
+            <div class='tb-swap-choice'><span class='tb-swap-step'>2</span><label>Second lesson<input type='search' class='tb-swap-search' data-swap-search placeholder='Search lessons…' autocomplete='off'><select name='second_lesson_id' data-swap-lesson required>{swap_lesson_options}</select><span class='tb-swap-preview' data-swap-preview>Select a lesson to view its details.</span></label></div>
+            <div class='tb-swap-note'>Only the timetable positions change. Class, subject, teacher and room assignments remain attached to their lessons.</div>
+            <button class='tb-btn' type='submit'>⇄ Swap positions</button>
+          </form>
+        </section>""" if not read_only and len(lessons) > 1 else ""
         builder_tools = [
             ("add","＋ Add lesson", bool(not read_only and allocations and days and periods)),
             ("swap","⇄ Swap lessons", bool(not read_only and len(lessons) > 1)),
@@ -651,7 +648,7 @@ def register_timetable_builder_routes(app, get_db, get_school_obj, module_page):
         .tb-lesson-top{{position:static;display:flex;justify-content:center;align-items:center;gap:9px;font-size:10px;width:100%}}.tb-lesson-top span{{position:absolute;top:4px;right:5px;z-index:1;font-size:8px;background:#d5e9d9;border-radius:10px;padding:2px 5px;white-space:nowrap}}.tb-subject-initials{{font-size:12px;letter-spacing:.5px;font-weight:900}}.tb-lesson-top span{{font-size:9px;background:#d5e9d9;border-radius:10px;padding:2px 5px;white-space:nowrap}}.tb-class{{font-size:9px;font-weight:800;margin-top:3px}}.tb-meta{{font-size:8px;color:#55705d;margin-top:2px}}.tb-room-label{{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:0 2px}}.tb-lesson-footer{{display:flex;align-items:center;justify-content:flex-end;width:100%;min-height:14px;margin-top:auto;gap:5px}}.tb-teacher-initials{{display:inline-flex;align-items:center;justify-content:center;min-width:20px;height:16px;padding:0 4px;box-sizing:border-box;border-radius:5px;background:color-mix(in srgb,var(--teacher-color) 78%,#173b29);color:#fff;text-shadow:0 1px 1px rgba(0,0,0,.22);font-size:8px;font-weight:950;letter-spacing:.04em;line-height:1}}
         .tb-actions{{position:relative;margin:0;font-size:9px;line-height:1}}.tb-actions summary{{cursor:pointer;color:#17633b;font-weight:900;list-style:none;white-space:nowrap;padding:2px 4px;border-radius:5px;background:rgba(255,255,255,.72)}}.tb-actions summary::-webkit-details-marker{{display:none}}.tb-actions summary:before{{content:'⋯';font-size:13px;margin-right:2px}}.tb-actions[open]{{position:absolute;right:3px;bottom:3px;z-index:20;width:150px;padding:7px;border:1px solid #cfe0d1;border-radius:8px;background:#fff;box-shadow:0 5px 18px rgba(20,60,30,.18);text-align:left}}.tb-actions form{{display:grid;gap:6px;margin-top:6px}}.tb-small,.tb-delete{{padding:9px;border:0;border-radius:8px;font-size:11px;font-weight:800;cursor:pointer}}.tb-small{{background:#287447;color:white}}.tb-delete{{background:#fff0ef;color:#a12828}}
         .tb-section-head{{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:12px;flex-wrap:wrap}}.tb-count{{padding:6px 10px;border-radius:999px;background:#edf6ee;color:#34764b;font-size:10px;font-weight:900;white-space:nowrap}}.tb-table-scroll{{overflow:auto;border:1px solid #e0eae1;border-radius:12px}}.tb-data-table{{width:100%;min-width:760px;border-collapse:collapse;background:#fff;font-size:11px}}.tb-data-table th{{background:#edf5ee;color:#315b3e;text-align:left;font-size:10px;letter-spacing:.03em;padding:11px 10px;white-space:nowrap}}.tb-data-table td{{padding:10px;border-top:1px solid #edf2ed;color:#3d5945;vertical-align:middle}}.tb-data-table tr:hover td{{background:#f8fcf8}}.tb-empty-cell{{text-align:center!important;color:#87988b!important;padding:22px!important}}.tb-row-actions summary{{cursor:pointer;color:#17633b;font-weight:900}}.tb-row-actions form{{display:grid;gap:7px;padding:8px 0}}.tb-row-actions label{{display:grid;gap:4px;font-size:10px;font-weight:800}}.tb-row-actions select{{padding:7px;border:1px solid #d5e4d7;border-radius:8px;min-width:110px}}.tb-row-actions button:disabled{{opacity:.45;cursor:not-allowed}}.tb-action-stack{{display:grid;gap:8px;min-width:135px}}.tb-action-stack>form{{margin:0}}.tb-row-actions{{min-width:135px}}.tb-row-actions[open]{{padding:8px;border:1px solid #dce9de;border-radius:9px;background:#fbfdfb}}.tb-row-actions form button{{width:100%;min-height:36px}}.tb-alert{{padding:11px 14px;border-radius:10px;margin-bottom:12px;font-size:12px;font-weight:700}}.tb-alert.success{{background:#eaf5ec;color:#17633b}}.tb-alert.error{{background:#fff1f0;color:#a12828}}.tb-empty{{padding:30px;text-align:center;color:#647b6a;background:#fff;border:1px dashed #cdddcf;border-radius:13px}}
-        .tb-toolbar.tb-toolbar{{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 14px}}.tb-tool-button{{border:1px solid #cfe2d2;border-radius:10px;background:#fff;color:#286743;padding:10px 13px;font-size:11px;font-weight:850;cursor:pointer;box-shadow:0 2px 7px rgba(35,83,51,.05)}}.tb-tool-button:hover{{background:#eaf5ec;border-color:#9fc9a7}}.tb-swap-filters{{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px;margin:12px 0 7px}}.tb-swap-filters label{{display:flex;flex-direction:column;gap:5px;color:#3b5946;font-size:11px;font-weight:800}}.tb-swap-filters select{{width:100%;min-width:0;padding:9px 10px;border:1px solid #d5e4d7;border-radius:9px;background:#fbfdfb;color:#234638;font-size:12px}}.tb-swap-count{{margin:4px 0 10px;color:#62806b;font-size:11px;font-weight:800}}.tb-swap-preview{{display:block;margin-top:7px;padding:9px 11px;border:1px solid #dce9de;border-radius:9px;background:#f2f8f3;color:#315b3e;font-size:11px;font-weight:700;line-height:1.5;white-space:normal}}.tb-swap-selects{{display:grid;grid-template-columns:1fr 1fr;gap:10px}}.tb-swap-selects .wide{{grid-column:auto}}.tb-swap-selects button{{grid-column:1/-1;justify-self:start}}@media(max-width:700px){{.tb-swap-filters{{grid-template-columns:repeat(2,minmax(0,1fr))}}.tb-swap-selects{{grid-template-columns:1fr}}}}.tb-modal-dialog>.tb-panel{{margin:0 0 12px}}.tb-modal-dialog .tb-table-scroll{{max-height:52vh;overflow:auto}}
+        .tb-toolbar.tb-toolbar{{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 14px}}.tb-tool-button{{border:1px solid #cfe2d2;border-radius:10px;background:#fff;color:#286743;padding:10px 13px;font-size:11px;font-weight:850;cursor:pointer;box-shadow:0 2px 7px rgba(35,83,51,.05)}}.tb-tool-button:hover{{background:#eaf5ec;border-color:#9fc9a7}}.tb-swap-help{{margin:0 0 14px;color:#62796a;font-size:12px;line-height:1.5}}.tb-swap-selects{{display:grid;grid-template-columns:1fr;gap:11px}}.tb-swap-choice{{display:grid;grid-template-columns:30px minmax(0,1fr);gap:9px;align-items:start;padding:12px;border:1px solid #dce9de;border-radius:13px;background:#fff}}.tb-swap-step{{display:flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:50%;background:#e8f4e9;color:#24683e;font-size:12px;font-weight:900}}.tb-swap-choice label{{display:flex;flex-direction:column;gap:7px;color:#315440;font-size:12px;font-weight:850}}.tb-swap-search,.tb-swap-choice select{{width:100%;min-width:0;padding:10px 11px;border:1px solid #d5e4d7;border-radius:9px;background:#fbfdfb;color:#234638;font-size:13px}}.tb-swap-preview{{display:block;padding:9px 11px;border-radius:9px;background:#f0f7f1;color:#315b3e;font-size:11px;font-weight:700;line-height:1.5;white-space:normal}}.tb-swap-direction{{text-align:center;color:#6b9b77;font-size:19px;font-weight:900;line-height:12px}}.tb-swap-note{{padding:9px 11px;border-left:3px solid #83b78d;background:#f2f8f3;color:#587260;font-size:11px;line-height:1.5}}.tb-swap-selects button{{justify-self:start}}.tb-modal-dialog>.tb-panel{{margin:0 0 12px}}.tb-modal-dialog .tb-table-scroll{{max-height:52vh;overflow:auto}}
         .tb-modal{{position:fixed;inset:0;z-index:10060;display:none;align-items:center;justify-content:center;padding:18px;background:rgba(20,43,30,.5);backdrop-filter:blur(5px)}}.tb-modal.is-open{{display:flex;animation:tbFade .16s ease-out}}.tb-modal-dialog{{width:min(680px,100%);max-height:88vh;overflow:auto;padding:25px;background:linear-gradient(145deg,#fff,#f3f9f3);border:1px solid #d5e6d8;border-radius:22px;box-shadow:0 24px 70px rgba(18,52,31,.25);animation:tbPop .18s ease-out}}
         .tb-modal-head{{display:flex;justify-content:space-between;align-items:flex-start;gap:14px;margin-bottom:19px}}.tb-modal-head h3{{font-size:20px;margin:4px 0;color:#214a34}}.tb-modal-head p{{font-size:12px;color:#718477;margin:0}}.tb-modal-close{{border:0;width:36px;height:36px;border-radius:11px;background:#eaf4eb;color:#326a43;font-size:22px;cursor:pointer;flex:none}}
         .tb-modal .tb-add-form{{grid-template-columns:repeat(2,minmax(0,1fr))}}.tb-modal .tb-add-form label.wide,.tb-modal .tb-add-form button{{grid-column:1/-1}}.tb-modal .tb-actions form{{display:grid;grid-template-columns:1fr 1fr;gap:11px}}.tb-modal .tb-actions form button{{grid-column:1/-1}}.tb-manage-button{{border:0;background:transparent;color:#17643e;font-size:10px;font-weight:900;text-decoration:underline;padding:2px 4px;cursor:pointer;white-space:nowrap}}.tb-modal .tb-actions label{{min-width:0}}
@@ -672,40 +669,37 @@ def register_timetable_builder_routes(app, get_db, get_school_obj, module_page):
           document.addEventListener('keydown',function(event){{if(event.key==='Escape')closeAll();}});
           const swapModal=document.getElementById('tb-modal-swap');
           if(swapModal){{
-            const filters=Array.from(swapModal.querySelectorAll('[data-swap-filter]'));
+            const searches=Array.from(swapModal.querySelectorAll('[data-swap-search]'));
             const lessonSelects=Array.from(swapModal.querySelectorAll('[data-swap-lesson]'));
-            const count=swapModal.querySelector('[data-swap-count]');
             const previews=Array.from(swapModal.querySelectorAll('[data-swap-preview]'));
             const allOptions=lessonSelects.length?Array.from(lessonSelects[0].options).slice(1):[];
+            function refreshChoices(){{
+              lessonSelects.forEach(function(select,index){{
+                const search=(searches[index]&&searches[index].value||'').trim().toLowerCase();
+                const other=lessonSelects[1-index];
+                const otherValue=other?other.value:'';
+                Array.from(select.options).slice(1).forEach(function(option){{
+                  const matches=!search||option.textContent.toLowerCase().includes(search);
+                  const duplicate=!!otherValue&&option.value===otherValue;
+                  option.hidden=!matches||duplicate;
+                  option.disabled=!matches||duplicate;
+                }});
+                if(select.selectedOptions.length&&select.selectedOptions[0].disabled)select.value='';
+              }});
+              updateSwapPreviews();
+            }}
             function updateSwapPreviews(){{
               lessonSelects.forEach(function(select,index){{
                 const option=select.selectedOptions&&select.selectedOptions[0];
                 const preview=previews[index];
                 if(!preview)return;
-                if(!option||!option.value){{preview.textContent=index===0?'Choose the first lesson to see its full details.':'Choose the second lesson to see its full details.';return;}}
-                const parts=[option.dataset.subject,option.dataset.class,option.dataset.teacher,option.dataset.day,option.dataset.period].filter(Boolean);
-                preview.textContent=parts.join(' · ');
+                if(!option||!option.value){{preview.textContent='Select a lesson to view its details.';return;}}
+                preview.textContent=[option.dataset.subject,option.dataset.class,option.dataset.teacher,option.dataset.day,option.dataset.period,(option.dataset.duration||'1')+' period(s)'].filter(Boolean).join(' · ');
               }});
             }}
-            function applySwapFilters(){{
-              const active={{}};filters.forEach(function(filter){{active[filter.dataset.swapFilter]=filter.value;}});
-              let visible=0;
-              lessonSelects.forEach(function(select){{
-                const previous=select.value;
-                Array.from(select.options).slice(1).forEach(function(option){{
-                  const show=Object.keys(active).every(function(key){{return !active[key]||option.dataset[key]===active[key];}});
-                  option.hidden=!show;option.disabled=!show;if(show)visible++;
-                }});
-                if(previous&&Array.from(select.options).some(function(option){{return option.value===previous&&!option.disabled;}}))select.value=previous;
-                else select.value='';
-              }});
-              const uniqueVisible=allOptions.filter(function(option){{return Object.keys(active).every(function(key){{return !active[key]||option.dataset[key]===active[key];}});}}).length;
-              if(count)count.textContent=uniqueVisible+' matching lessons · filters apply to both selections';
-            }}
-            filters.forEach(function(filter){{filter.addEventListener('change',applySwapFilters);}});
-            lessonSelects.forEach(function(select){{select.addEventListener('change',updateSwapPreviews);}});
-            applySwapFilters();
-            updateSwapPreviews();
+            searches.forEach(function(search){{search.addEventListener('input',refreshChoices);}});
+            lessonSelects.forEach(function(select){{select.addEventListener('change',refreshChoices);}});
+            refreshChoices();
           }}
         }})();
         function dragTimetableLesson(event){{var card=event.target.closest('[data-lesson-id]');if(card)event.dataTransfer.setData('text/plain',card.dataset.lessonId);}}
