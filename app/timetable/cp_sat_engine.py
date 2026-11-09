@@ -94,7 +94,10 @@ def _build_and_solve(
                 for learner_id in learner_ids for placed in fixed_by_learner[(learner_id, day)]
             ):
                 continue
-            room_ids = [candidate["room_id"]] if "room_id" in candidate else rooms_for_task(task)
+            room_ids = (
+                [candidate["room_id"]] if "room_id" in candidate
+                else list(candidate.get("allowed_room_ids", rooms_for_task(task)))
+            )
             for room_id in room_ids:
                 if (task_index, day, int(candidate["period_id"]), room_id) in blocked_candidates:
                     continue
