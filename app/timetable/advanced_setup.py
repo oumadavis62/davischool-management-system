@@ -324,9 +324,9 @@ def save_requirement_session_pattern(connection: Any, school_id: int, profile_id
                            int(period_id) if period_id is not None else None, label))
         total_periods += duration
     expected = int(requirement["lessons_per_week"]) * int(requirement["duration_periods"] or 1)
-    if total_periods != expected:
+    if total_periods > expected:
         raise TimetableSetupError(
-            f"Lesson pattern totals {total_periods} periods; this subject requires exactly {expected} periods per week."
+            f"These sessions use {total_periods} periods, exceeding the weekly limit of {expected}. Remove {total_periods - expected} period(s)."
         )
     try:
         cur.execute(
