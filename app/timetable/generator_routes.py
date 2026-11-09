@@ -287,7 +287,7 @@ def register_timetable_generator_routes(app, get_db, get_school_obj, module_page
         run_rows = "".join(render_run_row(r) for r in runs) or "<tr><td colspan='6' class='ag-muted'>No generation runs yet.</td></tr>"
         ready = bool(days and periods and (requirements or advanced_instructional_requirements) and not read_only)
         action_html = (
-            f"""<div class='ag-generate-form'><button type='button' class='ag-btn' onclick="ttRunGenerator(this,'/app/timetable/automatic/generate',{pid},'complete')" {'disabled' if not tab_id else ''}>⚡ Generate complete timetable</button></div>"""
+            f"""<div class='ag-generate-form'><button type='button' class='ag-btn' onclick="ttRunGenerator(this,'/app/timetable/automatic/generate',{pid},'complete')">⚡ Generate complete timetable</button></div>"""
             if ready else
             (f"""<div class='ag-warning'>This profile is {esc(selected['status']).replace('_',' ')} and is read-only. Create a new draft revision before generating or changing its timetable.</div><a class='ag-btn secondary' href='/app/timetable/publishing?profile_id={pid}'>Create Revision</a>""" if read_only else
              f"""<div class='ag-warning'>Complete the setup requirements first: add instructional days, teaching periods and a weekly requirement for every current class-subject-teacher allocation.</div><a class='ag-btn secondary' href='/app/timetable/setup?profile_id={pid}'>Complete Setup</a>""")
