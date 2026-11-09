@@ -10,7 +10,7 @@ from app.timetable.setup import TimetableSetupError, _profile
 from app.timetable.session_engine import _validate_constraints
 
 
-ENGINE_VERSION = "1.9"
+ENGINE_VERSION = "10.0"
 DEFAULT_NODE_LIMIT = 10_000_000
 GENERATION_TIME_LIMIT_SECONDS = 20.0
 
@@ -389,8 +389,8 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
                 "max_periods_per_day": int(class_limits[key[0]]["max_periods_per_day"]) if key[0] in class_limits and class_limits[key[0]]["max_periods_per_day"] is not None else None,
                 "occurrence": occurrence + 1,
             })
-    if len(tasks) > 700:
-        raise TimetableSetupError("This timetable contains more than 700 unscheduled lesson occurrences. Split the generation by school section or reduce the weekly requirements.")
+    if len(tasks) > 20_000:
+        raise TimetableSetupError("This timetable exceeds the supported 20,000 unscheduled lesson-occurrence capacity. Reduce duplicate requirements or generate the school in separate timetable profiles.")
 
     # Existing manual lessons are fixed anchors. A previous automatic version
     # is excluded from the search and is replaced only after a complete solution.
@@ -906,17 +906,7 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
                 return False
         return False
 
-    # Reserve time for the fallback pass. Previously the strict pass could
-    # consume the entire shared deadline, meaning fallback-only slots were
-    # never considered even when they could complete the timetable.
-    strict_started_at = time.monotonic()
-    remaining_budget = max(0.0, deadline - strict_started_at)
-    active_deadline = min(deadline, strict_started_at + remaining_budget * 0.60)
-    generated = search(False)
-    strict_nodes = nodes
-    strict_stop_reason = exhausted_reason
-    strict_elapsed = round(time.monotonic() - strict_started_at, 3)
-    if not generated and time.monotonic() < deadline:
+    def reset_search_state():
         placements[:] = list(fixed)
         class_week.clear()
         class_day_periods.clear()
@@ -924,15 +914,76 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
         class_intervals.clear()
         teacher_intervals.clear()
         room_intervals.clear()
-        for item in fixed:
-            index_placement(item, 1)
+        for fixed_item in fixed:
+            index_placement(fixed_item, 1)
+        assigned.clear()
+        last_rank_by_group.clear()
+
+    def large_schedule_pass(fallback: bool) -> bool:
+        """Greedy, non-recursive pass for large school-wide schedules."""
+        nonlocal nodes, exhausted, exhausted_reason
+        for group_id in search_group_order:
+            for task_index in symmetry_members[group_id]:
+                task = tasks[task_index]
+                placed = False
+                minimum_rank = last_rank_by_group.get(group_id, -1)
+                room_ids = _rooms_for_task(task)
+                for candidate_rank, candidate in enumerate(candidate_lookup[task_index]):
+                    if candidate_rank <= minimum_rank:
+                        continue
+                    if time.monotonic() >= active_deadline:
+                        exhausted = True
+                        exhausted_reason = "deadline" if active_deadline >= deadline else "strict_pass_budget"
+                        return False
+                    if not fallback and not candidate.get("explicitly_available"):
+                        continue
+                    for room_id in room_ids:
+                        nodes += 1
+                        if nodes > int(node_limit):
+                            exhausted = True
+                            exhausted_reason = "node_limit"
+                            return False
+                        if (task_index, candidate["day_id"], candidate["period_id"], room_id) in blocked_candidates:
+                            continue
+                        placement = dict(candidate, room_id=room_id)
+                        if not indexed_can_place(task, placement):
+                            continue
+                        placement.update({
+                            "class_id": task["class_id"],
+                            "subject_id": task["subject_id"],
+                            "teacher_id": task["teacher_id"],
+                            "fixed": False,
+                            "_symmetry_group": group_id,
+                            "_candidate_rank": candidate_rank,
+                        })
+                        placements.append(placement)
+                        index_placement(placement, 1)
+                        last_rank_by_group[group_id] = candidate_rank
+                        placed = True
+                        break
+                    if placed:
+                        break
+                if not placed:
+                    return False
+        return True
+
+    # Larger timetables use a non-recursive fail-first pass to avoid Python
+    # recursion depth and repeated MRV domain rescans. Smaller ones retain full backtracking.
+    strict_started_at = time.monotonic()
+    remaining_budget = max(0.0, deadline - strict_started_at)
+    active_deadline = min(deadline, strict_started_at + remaining_budget * 0.60)
+    large_schedule = len(tasks) > 700
+    generated = large_schedule_pass(False) if large_schedule else search(False)
+    strict_nodes = nodes
+    strict_stop_reason = exhausted_reason
+    strict_elapsed = round(time.monotonic() - strict_started_at, 3)
+    if not generated and time.monotonic() < deadline:
+        reset_search_state()
         nodes = 0
         exhausted = False
         exhausted_reason = None
         active_deadline = deadline
-        assigned.clear()
-        last_rank_by_group.clear()
-        generated = search(True)
+        generated = large_schedule_pass(True) if large_schedule else search(True)
         fallback_nodes = nodes
         fallback_stop_reason = exhausted_reason
 
