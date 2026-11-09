@@ -1168,7 +1168,6 @@ def generate_advanced_instructional_sessions(connection: Any, school_id: int,
     # in memory and can otherwise leave Supabase table locks open for minutes.
     connection.commit()
 
-    order = sorted(range(len(tasks)), key=lambda i: (len(candidates[i]), -tasks[i]["duration"], tasks[i]["requirement_id"], tasks[i]["session_no"]))
     planned = []
     nodes = 0
 
@@ -1203,25 +1202,45 @@ def generate_advanced_instructional_sessions(connection: Any, school_id: int,
                 return False
         return True
 
-    def search(position):
+    # Dynamic minimum-remaining-values search. A fixed ordering can consume
+    # the only consecutive two-period windows with single lessons before the
+    # double lessons are considered. Recalculate each unplaced task's viable
+    # domain after every placement, then schedule the most constrained task
+    # first (duration is the deterministic tie-breaker). This preserves all
+    # configured constraints while allowing backtracking to rearrange singles
+    # around scarce double-period windows.
+    remaining = set(range(len(tasks)))
+
+    def search():
         nonlocal nodes
-        if position == len(order):
+        if not remaining:
             return True
-        index = order[position]
-        task = tasks[index]
-        for option in candidates[index]:
+        best_index = None
+        best_options = None
+        best_key = None
+        for index in sorted(remaining):
+            task = tasks[index]
+            viable = [option for option in candidates[index] if compatible(task, option)]
+            if not viable:
+                return False
+            key = (len(viable), -int(task["duration"]),
+                   int(task["requirement_id"]), int(task["session_no"]))
+            if best_key is None or key < best_key:
+                best_index, best_options, best_key = index, viable, key
+        task = tasks[best_index]
+        for option in best_options:
             nodes += 1
             if nodes > int(node_limit):
                 return False
-            if not compatible(task, option):
-                continue
             planned.append({"task": task, "option": option})
-            if search(position + 1):
+            remaining.remove(best_index)
+            if search():
                 return True
+            remaining.add(best_index)
             planned.pop()
         return False
 
-    if not search(0):
+    if not search():
         raise TimetableSetupError("The normalized requirements cannot all fit without clashes under the configured constraints.")
 
     now = _now()
