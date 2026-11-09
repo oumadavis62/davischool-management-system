@@ -420,7 +420,7 @@ def register_timetable_builder_routes(app, get_db, get_school_obj, module_page):
                             if can_merge and duration > cell_span:
                                 cell_span = duration
                                 merged_period_ids.update(int(p["id"]) for p in span_periods[1:])
-                            room_label = esc(lesson["room_name"] or "Room not assigned")
+                            room_html = f"<div class='tb-meta tb-room-label'>⌂ {esc(lesson['room_name'])}</div>" if lesson["room_name"] else ""
                             move_day_opts = "".join(
                                 f"<option value='{int(d['id'])}' {'selected' if int(d['id'])==int(lesson['day_id']) else ''}>{esc(d['day_name'])}</option>" for d in days
                             )
@@ -441,7 +441,7 @@ def register_timetable_builder_routes(app, get_db, get_school_obj, module_page):
                             if not teacher_initials:
                                 name_parts = [part for part in str(lesson["teacher_name"] or "").split() if part]
                                 teacher_initials = "".join(part[0] for part in (name_parts[:1] + (name_parts[-1:] if len(name_parts) > 1 else []))).upper()[:4] or "—"
-                            cards.append(f"""<div class='tb-lesson {'tb-lesson-double' if duration > 1 else ''}' style='--teacher-color:{teacher_color}' title='{esc(lesson['subject_name'])} · {esc(lesson['teacher_name'])}' draggable='{'false' if read_only else 'true'}' data-lesson-id='{int(lesson['id'])}' ondragstart='dragTimetableLesson(event)'><div class='tb-lesson-top'><b class='tb-subject-initials'>{esc(str(lesson['subject_initial'] or '').strip().upper() or '—')}</b><span>{duration}P</span></div><div class='tb-meta tb-room-label'>⌂ {room_label}</div><div class='tb-lesson-footer'><span class='tb-teacher-initials' title='{esc(lesson['teacher_name'])}'>{esc(teacher_initials)}</span>{manage_html}</div></div>""")
+                            cards.append(f"""<div class='tb-lesson {'tb-lesson-double' if duration > 1 else ''}' style='--teacher-color:{teacher_color}' title='{esc(lesson['subject_name'])} · {esc(lesson['teacher_name'])}' draggable='{'false' if read_only else 'true'}' data-lesson-id='{int(lesson['id'])}' ondragstart='dragTimetableLesson(event)'><div class='tb-lesson-top'><b class='tb-subject-initials'>{esc(str(lesson['subject_initial'] or '').strip().upper() or '—')}</b><span>{duration}P</span></div>{room_html}<div class='tb-lesson-footer'><span class='tb-teacher-initials' title='{esc(lesson['teacher_name'])}'>{esc(teacher_initials)}</span>{manage_html}</div></div>""")
                         cells.append(f"<td class='tb-cell tb-cell-multi {'tb-cell-double' if cell_span > 1 else ''}' colspan='{cell_span}' data-day-id='{int(day['id'])}' data-period-id='{int(period['id'])}' ondragover='event.preventDefault()' ondrop='dropTimetableLesson(event,this)'>{''.join(cards)}</td>")
                     elif continued_lessons:
                         continued_html = "".join(
