@@ -415,7 +415,7 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
             for x in class_records
         )
         class_limit_form = f"""<section class='tt-section'><div class='tt-section-title'><div><span class='tt-kicker'>08 · CLASS WORKLOAD LIMITS</span><h3>Maximum weekly lessons and daily periods</h3><p>Set a ceiling independently for each class or stream. Double and triple lessons count by their actual period duration toward the daily period ceiling.</p></div></div><div class='tt-split'><form method='post' data-native-post='true' action='/app/timetable/setup/class-limits' class='tt-form compact'>{hidden}<label class='wide'>Class / stream<select name='class_id' required><option value=''>Select class or stream</option>{class_limit_class_opts}</select></label><label>Maximum lessons per week<input name='max_lessons_per_week' type='number' min='1' max='100' placeholder='No limit'></label><label>Maximum periods per day<input name='max_periods_per_day' type='number' min='1' max='30' placeholder='No limit'></label><label class='wide'>Notes<input name='notes' maxlength='180' placeholder='Optional workload guidance'></label><button class='tt-btn'>Save class workload limits</button></form><div class='tt-table'><table><tr><th>Class / stream</th><th>Max lessons / week</th><th>Max periods / day</th><th>Notes</th><th>Actions</th></tr>{class_limit_rows}</table></div></div></section>"""
-                teacher_color_rows = "".join(
+        teacher_color_rows = "".join(
             f"<tr><td><b>{esc(t['name'])}</b></td><td><form method='post' data-native-post='true' action='/app/timetable/setup/teacher-color' class='tt-teacher-color-form'>{hidden}<input type='hidden' name='teacher_id' value='{int(t['id'])}'><input aria-label='Colour for {esc(t['name'])}' type='color' name='teacher_color' value='{esc(t['teacher_color'] or '#2563EB', True)}' required><span class='tt-teacher-color-code'>{esc(t['teacher_color'] or '#2563EB')}</span><button class='tt-btn'>Save colour</button></form></td></tr>"
             for t in teachers
         ) or "<tr><td colspan='2' class='tt-muted'>No teachers are registered yet.</td></tr>"
@@ -425,7 +425,7 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
           <style>.tt-teacher-colours .tt-teacher-color-form{{display:flex;align-items:center;gap:10px;flex-wrap:wrap}}.tt-teacher-colours input[type=color]{{width:52px;height:38px;padding:2px;border:1px solid #d5e4d7;border-radius:9px;background:#fff;cursor:pointer}}.tt-teacher-color-code{{font:700 11px ui-monospace,monospace;color:#607669;min-width:65px}}.tt-teacher-colours table{{min-width:360px}}</style>
           <div class='tt-table'><table><thead><tr><th>Teacher</th><th>Lesson card colour</th></tr></thead><tbody>{teacher_color_rows}</tbody></table></div>
         </section>"""
-# Current allocation monitor: compare the weekly lessons configured for each
+        # Current allocation monitor: compare the weekly lessons configured for each
         # allocated class/stream with its own workload ceiling before generation.
         requirements_by_allocation = {
             (int(r["class_id"]), int(r["subject_id"]), int(r["teacher_id"])): r
