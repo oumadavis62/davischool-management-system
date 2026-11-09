@@ -10,7 +10,7 @@ from app.timetable.setup import TimetableSetupError, _profile
 from app.timetable.session_engine import _validate_constraints
 
 
-ENGINE_VERSION = "10.0"
+ENGINE_VERSION = "10.1"
 DEFAULT_NODE_LIMIT = 10_000_000
 GENERATION_TIME_LIMIT_SECONDS = 20.0
 
@@ -608,6 +608,7 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
     # task/day/period/room combination, multiplying database round-trips.
     from collections import defaultdict
     blocked_candidates = set()
+    blocked_candidate_counts = {}
     existing_by_id = {}
     conflict_sql = """SELECT s.id,s.day_id,s.start_time,s.end_time,s.room_id,
                               sc.class_id,st.teacher_id
@@ -657,6 +658,7 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
                         blocked_candidates.add((
                             task_index, candidate["day_id"], candidate["period_id"], room_id
                         ))
+                        blocked_candidate_counts[task_index] = blocked_candidate_counts.get(task_index, 0) + 1
                         break
 
     # All database-backed inputs and conflict checks are now materialised.
@@ -743,39 +745,46 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
     for item in fixed:
         index_placement(item, 1)
 
+    rejection_counts = {}
+    rejection_by_requirement = {}
+
     def indexed_can_place(task, candidate):
         class_id = int(task["class_id"])
         teacher_id = int(task["teacher_id"])
+        subject_id = int(task["subject_id"])
         day_id = int(candidate["day_id"])
+        requirement_key = (class_id, subject_id, teacher_id)
+
+        def reject(reason):
+            rejection_counts[reason] = rejection_counts.get(reason, 0) + 1
+            per_requirement = rejection_by_requirement.setdefault(requirement_key, {})
+            per_requirement[reason] = per_requirement.get(reason, 0) + 1
+            return False
+
         if task.get("max_lessons_per_day"):
-            key = (class_id, int(task["subject_id"]), teacher_id, day_id)
+            key = (class_id, subject_id, teacher_id, day_id)
             if subject_day.get(key, 0) >= int(task["max_lessons_per_day"]):
-                return False
+                return reject("configured_subject_daily_limit")
         max_week = task.get("max_lessons_per_week")
         if max_week is not None and class_week.get(class_id, 0) >= int(max_week):
-            return False
+            return reject("configured_class_weekly_limit")
         max_day_periods = task.get("max_periods_per_day")
         if max_day_periods is not None:
             used = class_day_periods.get((class_id, day_id), 0)
             if used + int(candidate.get("duration", 1)) > int(max_day_periods):
-                return False
+                return reject("configured_class_daily_period_limit")
         start, end = candidate["start_time"], candidate["end_time"]
         for interval in class_intervals.get((class_id, day_id), ()):
             if _overlap(start, end, interval[0], interval[1]):
-                return False
-        candidate_start_period = int(candidate.get("period_no", 0))
-        candidate_end_period = int(candidate.get("period_end_no", candidate_start_period))
+                return reject("class_already_has_a_lesson")
         for interval in teacher_intervals.get((teacher_id, day_id), ()):
             if _overlap(start, end, interval[0], interval[1]):
-                return False
-            if (interval[3] + 1 == candidate_start_period
-                    or candidate_end_period + 1 == interval[2]):
-                return False
+                return reject("teacher_has_an_overlapping_lesson")
         room_id = candidate.get("room_id")
         if room_id is not None:
             for interval in room_intervals.get((int(room_id), day_id), ()):
                 if _overlap(start, end, interval[0], interval[1]):
-                    return False
+                    return reject("room_already_booked")
         return True
 
     nodes = 0
@@ -1057,21 +1066,59 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
 
     success = generated
     if not success:
+        class_names = {int(row["id"]): str(row["name"]) for row in cur.execute(
+            "SELECT id,name FROM classes WHERE school_id=?", (school_id,)
+        ).fetchall()}
+        subject_names = {int(row["id"]): str(row["name"]) for row in cur.execute(
+            "SELECT id,name FROM subjects WHERE school_id=?", (school_id,)
+        ).fetchall()}
+        teacher_names = {int(row["id"]): str(row["name"]) for row in cur.execute(
+            "SELECT id,name FROM teachers WHERE school_id=?", (school_id,)
+        ).fetchall()}
+        requirement_diagnostics = []
+        for task_index, task in enumerate(tasks):
+            key = (int(task["class_id"]), int(task["subject_id"]), int(task["teacher_id"]))
+            counts = rejection_by_requirement.get(key, {})
+            requirement_diagnostics.append({
+                "class": class_names.get(key[0], "Class ID " + str(key[0])),
+                "class_id": key[0],
+                "subject": subject_names.get(key[1], "Subject ID " + str(key[1])),
+                "subject_id": key[1],
+                "teacher": teacher_names.get(key[2], "Teacher ID " + str(key[2])),
+                "teacher_id": key[2],
+                "lesson_occurrence": int(task["occurrence"]),
+                "lesson_duration_periods": int(task["duration"]),
+                "candidate_slots_before_conflicts": len(candidate_lookup[task_index]),
+                "blocked_by_existing_shared_sessions": int(blocked_candidate_counts.get(task_index, 0)),
+                "rejections": counts,
+            })
+        requirement_diagnostics.sort(
+            key=lambda item: (item["candidate_slots_before_conflicts"], -sum(item["rejections"].values()))
+        )
+        stop_reason = exhausted_reason or strict_stop_reason or fallback_stop_reason or "all_candidates_exhausted"
+        if stop_reason == "deadline":
+            cause = "The solver reached the 20-second time limit while exploring possible placements."
+            next_step = "Review the most constrained lessons below, then check teacher availability, class limits, room use and manual placements."
+        elif stop_reason == "node_limit":
+            cause = "The solver reached its configured search-node limit before finding a complete arrangement."
+            next_step = "Review the most constrained lessons below; if the inputs are valid, the search strategy may need further optimization."
+        elif stop_reason == "strict_pass_budget":
+            cause = "The strict search pass used its allocated time; the fallback pass did not complete a full solution."
+            next_step = "Review fallback-only availability and the most constrained lessons below."
+        else:
+            cause = "The solver exhausted the available combinations without placing every required lesson."
+            next_step = "Start with lessons showing zero candidate slots or the fewest candidate slots, then review the listed constraints."
         summary = {
             "status": "failed",
-            "message": (
-                "No complete clash-free timetable was found before the 20-second overall processing deadline expired. "
-                + "(Strict pass: " + str(strict_nodes) + " nodes; fallback pass: " + str(fallback_nodes)
-                + " nodes; search elapsed: " + str(round(time.monotonic() - search_started_at, 3)) + "s.)"
-                if exhausted and exhausted_reason == "deadline"
-                else "No complete clash-free timetable was found within the 10,000,000-node search allowance per pass. "
-                + "(Strict pass: " + str(strict_nodes) + " nodes; fallback pass: " + str(fallback_nodes)
-                + " nodes; search elapsed: " + str(round(time.monotonic() - search_started_at, 3)) + "s.)"
-                if exhausted and exhausted_reason == "node_limit"
-                else "The configured constraints leave at least one lesson without a valid slot. "
-                + "(Strict pass: " + str(strict_nodes) + " nodes; fallback pass: " + str(fallback_nodes)
-                + " nodes; search elapsed: " + str(round(time.monotonic() - search_started_at, 3)) + "s.)"
-            ),
+            "message": "Timetable generation failed. " + cause + " " + next_step,
+            "failure_cause": cause,
+            "recommended_action": next_step,
+            "failure_code": stop_reason,
+            "most_constrained_lessons": requirement_diagnostics[:12],
+            "constraint_rejection_totals": rejection_counts,
+            "candidate_slot_count_min": min((x["candidate_slots_before_conflicts"] for x in requirement_diagnostics), default=0),
+            "candidate_slot_count_max": max((x["candidate_slots_before_conflicts"] for x in requirement_diagnostics), default=0),
+            "diagnostic_note": "Rejection totals count solver checks, not unique timetable cells. A timeout identifies the search limit reached, not proof that the timetable is mathematically impossible.",
             "required_lessons": total_required,
             "manual_lessons_kept": len(manual),
             "unscheduled_lessons": len(tasks),
