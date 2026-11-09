@@ -221,10 +221,15 @@ def register_timetable_view_routes(app, get_db, get_school_obj, module_page):
                                 )
                             cells.append(f"<td class='tb-cell tb-cell-multi {'tb-cell-double' if cell_span > 1 else ''}' colspan='{cell_span}'>{''.join(cards)}</td>")
                         elif continued_lessons:
-                            continued_html = "".join(
-                                f"<div class='tb-continued-item' style='--teacher-color:{str(item['teacher_color'] or '#2563EB')}' title='{esc(item['subject_name'])} · {esc(item['teacher_name'])}'>↳ {esc(str(item['subject_initial'] or '').strip().upper() or '—')} continues{'' if view_type == 'teacher' else " <b class='tb-teacher-initials'>" + esc(str(item['teacher_initials'] or '').strip().upper() or '—') + "</b>"}</div>"
-                                for item in continued_lessons
-                            )
+                            continued_cards = []
+                            for item in continued_lessons:
+                                continued_avatar = ""
+                                if view_type != "teacher":
+                                    continued_avatar = f" <b class='tb-teacher-initials'>{esc(str(item['teacher_initials'] or '').strip().upper() or '—')}</b>"
+                                continued_cards.append(
+                                    f"<div class='tb-continued-item' style='--teacher-color:{str(item['teacher_color'] or '#2563EB')}' title='{esc(item['subject_name'])} · {esc(item['teacher_name'])}'>↳ {esc(str(item['subject_initial'] or '').strip().upper() or '—')} continues{continued_avatar}</div>"
+                                )
+                            continued_html = "".join(continued_cards)
                             cells.append(f"<td class='tb-cell tb-continued'>{continued_html}</td>")
                         else:
                             cells.append("<td class='tb-cell tb-free'></td>")
