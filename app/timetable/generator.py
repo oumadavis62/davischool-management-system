@@ -847,7 +847,7 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
             cause = "The strict search pass used its allocated time; the fallback pass did not complete a full solution."
             next_step = "Review fallback-only availability and the most constrained lessons below."
         else:
-            cause = "The solver exhausted the available combinations without placing every required lesson."
+            cause = "The solver could not place every required lesson without a valid slot arrangement because the current hard constraints conflict."
             next_step = "Start with lessons showing zero candidate slots or the fewest candidate slots, then review the listed constraints."
         summary = {
             "status": "failed",
