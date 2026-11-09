@@ -16,7 +16,7 @@ class TimetableViewTests(unittest.TestCase):
         self.db.executescript("""
             CREATE TABLE teachers (id INTEGER PRIMARY KEY, school_id INTEGER, name TEXT);
             CREATE TABLE classes (id INTEGER PRIMARY KEY, school_id INTEGER, name TEXT, stream TEXT);
-            CREATE TABLE subjects (id INTEGER PRIMARY KEY, school_id INTEGER, name TEXT);
+            CREATE TABLE subjects (id INTEGER PRIMARY KEY, school_id INTEGER, name TEXT, initial TEXT);
             CREATE TABLE teacher_allocations (
                 id INTEGER PRIMARY KEY, school_id INTEGER, teacher_id INTEGER,
                 subject_id INTEGER, class_id INTEGER
