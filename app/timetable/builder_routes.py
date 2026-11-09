@@ -389,7 +389,10 @@ def register_timetable_builder_routes(app, get_db, get_school_obj, module_page):
                 merged_period_ids = set()
                 for timeline_position, (_, item_type, item) in enumerate(timeline):
                     if item_type == "break":
-                        cells.append(f"<td class='tb-break-cell'><b>{esc(item['label'])}</b><span>{esc(item['start_time'])}–{esc(item['end_time'])}</span></td>")
+                        # A break belongs to the whole school day, not to each
+                        # class row. Render one vertically merged cell per day.
+                        if class_index == 0:
+                            cells.append(f"<td class='tb-break-cell' rowspan='{len(day_class_rows)}'><b>{esc(item['label'])}</b><span>{esc(item['start_time'])}–{esc(item['end_time'])}</span></td>")
                         continue
                     period = item
                     if int(period["id"]) in merged_period_ids:
