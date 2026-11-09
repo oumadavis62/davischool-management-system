@@ -14,7 +14,7 @@ class TimetableViewTests(unittest.TestCase):
         self.db.row_factory = sqlite3.Row
         ensure_timetable_schema(self.db)
         self.db.executescript("""
-            CREATE TABLE teachers (id INTEGER PRIMARY KEY, school_id INTEGER, name TEXT);
+            CREATE TABLE teachers (id INTEGER PRIMARY KEY, school_id INTEGER, name TEXT, teacher_color TEXT, teacher_initials TEXT);
             CREATE TABLE classes (id INTEGER PRIMARY KEY, school_id INTEGER, name TEXT, stream TEXT);
             CREATE TABLE subjects (id INTEGER PRIMARY KEY, school_id INTEGER, name TEXT, initial TEXT);
             CREATE TABLE teacher_allocations (
@@ -22,7 +22,7 @@ class TimetableViewTests(unittest.TestCase):
                 subject_id INTEGER, class_id INTEGER
             );
         """)
-        self.db.executemany("INSERT INTO teachers VALUES(?,?,?)", [(10,1,"Teacher A"),(11,1,"Teacher B")])
+        self.db.executemany("INSERT INTO teachers VALUES(?,?,?,?,?)", [(10,1,"Teacher A","#315f45","TA"),(11,1,"Teacher B","#4d6f5c","TB")])
         self.db.executemany("INSERT INTO classes VALUES(?,?,?,?)", [(20,1,"Grade 7","Blue"),(21,1,"Grade 8","Green")])
         self.db.executemany("INSERT INTO subjects VALUES(?,?,?,?)", [(30,1,"Mathematics","MAT"),(31,1,"English","ENG")])
         self.db.executemany(
