@@ -457,33 +457,43 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
     # reads for the same rules and period ordering thousands of times.
     constraint_cache = {}
     candidates_by_task = []
+    candidate_filter_diagnostics = {}
     for task_index, task in enumerate(tasks):
         _check_generation_deadline(deadline)
         candidates = []
+        filter_reasons = {}
+        def filtered(reason):
+            filter_reasons[reason] = filter_reasons.get(reason, 0) + 1
         for day in days:
             _check_generation_deadline(deadline)
             day_id = int(day["id"])
             for start_index, period in enumerate(periods):
                 _check_generation_deadline(deadline)
                 if task.get("preferred_period_id") is not None and int(period["id"]) != int(task["preferred_period_id"]):
+                    filtered("not_the_preferred_period")
                     continue
                 # A single configured lesson must fit the class's daily
                 # period ceiling on its own; otherwise no placement can ever
                 # satisfy the workload limit, regardless of the search order.
                 if (task.get("max_periods_per_day") is not None
                         and int(task["duration"]) > int(task["max_periods_per_day"])):
+                    filtered("lesson_duration_exceeds_class_daily_limit")
                     continue
                 span = _period_span(periods, start_index, task["duration"])
                 if not span:
+                    filtered("no_contiguous_teaching_period_span")
                     continue
                 if any((task["teacher_id"], day_id, int(p["id"])) in unavailable for p in span):
+                    filtered("teacher_marked_unavailable")
                     continue
                 if any((task["subject_id"], day_id, int(p["id"])) in subject_unavailable for p in span):
+                    filtered("subject_marked_unavailable")
                     continue
                 if any(
                     _overlap(span[0]["start_time"], span[-1]["end_time"], b["start_time"], b["end_time"])
                     for b in breaks
                 ):
+                    filtered("overlaps_configured_break")
                     continue
                 try:
                     _validate_constraints(
@@ -493,7 +503,8 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
                         str(span[0]["start_time"]), str(span[-1]["end_time"]), None,
                         cache=constraint_cache,
                     )
-                except TimetableSetupError:
+                except TimetableSetupError as constraint_error:
+                    filtered("constraint: " + str(constraint_error))
                     continue
                 candidates.append({
                     "day_id": day_id,
@@ -509,10 +520,20 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
                         and all((task["subject_id"], day_id, int(p["id"])) not in subject_fallback_only for p in span)
                     ),
                 })
+        candidate_filter_diagnostics[task_index] = filter_reasons
         if not candidates:
+            class_row = cur.execute("SELECT name FROM classes WHERE school_id=? AND id=?", (school_id, int(task["class_id"]))).fetchone()
+            subject_row = cur.execute("SELECT name FROM subjects WHERE school_id=? AND id=?", (school_id, int(task["subject_id"]))).fetchone()
+            teacher_row = cur.execute("SELECT name FROM teachers WHERE school_id=? AND id=?", (school_id, int(task["teacher_id"]))).fetchone()
+            class_label = str(class_row["name"]) if class_row else "Class ID " + str(task["class_id"])
+            subject_label = str(subject_row["name"]) if subject_row else "Subject ID " + str(task["subject_id"])
+            teacher_label = str(teacher_row["name"]) if teacher_row else "Teacher ID " + str(task["teacher_id"])
+            filter_detail = "; ".join(reason + ": " + str(count) for reason, count in sorted(filter_reasons.items(), key=lambda pair: -pair[1]))
             message = (
-                "No valid time slots are available for class ID " + str(task["class_id"]) +
-                ", subject ID " + str(task["subject_id"]) + ". Check teacher availability, periods and breaks."
+                "No eligible timetable slot exists for " + class_label + " / " + subject_label
+                + " / " + teacher_label + " (lesson " + str(task["occurrence"]) + "). "
+                + "The candidate scan rejected every slot. " + (filter_detail or "No candidate slot passed the configured filters.")
+                + ". Check the named teacher's availability, subject restrictions, lesson duration, breaks and timetable constraints."
             )
             now = _now()
             summary = {
@@ -523,11 +544,23 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
                 "unscheduled_lessons": len(tasks),
                 "search_nodes": 0,
                 "search_limit": int(node_limit),
+                "failure_code": "no_eligible_candidate_slots",
+                "affected_lesson": {
+                    "class": class_label, "class_id": int(task["class_id"]),
+                    "subject": subject_label, "subject_id": int(task["subject_id"]),
+                    "teacher": teacher_label, "teacher_id": int(task["teacher_id"]),
+                    "lesson_occurrence": int(task["occurrence"]),
+                    "lesson_duration_periods": int(task["duration"]),
+                },
+                "candidate_filter_rejections": filter_reasons,
+                "recommended_action": "Review the availability and constraints listed in the failure details for this class, subject and teacher.",
             }
             snapshot = {
                 "profile_id": profile_id,
                 "engine_version": ENGINE_VERSION,
                 "reason": message,
+                "candidate_filter_rejections": filter_reasons,
+                "affected_lesson": {"class_id": int(task["class_id"]), "subject_id": int(task["subject_id"]), "teacher_id": int(task["teacher_id"])},
                 "manual_lesson_ids": [int(l["id"]) for l in manual],
                 "previous_generated_ids": [int(l["id"]) for l in previous_generated],
             }
