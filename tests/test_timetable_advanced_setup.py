@@ -103,7 +103,7 @@ class AdvancedTimetableSetupTests(unittest.TestCase):
         )
 
 
-    def test_weekly_pattern_must_exactly_match_allocated_periods(self):
+    def test_partial_weekly_pattern_can_be_saved_without_exceeding_allocation(self):
         self.db.execute(
             """INSERT INTO ds_timetable_class_requirements
                (school_id,profile_id,class_id,subject_id,teacher_id,lessons_per_week)
@@ -123,22 +123,17 @@ class AdvancedTimetableSetupTests(unittest.TestCase):
                 {"duration_periods": 1, "session_label": "Single 3"},
             ],
         )
+        with self.assertRaises(TimetableSetupError):
+            save_requirement_session_pattern(
+                self.db, 12, self.profile_id, requirement_id,
+                [{"duration_periods": 2}, {"duration_periods": 2}, {"duration_periods": 2}],
+            )
         rows = self.db.execute(
             """SELECT duration_periods FROM ds_timetable_requirement_patterns
                WHERE requirement_id=? ORDER BY session_no""",
             (requirement_id,),
         ).fetchall()
         self.assertEqual([row["duration_periods"] for row in rows], [2, 1, 1, 1])
-        with self.assertRaises(TimetableSetupError):
-            save_requirement_session_pattern(
-                self.db, 12, self.profile_id, requirement_id,
-                [{"duration_periods": 2}, {"duration_periods": 2}],
-            )
-        preserved = self.db.execute(
-            "SELECT COUNT(*) AS n FROM ds_timetable_requirement_patterns WHERE requirement_id=?",
-            (requirement_id,),
-        ).fetchone()["n"]
-        self.assertEqual(preserved, 4)
 
 
     def test_two_doubles_and_one_single_fill_five_periods(self):
