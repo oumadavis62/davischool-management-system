@@ -65,7 +65,13 @@ def register_timetable_builder_routes(app, get_db, get_school_obj, module_page):
         school_id = int(school["id"])
         con = get_db()
         try:
-            if value("allocation"):
+            if value("first_lesson_id") and value("second_lesson_id"):
+                swap_lesson_positions(
+                    con, school_id, profile_id, integer("first_lesson_id"),
+                    integer("second_lesson_id"), request.session.get("email", "")
+                )
+                message = "Lesson positions swapped successfully."
+            elif value("allocation"):
                 parts = value("allocation").split("|")
                 if len(parts) != 3:
                     raise TimetableSetupError("Select a valid class, subject and teacher allocation.")
