@@ -341,8 +341,7 @@ def solve_timetable(
             tasks, candidate_lookup, rooms_for_task, fixed, blocked_candidates,
             class_limits, fallback_budget, node_limit, workers, True, optimize=False,
         )
-        if fallback["status"] in ("OPTIMAL", "FEASIBLE"):
-            feasible = fallback
+        feasible = fallback
 
     optimized = None
     if feasible["status"] in ("OPTIMAL", "FEASIBLE") and time.monotonic() < deadline:
