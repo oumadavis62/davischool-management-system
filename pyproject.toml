@@ -20,7 +20,7 @@ dependencies = [
     "psycopg[pool,binary]==3.3.6",
     "psycopg-pool==3.3.3",
     "cryptography==46.0.4",
-    "ortools==9.14.6206",
+    "ortools==9.15.6755",
 ]
 
 [tool.setuptools]
