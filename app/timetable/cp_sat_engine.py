@@ -40,6 +40,8 @@ def _build_and_solve(
     node_limit: int,
     workers: int,
     allow_fallback: bool,
+    optimize: bool = True,
+    solution_hint: list[dict] | None = None,
 ) -> dict:
     build_started = time.monotonic()
     model = cp_model.CpModel()
@@ -249,8 +251,19 @@ def _build_and_solve(
             balance_terms.append(maximum - minimum)
 
     objective = list(objective_terms) + balance_terms
-    if objective:
+    if optimize and objective:
         model.Minimize(sum(objective))
+    if solution_hint:
+        hint_keys = {
+            (int(item["task_index"]), int(item["day_id"]), int(item["period_id"]),
+             item.get("room_id"), str(item["start_time"]), str(item["end_time"]))
+            for item in solution_hint
+        }
+        for task_index, entries in variables.items():
+            for var, placement, room_id in entries:
+                key = (int(task_index), int(placement["day_id"]), int(placement["period_id"]),
+                       room_id, str(placement["start_time"]), str(placement["end_time"]))
+                model.AddHint(var, 1 if key in hint_keys else 0)
     model.AddDecisionStrategy(
         all_vars,
         cp_model.CHOOSE_FIRST,
@@ -315,22 +328,46 @@ def solve_timetable(
         }
     started = time.monotonic()
     remaining = max(0.1, deadline - started)
-    strict_budget = max(0.1, remaining * 0.65)
+    strict_budget = max(0.1, remaining * 0.55)
     strict = _build_and_solve(
         tasks, candidate_lookup, rooms_for_task, fixed, blocked_candidates,
-        class_limits, strict_budget, node_limit, workers, False,
+        class_limits, strict_budget, node_limit, workers, False, optimize=False,
     )
     fallback = None
+    feasible = strict
     if strict["status"] not in ("OPTIMAL", "FEASIBLE") and time.monotonic() < deadline:
         fallback_budget = max(0.1, deadline - time.monotonic())
         fallback = _build_and_solve(
             tasks, candidate_lookup, rooms_for_task, fixed, blocked_candidates,
-            class_limits, fallback_budget, node_limit, workers, True,
+            class_limits, fallback_budget, node_limit, workers, True, optimize=False,
         )
-    result = fallback if fallback and fallback["status"] in ("OPTIMAL", "FEASIBLE") else strict
+        if fallback["status"] in ("OPTIMAL", "FEASIBLE"):
+            feasible = fallback
+
+    optimized = None
+    if feasible["status"] in ("OPTIMAL", "FEASIBLE") and time.monotonic() < deadline:
+        optimization_budget = max(0.1, deadline - time.monotonic())
+        optimized = _build_and_solve(
+            tasks, candidate_lookup, rooms_for_task, fixed, blocked_candidates,
+            class_limits, optimization_budget, node_limit, workers,
+            allow_fallback=bool(fallback and feasible is fallback),
+            optimize=True,
+            solution_hint=feasible["placements"],
+        )
+    result = (
+        optimized if optimized and optimized["status"] in ("OPTIMAL", "FEASIBLE")
+        else feasible
+    )
     result["strict_status"] = strict["status"]
     result["strict_branches"] = strict["branches"]
     result["fallback_status"] = fallback["status"] if fallback else "NOT_RUN"
     result["fallback_branches"] = fallback["branches"] if fallback else 0
+    result["optimization_status"] = optimized["status"] if optimized else "NOT_RUN"
+    result["optimization_branches"] = optimized["branches"] if optimized else 0
+    result["branches"] = int(result.get("branches") or 0) + (
+        int(strict["branches"]) if result is not strict else 0
+    ) + (
+        int(fallback["branches"]) if fallback and result is not fallback else 0
+    )
     result["elapsed_seconds"] = round(time.monotonic() - started, 3)
     return result
