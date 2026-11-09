@@ -1144,6 +1144,48 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
               }}
             }},false);
           }}
+          // Keep the Teaching Requirements add/manage dialogs responsive even
+          // when the two-tab workspace is restored or its inline initializer runs
+          // before the section is fully attached to the document.
+          if(!document.documentElement.dataset.ttRequirementDialogsBound){
+            document.documentElement.dataset.ttRequirementDialogsBound='1';
+            document.addEventListener('click',event=>{
+              const addButton=event.target.closest('[data-req-add-open]');
+              if(addButton){
+                const modal=document.getElementById('tt-req-add-modal');
+                if(modal&&modal.hidden){modal.hidden=false;document.body.classList.add('tt-modal-scroll-locked');modal.querySelector('select')?.focus();}
+                return;
+              }
+              const manageButton=event.target.closest('[data-req-manage-open]');
+              if(manageButton){
+                const modal=document.getElementById(manageButton.dataset.reqManageOpen);
+                if(modal&&!modal.classList.contains('is-open')){modal.classList.add('is-open');document.body.classList.add('tt-modal-scroll-locked');modal.querySelector('input,select,button')?.focus();}
+                return;
+              }
+              const closeButton=event.target.closest('[data-req-manage-close],[data-req-add-close]');
+              if(closeButton){
+                const manage=closeButton.closest('.tt-req-manage-modal');
+                if(manage)manage.classList.remove('is-open');
+                const add=document.getElementById('tt-req-add-modal');
+                if(add&&(closeButton.closest('#tt-req-add-modal')||closeButton.dataset.reqAddClose!==undefined))add.hidden=true;
+                if(!document.querySelector('.tt-req-manage-modal.is-open')&&(!add||add.hidden))document.body.classList.remove('tt-modal-scroll-locked');
+                return;
+              }
+              if(event.target.classList?.contains('tt-req-manage-modal')){
+                event.target.classList.remove('is-open');
+                if(!document.querySelector('.tt-req-manage-modal.is-open'))document.body.classList.remove('tt-modal-scroll-locked');
+              }
+              const addModal=document.getElementById('tt-req-add-modal');
+              if(addModal&&event.target===addModal){addModal.hidden=true;document.body.classList.remove('tt-modal-scroll-locked');}
+            });
+            document.addEventListener('keydown',event=>{
+              if(event.key!=='Escape')return;
+              document.querySelectorAll('.tt-req-manage-modal.is-open').forEach(modal=>modal.classList.remove('is-open'));
+              const add=document.getElementById('tt-req-add-modal');
+              if(add)add.hidden=true;
+              if(!document.querySelector('.tt-req-manage-modal.is-open'))document.body.classList.remove('tt-modal-scroll-locked');
+            });
+          }
           let serial=0;
           root.querySelectorAll('.tt-section').forEach(section=>{{
             const addForm=Array.from(section.querySelectorAll('.tt-form.compact')).find(form=>!form.closest('.tt-table')&&!form.closest('details'))||null;
