@@ -219,6 +219,71 @@ def move_lesson(connection: Any, school_id: int, profile_id: int, lesson_id: int
     connection.commit()
 
 
+
+def swap_lesson_positions(connection: Any, school_id: int, profile_id: int,
+                          first_lesson_id: int, second_lesson_id: int,
+                          changed_by: str = "") -> None:
+    """Atomically exchange two scheduled lesson positions after normal validation."""
+    if first_lesson_id == second_lesson_id:
+        raise TimetableSetupError("Choose two different lessons to swap.")
+    cur = connection.cursor()
+    rows = cur.execute(
+        """SELECT * FROM ds_timetable_lessons
+           WHERE school_id=? AND profile_id=? AND status='scheduled' AND id IN (?,?)""",
+        (school_id, profile_id, first_lesson_id, second_lesson_id),
+    ).fetchall()
+    by_id = {int(row["id"]): row for row in rows}
+    if first_lesson_id not in by_id or second_lesson_id not in by_id:
+        raise TimetableSetupError("One of the selected lessons is no longer available in this timetable.")
+    first, second = by_id[first_lesson_id], by_id[second_lesson_id]
+    if int(first["duration_periods"] or 1) != int(second["duration_periods"] or 1):
+        raise TimetableSetupError("Only lessons with the same duration can be swapped. Move or adjust the double lesson separately.")
+    first_before, second_before = dict(first), dict(second)
+    now = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+    cur.execute(
+        """UPDATE ds_timetable_lessons SET status='swap_pending'
+           WHERE school_id=? AND profile_id=? AND id IN (?,?)""",
+        (school_id, profile_id, first_lesson_id, second_lesson_id),
+    )
+    try:
+        _, first_span = _placement_context(
+            cur, school_id, profile_id, int(first["class_id"]), int(first["subject_id"]),
+            int(first["teacher_id"]), int(second["day_id"]), int(second["period_id"]),
+            int(first["room_id"]) if first["room_id"] is not None else None,
+            exclude_lesson_id=first_lesson_id,
+        )
+        if len(first_span) != int(first["duration_periods"] or 1):
+            raise TimetableSetupError("The first lesson cannot fit the other lesson's time slot.")
+        cur.execute(
+            """UPDATE ds_timetable_lessons
+               SET day_id=?,period_id=?,status='scheduled',generation_run_id=NULL,updated_at=?
+               WHERE id=? AND school_id=? AND profile_id=?""",
+            (int(second["day_id"]), int(second["period_id"]), now, first_lesson_id, school_id, profile_id),
+        )
+        _, second_span = _placement_context(
+            cur, school_id, profile_id, int(second["class_id"]), int(second["subject_id"]),
+            int(second["teacher_id"]), int(first["day_id"]), int(first["period_id"]),
+            int(second["room_id"]) if second["room_id"] is not None else None,
+            exclude_lesson_id=second_lesson_id,
+        )
+        if len(second_span) != int(second["duration_periods"] or 1):
+            raise TimetableSetupError("The second lesson cannot fit the first lesson's time slot.")
+        cur.execute(
+            """UPDATE ds_timetable_lessons
+               SET day_id=?,period_id=?,status='scheduled',generation_run_id=NULL,updated_at=?
+               WHERE id=? AND school_id=? AND profile_id=?""",
+            (int(first["day_id"]), int(first["period_id"]), now, second_lesson_id, school_id, profile_id),
+        )
+        first_after = cur.execute("SELECT * FROM ds_timetable_lessons WHERE id=? AND school_id=?", (first_lesson_id, school_id)).fetchone()
+        second_after = cur.execute("SELECT * FROM ds_timetable_lessons WHERE id=? AND school_id=?", (second_lesson_id, school_id)).fetchone()
+        _log_change(cur, school_id, profile_id, first_lesson_id, "LESSON_SWAP", first_before, first_after, changed_by)
+        _log_change(cur, school_id, profile_id, second_lesson_id, "LESSON_SWAP", second_before, second_after, changed_by)
+        connection.commit()
+    except Exception:
+        connection.rollback()
+        raise
+
+
 def delete_lesson(connection: Any, school_id: int, profile_id: int, lesson_id: int, changed_by: str = "") -> None:
     cur = connection.cursor()
     existing = cur.execute(
