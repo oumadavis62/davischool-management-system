@@ -725,7 +725,7 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
         .tt-req-card-action>details[open]{{grid-column:1/-1}}
         .tt-req-card-action>details[open] .tt-req-manage{{margin-top:10px;padding:14px;border:1px solid #e0ebe2;border-radius:12px;background:#f8fbf8;min-width:min(680px,80vw)}}
         .tt-req-empty{{padding:35px 20px;text-align:center;border:1px dashed #cfdfd2;border-radius:14px;background:#fbfdfb;color:#6c8172;font-size:12px}}
-        @media(max-width:700px){{.tt-req-card-main{{grid-template-columns:minmax(0,1fr) auto;gap:10px}}.tt-req-card-load{{grid-column:1/-1;grid-row:2}}.tt-req-card-action{{grid-column:2;grid-row:1}}.tt-req-card-action>details[open]{{grid-column:1/-1}}.tt-req-card-action>details[open] .tt-req-manage{{min-width:0;width:calc(100vw - 82px)}}.tt-req-class-group>header{{padding:11px 13px}}.tt-req-card{{padding:12px 13px}}}
+        @media(max-width:700px){{.tt-req-card-main{{grid-template-columns:minmax(0,1fr) auto;gap:10px}}.tt-req-card-load{{grid-column:1/-1;grid-row:2}}.tt-req-card-action{{grid-column:2;grid-row:1}}.tt-req-card-action>details[open]{{grid-column:1/-1}}.tt-req-card-action>details[open] .tt-req-manage{{min-width:0;width:calc(100vw - 82px)}}.tt-req-class-group>header{{padding:11px 13px}}.tt-req-card{{padding:12px 13px}}}}
 
         .tt-req-pagination{{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;padding-top:13px}}
         .tt-req-pagination>div{{display:flex;gap:7px}}
