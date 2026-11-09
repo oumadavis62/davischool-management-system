@@ -533,6 +533,10 @@ def ensure_timetable_schema(connection: Any) -> None:
         if column not in columns:
             cursor.execute("ALTER TABLE ds_timetable_profiles ADD COLUMN " + column + " " + column_type)
     cursor.execute("SELECT * FROM ds_timetable_requirement_patterns LIMIT 0")
+    pattern_columns = {str(col.name if hasattr(col, "name") else col[0]).lower() for col in (cursor.description or [])}
+    for column in ("linked_class_ids_json", "co_teacher_ids_json"):
+        if column not in pattern_columns:
+            cursor.execute("ALTER TABLE ds_timetable_requirement_patterns ADD COLUMN " + column + " TEXT NOT NULL DEFAULT '[]'")
     pattern_columns = {
         str(col.name if hasattr(col, "name") else col[0]).lower()
         for col in (cursor.description or [])
