@@ -97,7 +97,67 @@ def register_timetable_generator_routes(app, get_db, get_school_obj, module_page
         job_progress_html = ""
         if job_id:
             job_progress_html = f"<section class='ag-result' id='tt-job-progress'><span class='ag-kicker'>BACKGROUND GENERATION · JOB #{int(job_id)}</span><h3 id='tt-job-title'>Checking generation status…</h3><p id='tt-job-message'>The timetable is being generated in the background. You can safely leave this page.</p><div id='tt-job-stage' class='ag-state'>QUEUED</div></section>"
-        generator_script = "<script>\n        const ttTabSessionId = TT_TAB_SESSION_ID || new URL(window.location.href).searchParams.get('ds_tab') || '';\n        async function ttRunGenerator(button, action, profileId, mode) {\n            if (button.dataset.busy === '1') return;\n            const payload = new URLSearchParams({profile_id: String(profileId)});\n            const target = new URL(action, window.location.origin);\n            if (ttTabSessionId) {\n                target.searchParams.set('ds_tab', ttTabSessionId);\n                payload.set('ds_tab', ttTabSessionId);\n            }\n            if (mode === 'dated') {\n                const start = document.getElementById('tt-start-date');\n                const end = document.getElementById('tt-end-date');\n                if (!start || !end || !start.value || !end.value) {\n                    alert('Choose both the start and end dates before generating.');\n                    return;\n                }\n                if (end.value < start.value) {\n                    alert('The end date must be on or after the start date.');\n                    return;\n                }\n                const span = (Date.parse(end.value + 'T00:00:00Z') - Date.parse(start.value + 'T00:00:00Z')) / 86400000;\n                if (span > 365) {\n                    alert('Generate no more than 366 calendar days at a time.');\n                    return;\n                }\n                payload.set('start_date', start.value);\n                payload.set('end_date', end.value);\n            }\n            const prompts = {\n                complete: 'Generate a complete timetable using the current setup? Existing manual lessons will be preserved.',\n                advanced: 'Generate normalized sessions, including combined classes and teaching teams?',\n                dated: 'Generate dated sessions for every active requirement in this date range?'\n            };\n            if (!confirm(prompts[mode] || 'Start timetable generation?')) return;\n            const original = button.textContent;\n            button.dataset.busy = '1';\n            button.disabled = true;\n            button.textContent = 'Generating timetable…';\n            try {\n                const response = await fetch(target.toString(), {\n                    method: 'POST',\n                    credentials: 'same-origin',\n                    headers: {'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8'},\n                    body: payload.toString(),\n                    redirect: 'follow'\n                });\n                if (!response.ok) {\n                    const detail = (await response.text()).slice(0, 500);\n                    throw new Error('Server returned HTTP ' + response.status + (detail ? ': ' + detail : ''));\n                }\n                if (response.redirected && response.url) window.location.assign(response.url);\n                else window.location.reload();\n            } catch (error) {\n                button.disabled = false;\n                button.dataset.busy = '';\n                button.textContent = original;\n                alert('Timetable generation request failed: ' + (error && error.message ? error.message : error));\n            }\n        }\n        </script>"
+        generator_script = """<script>
+        const ttTabSessionId = TT_TAB_SESSION_ID || new URL(window.location.href).searchParams.get('ds_tab') || '';
+        async function ttRunGenerator(button, action, profileId, mode) {
+            if (button.dataset.busy === '1') return;
+            const payload = new URLSearchParams({profile_id: String(profileId)});
+            const target = new URL(action, window.location.origin);
+            if (ttTabSessionId) {
+                target.searchParams.set('ds_tab', ttTabSessionId);
+                payload.set('ds_tab', ttTabSessionId);
+            }
+            if (mode === 'dated') {
+                const start = document.getElementById('tt-start-date');
+                const end = document.getElementById('tt-end-date');
+                if (!start || !end || !start.value || !end.value) {
+                    alert('Choose both the start and end dates before generating.');
+                    return;
+                }
+                if (end.value < start.value) {
+                    alert('The end date must be on or after the start date.');
+                    return;
+                }
+                const span = (Date.parse(end.value + 'T00:00:00Z') - Date.parse(start.value + 'T00:00:00Z')) / 86400000;
+                if (span > 365) {
+                    alert('Generate no more than 366 calendar days at a time.');
+                    return;
+                }
+                payload.set('start_date', start.value);
+                payload.set('end_date', end.value);
+            }
+            const prompts = {
+                complete: 'Generate a complete timetable using the current setup? Existing manual lessons will be preserved.',
+                advanced: 'Generate normalized sessions, including combined classes and teaching teams?',
+                dated: 'Generate dated sessions for every active requirement in this date range?'
+            };
+            if (!confirm(prompts[mode] || 'Start timetable generation?')) return;
+            const original = button.textContent;
+            button.dataset.busy = '1';
+            button.disabled = true;
+            button.textContent = 'Generating timetable…';
+            try {
+                const response = await fetch(target.toString(), {
+                    method: 'POST',
+                    credentials: 'same-origin',
+                    headers: {'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8'},
+                    body: payload.toString(),
+                    redirect: 'follow'
+                });
+                if (!response.ok) {
+                    const detail = (await response.text()).slice(0, 500);
+                    throw new Error('Server returned HTTP ' + response.status + (detail ? ': ' + detail : ''));
+                }
+                if (response.redirected && response.url) window.location.assign(response.url);
+                else window.location.reload();
+            } catch (error) {
+                button.disabled = false;
+                button.dataset.busy = '';
+                button.textContent = original;
+                alert('Timetable generation request failed: ' + (error && error.message ? error.message : error));
+            }
+        }
+        </script>"""
         generator_script = generator_script.replace("TT_TAB_SESSION_ID", json.dumps(tab_id))
         if job_id:
             generator_script += f"""<script>
