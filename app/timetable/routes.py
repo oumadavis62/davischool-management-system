@@ -559,9 +559,8 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
         body = f"""
         <style>
         .tt-wrap{{max-width:1500px;margin:auto;padding:22px;color:#234638}}
-        .tt-wrap.tt-requirements-focus>.tt-section:not(.tt-requirements-section){{display:none}}
-        .tt-wrap.tt-requirements-focus>.tt-hero,.tt-wrap.tt-requirements-focus>.tt-profile,.tt-wrap.tt-requirements-focus>.tt-alert{{display:none}}
-        .tt-wrap.tt-requirements-focus>.tt-requirements-section{{margin-top:0}}
+        .tt-wrap.tt-requirements-focus>:not(.tt-requirements-section){{display:none!important}}
+        .tt-wrap.tt-requirements-focus>.tt-requirements-section{{display:block;margin-top:0}}
         .tt-wrap *{{box-sizing:border-box}}
         .tt-wrap{{background:linear-gradient(145deg,#edf6ef 0%,#e4f0e6 42%,#f7faf7 100%);border-radius:26px;padding:24px}}
         .tt-hero{{position:relative;overflow:hidden;display:flex;justify-content:space-between;align-items:center;gap:18px;flex-wrap:wrap;margin-bottom:18px;padding:28px 30px;border:1px solid #d1e3d4;border-radius:23px;background:linear-gradient(118deg,#dceede 0%,#c9e2ce 52%,#eaf4e9 100%);box-shadow:0 14px 32px rgba(39,91,57,.09)}}
