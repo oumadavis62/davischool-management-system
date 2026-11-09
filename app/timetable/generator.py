@@ -533,13 +533,19 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
     # expensive O(nodes * candidates * placements) workload. The solver's
     # constraints are enforced by _can_place; this ordering only guides which
     # valid slot is tried first.
+    day_rank = {int(day["id"]): index for index, day in enumerate(days)}
     candidate_lookup = {
         i: sorted(
             candidates,
             key=lambda candidate: (
                 not bool(candidate.get("preferred")),
+                # Round-robin the weekly occurrence positions across the
+                # timetable: first diagonal (Mon P1, Tue P2, Wed P3, ...),
+                # then the neighbouring diagonals. This avoids repeatedly
+                # consuming the same early periods on every instructional day.
+                abs(int(candidate["period_no"]) - (day_rank.get(int(candidate["day_id"]), 0) + 1)),
+                day_rank.get(int(candidate["day_id"]), 0),
                 int(candidate["period_no"]),
-                int(candidate["day_id"]),
             ),
         )
         for i, candidates in candidates_by_task
