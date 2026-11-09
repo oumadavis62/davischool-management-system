@@ -473,8 +473,37 @@ class DaviSchoolTabSessionMiddleware:
                 return
             await self.app(scope, receive, send)
 
+        async def keepalive_guard(scope, receive, send):
+            # Handle keep-alive at the tab-session boundary, after the
+            # selected per-tab cookie has been decoded by SessionMiddleware.
+            # This avoids routing the heartbeat through unrelated UI/auth
+            # handlers that may inspect the legacy session cookie.
+            if (
+                scope.get("type") == "http"
+                and scope.get("path") == "/app/session-keepalive"
+                and scope.get("method", "GET").upper() == "GET"
+            ):
+                session = scope.get("session", {})
+                authenticated = bool(session.get("email"))
+                if authenticated:
+                    import time
+                    session["_last_activity"] = time.time()
+                body = b'{"ok":true}' if authenticated else b'{"ok":false,"detail":"Not authenticated"}'
+                await send({
+                    "type": "http.response.start",
+                    "status": 200 if authenticated else 401,
+                    "headers": [
+                        (b"content-type", b"application/json; charset=utf-8"),
+                        (b"cache-control", b"no-store"),
+                        (b"content-length", str(len(body)).encode("ascii")),
+                    ],
+                })
+                await send({"type": "http.response.body", "body": body})
+                return
+            await preview_guard(scope, receive, send)
+
         session_app = SessionMiddleware(
-            preview_guard,
+            keepalive_guard,
             secret_key=self.secret_key,
             session_cookie=session_cookie,
             max_age=self.max_age,
