@@ -1378,162 +1378,119 @@ def generate_advanced_instructional_sessions(connection: Any, school_id: int,
     # in memory and can otherwise leave Supabase table locks open for minutes.
     connection.commit()
 
+    from collections import defaultdict
+    from ortools.sat.python import cp_model
+
     planned = []
     nodes = 0
+    model = cp_model.CpModel()
+    variables = {}
+    option_meta = {}
+    by_class_period = defaultdict(list)
+    by_teacher_period = defaultdict(list)
+    by_learner_period = defaultdict(list)
+    by_room_period = defaultdict(list)
+    by_subject_day = defaultdict(list)
+    by_class_day_periods = defaultdict(list)
+    by_class_week = defaultdict(list)
+    objective_terms = []
+    day_order = {int(day["id"]): index for index, day in enumerate(days)}
 
-    def overlaps(a, b):
-        return a["day_id"] == b["day_id"] and a["start"] < b["end"] and a["end"] > b["start"]
-
-    def compatible(task, option):
-        # Prevent separate sessions of the same subject from being placed
-        # on the same day for any shared class. A double lesson is a single
-        # task/option whose duration spans consecutive periods.
-        if task.get("subject_id") is not None:
-            for placed in planned:
-                _check_generation_deadline(deadline)
-                other = placed["task"]
-                if (int(placed["option"]["day_id"]) == int(option["day_id"])
-                    and other.get("subject_id") is not None
-                    and int(other["subject_id"]) == int(task["subject_id"])
-                    and set(task["classes"]) & set(other["classes"])):
-                    return False
-
-        for class_id in task["classes"]:
-            limit = class_limits.get(int(class_id))
-            if not limit:
+    for task_index, task in enumerate(tasks):
+        task_vars = []
+        for option_index, option in enumerate(candidates[task_index]):
+            day_id = int(option["day_id"])
+            period_ids = [
+                int(period["id"]) for period in periods
+                if _overlap(str(period["start_time"]), str(period["end_time"]),
+                            str(option["start"]), str(option["end"]))
+            ]
+            if not period_ids:
                 continue
-            same_class_week = sum(
-                1 for placed in planned if int(class_id) in placed["task"]["classes"]
-            )
-            if limit["max_lessons_per_week"] is not None and same_class_week >= int(limit["max_lessons_per_week"]):
-                return False
-            same_class_day_periods = sum(
-                int(placed["option"]["duration"]) for placed in planned
-                if int(class_id) in placed["task"]["classes"]
-                and int(placed["option"]["day_id"]) == int(option["day_id"])
-            )
-            if limit["max_periods_per_day"] is not None and same_class_day_periods + int(option["duration"]) > int(limit["max_periods_per_day"]):
-                return False
-        for placed in planned:
-            other = placed["task"]
-            other_option = placed["option"]
-            if not overlaps(option, other_option):
-                continue
-            if (set(task["classes"]) & set(other["classes"])
-                or set(task["teachers"]) & set(other["teachers"])
-                or set(task["learners"]) & set(other["learners"])
-                or (option["room_id"] is not None and option["room_id"] == other_option["room_id"])):
-                return False
-        return True
+            var = model.NewBoolVar("advanced_t{}_o{}".format(task_index, option_index))
+            variables[(task_index, option_index)] = var
+            option_meta[(task_index, option_index)] = option
+            task_vars.append(var)
+            for class_id in task["classes"]:
+                for period_id in period_ids:
+                    by_class_period[(int(class_id), day_id, period_id)].append(var)
+                by_class_week[int(class_id)].append(var)
+                by_class_day_periods[(int(class_id), day_id)].append((var, int(option["duration"])))
+                if task.get("subject_id") is not None:
+                    by_subject_day[(int(class_id), int(task["subject_id"]), day_id)].append(var)
+            for teacher_id in task["teachers"]:
+                for period_id in period_ids:
+                    by_teacher_period[(int(teacher_id), day_id, period_id)].append(var)
+            for learner_id in task["learners"]:
+                for period_id in period_ids:
+                    by_learner_period[(int(learner_id), day_id, period_id)].append(var)
+            if option["room_id"] is not None:
+                for period_id in period_ids:
+                    by_room_period[(int(option["room_id"]), day_id, period_id)].append(var)
 
-    # Dynamic minimum-remaining-values search. A fixed ordering can consume
-    # the only consecutive two-period windows with single lessons before the
-    # double lessons are considered. Recalculate each unplaced task's viable
-    # domain after every placement, then schedule the most constrained task
-    # first (duration is the deterministic tie-breaker). This preserves all
-    # configured constraints while allowing backtracking to rearrange singles
-    # around scarce double-period windows.
-    remaining = set(range(len(tasks)))
+            # Preferences and distribution are soft costs; all resource and
+            # workload restrictions remain hard constraints.
+            cost = int(preference_penalty(task, option)) * 100
+            cost += 0 if task["preferred_day_id"] == day_id else 20
+            cost += int(option["period_no"]) * 3
+            cost += day_order.get(day_id, 0)
+            objective_terms.append((var, cost))
+        if not task_vars:
+            model.AddBoolOr([])
+        else:
+            model.Add(sum(task_vars) == 1)
 
-    def search():
-        nonlocal nodes
-        if time.monotonic() >= deadline:
-            return False
-        if not remaining:
-            return True
-        best_index = None
-        best_options = None
-        best_key = None
-        for index in sorted(remaining):
-            if time.monotonic() >= deadline:
-                return False
-            task = tasks[index]
-            viable = []
-            for option in candidates[index]:
-                _check_generation_deadline(deadline)
-                if compatible(task, option):
-                    viable.append(option)
-            if not viable:
-                return False
-            key = (len(viable), -int(task["duration"]),
-                   int(task["requirement_id"]), int(task["session_no"]))
-            if best_key is None or key < best_key:
-                best_index, best_options, best_key = index, viable, key
-        task = tasks[best_index]
+    for resource_buckets in (
+        by_class_period, by_teacher_period, by_learner_period, by_room_period, by_subject_day
+    ):
+        for bucket_vars in resource_buckets.values():
+            if len(bucket_vars) > 1:
+                model.Add(sum(bucket_vars) <= 1)
 
-        def distribution_score(option):
-            # Spread each requirement's weekly occurrences across days, and
-            # avoid repeatedly assigning the same class/teacher to the same
-            # period number on different days.
-            score = 0
-            task_classes = set(task["classes"])
-            task_teachers = set(task["teachers"])
-            task_learners = set(task["learners"])
-            same_requirement_day = 0
-            class_day = 0
-            teacher_day = 0
-            same_period = 0
-            same_period_same_day = 0
-            for placed in planned:
-                other = placed["task"]
-                slot = placed["option"]
-                same_day = int(slot["day_id"]) == int(option["day_id"])
-                related_class = bool(task_classes & set(other["classes"]))
-                related_teacher = bool(task_teachers & set(other["teachers"]))
-                related_learners = bool(task_learners & set(other["learners"]))
-                same_requirement = int(task["requirement_id"]) == int(other["requirement_id"])
-                if same_requirement and same_day:
-                    same_requirement_day += 1
-                if same_day and related_class:
-                    class_day += int(slot["duration"])
-                if same_day and related_teacher:
-                    teacher_day += int(slot["duration"])
-                if int(slot["period_no"]) == int(option["period_no"]):
-                    if related_class or related_teacher or related_learners:
-                        same_period += 1
-                        if same_day:
-                            same_period_same_day += 1
-            # Strongly discourage stacking a requirement on one day; then
-            # balance daily workload and rotate recurring period positions.
-            score += same_requirement_day * 100
-            score += class_day * 12
-            score += teacher_day * 10
-            score += same_period * 18
-            score += same_period_same_day * 8
-            # Prefer the least-loaded day for this class/teacher combination.
-            daily_load = 0
-            for placed in planned:
-                _check_generation_deadline(deadline)
-                if int(placed["option"]["day_id"]) == int(option["day_id"]) and (
-                    task_classes & set(placed["task"]["classes"])
-                    or task_teachers & set(placed["task"]["teachers"])
-                ):
-                    daily_load += 1
-            score += daily_load * 6
-            return (
-                preference_penalty(task, option),
-                score,
-                0 if task["preferred_day_id"] == option["day_id"] else 1,
-                option["period_no"],
-                option["day_id"],
+    for class_id, class_vars in by_class_week.items():
+        limit = class_limits.get(class_id)
+        if limit and limit["max_lessons_per_week"] is not None:
+            model.Add(sum(class_vars) <= int(limit["max_lessons_per_week"]))
+
+    for (class_id, day_id), entries in by_class_day_periods.items():
+        limit = class_limits.get(class_id)
+        if limit and limit["max_periods_per_day"] is not None:
+            model.Add(
+                sum(var * duration for var, duration in entries)
+                <= int(limit["max_periods_per_day"])
             )
 
-        for option in sorted(best_options, key=distribution_score):
-            if time.monotonic() >= deadline:
-                return False
-            nodes += 1
-            if nodes > int(node_limit):
-                return False
-            planned.append({"task": task, "option": option})
-            remaining.remove(best_index)
-            if search():
-                return True
-            remaining.add(best_index)
-            planned.pop()
-        return False
+    model.Minimize(sum(var * cost for var, cost in objective_terms))
+    solver = cp_model.CpSolver()
+    solver.parameters.max_time_in_seconds = max(0.1, deadline - time.monotonic())
+    solver.parameters.num_search_workers = max(1, min(8, __import__("os").cpu_count() or 1))
+    solver.parameters.random_seed = 53
+    solver.parameters.log_search_progress = False
+    status = solver.Solve(model)
+    nodes = int(solver.NumBranches())
+    if status not in (cp_model.OPTIMAL, cp_model.FEASIBLE):
+        status_name = solver.StatusName(status)
+        if status == cp_model.INFEASIBLE:
+            raise TimetableSetupError(
+                "CP-SAT proved that the normalized combined/co-teaching requirements cannot all fit "
+                "without violating class, teacher, learner, room or workload constraints."
+            )
+        if status == cp_model.UNKNOWN:
+            raise TimetableSetupError(
+                "CP-SAT reached the timetable generation time limit before finding a complete "
+                "combined/co-teaching schedule. Existing generated sessions were preserved."
+            )
+        raise TimetableSetupError(
+            "CP-SAT could not solve the normalized instructional requirements: " + status_name
+        )
 
-    if not search():
-        raise TimetableSetupError("The normalized requirements cannot all fit without clashes under the configured constraints.")
+    for (task_index, option_index), var in variables.items():
+        if solver.Value(var):
+            planned.append({
+                "task": tasks[task_index],
+                "option": option_meta[(task_index, option_index)],
+            })
+
 
     now = _now()
     snapshot = {
