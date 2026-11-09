@@ -357,6 +357,11 @@ def register_timetable_builder_routes(app, get_db, get_school_obj, module_page):
                 headers.append(f"<th class='tb-break-heading'><b>{esc(item['label'])}</b><span>{esc(item['start_time'])}–{esc(item['end_time'])}</span></th>")
             else:
                 headers.append(f"<th class='tb-period-heading'><b>{esc(item['label'])}</b><span>{esc(item['start_time'])}–{esc(item['end_time'])}</span></th>")
+        timeline_period_positions = {
+            int(item["id"]): position
+            for position, (_, item_type, item) in enumerate(timeline)
+            if item_type == "period"
+        }
         rows = []
         for day in days:
             day_class_rows = class_rows or [{"class_id": 0, "class_name": "—", "stream": ""}]
@@ -369,18 +374,40 @@ def register_timetable_builder_routes(app, get_db, get_school_obj, module_page):
                 class_name_html = f"<b class='tb-class-name'>{esc(class_row['class_name'])}</b>"
                 stream_html = f"<span class='tb-stream-name'>{esc(class_row['stream'])}</span>" if class_row["stream"] else ""
                 cells.append(f"<th class='tb-class-heading'>{class_name_html}{stream_html}</th>")
-                for _, item_type, item in timeline:
+                merged_period_ids = set()
+                for timeline_position, (_, item_type, item) in enumerate(timeline):
                     if item_type == "break":
                         cells.append(f"<td class='tb-break-cell'><b>{esc(item['label'])}</b><span>{esc(item['start_time'])}–{esc(item['end_time'])}</span></td>")
                         continue
                     period = item
+                    if int(period["id"]) in merged_period_ids:
+                        continue
                     key = (int(day["id"]), int(class_row["class_id"]), int(period["id"]))
                     slot_lessons = lesson_by_start.get(key, [])
                     continued_lessons = occupied.get(key, [])
                     if slot_lessons:
                         cards = []
+                        cell_span = 1
                         for lesson in slot_lessons:
-                            duration = int(lesson["duration_periods"] or 1)
+                            duration = max(1, int(lesson["duration_periods"] or 1))
+                            start_period_index = period_index.get(int(lesson["period_id"]))
+                            span_periods = [
+                                periods[start_period_index + offset]
+                                for offset in range(duration)
+                                if start_period_index is not None and start_period_index + offset < len(periods)
+                            ]
+                            # Merge only when every consecutive lesson period is also
+                            # adjacent in the visible grid (no break column in between).
+                            can_merge = (
+                                len(span_periods) == duration
+                                and all(
+                                    timeline_period_positions.get(int(span_periods[offset]["id"])) == timeline_position + offset
+                                    for offset in range(duration)
+                                )
+                            )
+                            if can_merge and duration > cell_span:
+                                cell_span = duration
+                                merged_period_ids.update(int(p["id"]) for p in span_periods[1:])
                             room_label = esc(lesson["room_name"] or "Room not assigned")
                             move_day_opts = "".join(
                                 f"<option value='{int(d['id'])}' {'selected' if int(d['id'])==int(lesson['day_id']) else ''}>{esc(d['day_name'])}</option>" for d in days
@@ -397,7 +424,7 @@ def register_timetable_builder_routes(app, get_db, get_school_obj, module_page):
                             teacher_color = safe_teacher_color(lesson["teacher_color"])
                             teacher_name_color = teacher_name_text_color(teacher_color)
                             cards.append(f"""<div class='tb-lesson' style='--teacher-color:{teacher_color}' title='{esc(lesson['subject_name'])} · {esc(lesson['teacher_name'])}' draggable='{'false' if read_only else 'true'}' data-lesson-id='{int(lesson['id'])}' ondragstart='dragTimetableLesson(event)'><div class='tb-lesson-top'><b class='tb-subject-initials'>{esc(str(lesson['subject_initial'] or '').strip().upper() or '—')}</b><span>{duration}P</span></div><div class='tb-meta tb-teacher-name' style='color:{teacher_name_color}!important;-webkit-text-fill-color:{teacher_name_color}'>{esc(lesson['teacher_name'])}</div><div class='tb-meta'>⌂ {room_label}</div>{manage_html}</div>""")
-                        cells.append(f"<td class='tb-cell tb-cell-multi' data-day-id='{int(day['id'])}' data-period-id='{int(period['id'])}' ondragover='event.preventDefault()' ondrop='dropTimetableLesson(event,this)'>{''.join(cards)}</td>")
+                        cells.append(f"<td class='tb-cell tb-cell-multi' colspan='{cell_span}' data-day-id='{int(day['id'])}' data-period-id='{int(period['id'])}' ondragover='event.preventDefault()' ondrop='dropTimetableLesson(event,this)'>{''.join(cards)}</td>")
                     elif continued_lessons:
                         continued_html = "".join(
                             f"<div class='tb-continued-item' style='--teacher-color:{safe_teacher_color(item['teacher_color'])}' title='{esc(item['subject_name'])} · {esc(item['teacher_name'])}'>↳ {esc(str(item['subject_initial'] or '').strip().upper() or '—')} continues · {esc(item['teacher_name'])}</div>"
