@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "davischool-management-system"
 version = "1.0.0"
 description = "DaviSchool Management System"
-requires-python = ">=3.11,<3.14"
+requires-python = ">=3.11,<3.15"
 dependencies = [
     "fastapi[standard]==0.128.2",
     "uvicorn[standard]==0.48.0",
