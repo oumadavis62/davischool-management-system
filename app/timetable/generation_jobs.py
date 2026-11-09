@@ -134,6 +134,9 @@ def _execute_job(get_db, job):
     school_id = int(job["school_id"])
     profile_id = int(job["profile_id"])
     email = str(job["requested_by"] or "")
+    # One shared wall-clock budget covers normalized sessions, ordinary
+    # lessons, and their database-backed candidate preparation.
+    deadline = time.monotonic() + 12.0
     con = get_db()
     advanced_result = None
     created_advanced_ids = []
@@ -148,7 +151,8 @@ def _execute_job(get_db, job):
         if int(advanced_count or 0):
             _set_job(get_db, job_id, stage="generating combined and co-teaching lessons")
             advanced_result = generate_advanced_instructional_sessions(
-                con, school_id, profile_id, email, defer_replacement=True
+                con, school_id, profile_id, email, defer_replacement=True,
+                deadline=deadline
             )
             created_advanced_ids = list(advanced_result.get("session_ids") or [])
 
@@ -156,6 +160,7 @@ def _execute_job(get_db, job):
         result = generate_timetable(
             con, school_id, profile_id, email,
             normalized_run_id=(advanced_result or {}).get("run_id"),
+            deadline=deadline,
         )
         if result.get("status") != "completed":
             _delete_sessions(con, school_id, profile_id, created_advanced_ids)
