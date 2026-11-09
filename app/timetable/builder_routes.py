@@ -300,15 +300,20 @@ def register_timetable_builder_routes(app, get_db, get_school_obj, module_page):
             f"<option value='{int(r['id'])}'>{esc(r['name'])} ({esc(r['room_type'])})</option>" for r in rooms
         )
         period_index = {int(p["id"]): i for i,p in enumerate(periods)}
-        lesson_by_start = {(int(l["day_id"]),int(l["period_id"])):l for l in lessons}
+        # A school timetable has many classes running in parallel in the same slot.
+        # Keep every lesson in each cell; a single-value dictionary silently hid all
+        # but the last class scheduled for a day/period.
+        lesson_by_start = {}
+        for lesson in lessons:
+            lesson_by_start.setdefault((int(lesson["day_id"]), int(lesson["period_id"])), []).append(lesson)
         occupied = {}
         for lesson in lessons:
             start = period_index.get(int(lesson["period_id"]))
             if start is None:
                 continue
-            for offset in range(1,int(lesson["duration_periods"] or 1)):
+            for offset in range(1, int(lesson["duration_periods"] or 1)):
                 if start + offset < len(periods):
-                    occupied[(int(lesson["day_id"]),int(periods[start+offset]["id"]))] = lesson
+                    occupied.setdefault((int(lesson["day_id"]), int(periods[start+offset]["id"])), []).append(lesson)
         timeline = sorted(
             [(str(p["start_time"]), "period", p) for p in periods] +
             [(str(br["start_time"]), "break", br) for br in breaks],
@@ -329,27 +334,33 @@ def register_timetable_builder_routes(app, get_db, get_school_obj, module_page):
                     continue
                 period = item
                 key = (int(day["id"]),int(period["id"]))
-                lesson = lesson_by_start.get(key)
-                if lesson:
-                    duration = int(lesson["duration_periods"] or 1)
-                    room_label = esc(lesson["room_name"] or "Room not assigned")
-                    move_day_opts = "".join(
-                        f"<option value='{int(d['id'])}' {'selected' if int(d['id'])==int(lesson['day_id']) else ''}>{esc(d['day_name'])}</option>" for d in days
+                slot_lessons = lesson_by_start.get(key, [])
+                continued_lessons = occupied.get(key, [])
+                if slot_lessons:
+                    cards = []
+                    for lesson in slot_lessons:
+                        duration = int(lesson["duration_periods"] or 1)
+                        room_label = esc(lesson["room_name"] or "Room not assigned")
+                        move_day_opts = "".join(
+                            f"<option value='{int(d['id'])}' {'selected' if int(d['id'])==int(lesson['day_id']) else ''}>{esc(d['day_name'])}</option>" for d in days
+                        )
+                        move_period_opts = "".join(
+                            f"<option value='{int(p['id'])}' {'selected' if int(p['id'])==int(lesson['period_id']) else ''}>{esc(p['label'])} ({esc(p['start_time'])})</option>" for p in periods
+                        )
+                        move_room_opts = "<option value=''>Keep current room</option>" + "".join(
+                            f"<option value='{int(r['id'])}' {'selected' if lesson['room_id'] is not None and int(r['id'])==int(lesson['room_id']) else ''}>{esc(r['name'])}</option>" for r in rooms
+                        )
+                        manage_html = ""
+                        if not read_only:
+                            manage_html = f"""<details class='tb-actions'><summary>Manage</summary><form method='post' action='/app/timetable/builder/move'><input type='hidden' name='profile_id' value='{pid}'><input type='hidden' name='lesson_id' value='{int(lesson['id'])}'><label>Move to day<select name='day_id'>{move_day_opts}</select></label><label>Start period<select name='period_id'>{move_period_opts}</select></label><label>Room<select name='room_id'>{move_room_opts}</select></label><button class='tb-small'>Move lesson</button></form><form method='post' action='/app/timetable/builder/delete' onsubmit="return confirm('Remove this lesson from the timetable?')"><input type='hidden' name='profile_id' value='{pid}'><input type='hidden' name='lesson_id' value='{int(lesson['id'])}'><button class='tb-delete'>Delete lesson</button></form></details>"""
+                        cards.append(f"""<div class='tb-lesson' draggable='{'false' if read_only else 'true'}' data-lesson-id='{int(lesson['id'])}' ondragstart='dragTimetableLesson(event)'><div class='tb-lesson-top'><b>{esc(lesson['subject_name'])}</b><span>{duration}P</span></div><div class='tb-class'>{esc(lesson['class_name'])} {esc(lesson['stream'] or '')}</div><div class='tb-meta'>{esc(lesson['teacher_name'])}</div><div class='tb-meta'>⌂ {room_label}</div>{manage_html}</div>""")
+                    cells.append(f"<td class='tb-cell tb-cell-multi' data-day-id='{int(day['id'])}' data-period-id='{int(period['id'])}' ondragover='event.preventDefault()' ondrop='dropTimetableLesson(event,this)'>{''.join(cards)}</td>")
+                elif continued_lessons:
+                    continued_html = "".join(
+                        f"<div class='tb-continued-item'>↳ {esc(item['class_name'])} {esc(item['stream'] or '')} · {esc(item['subject_name'])} continues</div>"
+                        for item in continued_lessons
                     )
-                    move_period_opts = "".join(
-                        f"<option value='{int(p['id'])}' {'selected' if int(p['id'])==int(lesson['period_id']) else ''}>{esc(p['label'])} ({esc(p['start_time'])})</option>" for p in periods
-                    )
-                    move_room_opts = "<option value=''>Keep current room</option>" + "".join(
-                        f"<option value='{int(r['id'])}' {'selected' if lesson['room_id'] is not None and int(r['id'])==int(lesson['room_id']) else ''}>{esc(r['name'])}</option>" for r in rooms
-                    )
-                    manage_html = ""
-                    if not read_only:
-                        manage_html = f"""<details class='tb-actions'><summary>Manage</summary><form method='post' action='/app/timetable/builder/move'><input type='hidden' name='profile_id' value='{pid}'><input type='hidden' name='lesson_id' value='{int(lesson['id'])}'><label>Move to day<select name='day_id'>{move_day_opts}</select></label><label>Start period<select name='period_id'>{move_period_opts}</select></label><label>Room<select name='room_id'>{move_room_opts}</select></label><button class='tb-small'>Move lesson</button></form><form method='post' action='/app/timetable/builder/delete' onsubmit="return confirm('Remove this lesson from the timetable?')"><input type='hidden' name='profile_id' value='{pid}'><input type='hidden' name='lesson_id' value='{int(lesson['id'])}'><button class='tb-delete'>Delete lesson</button></form></details>"""
-                    card = f"""<div class='tb-lesson' draggable='{'false' if read_only else 'true'}' data-lesson-id='{int(lesson['id'])}' ondragstart='dragTimetableLesson(event)'><div class='tb-lesson-top'><b>{esc(lesson['subject_name'])}</b><span>{duration}P</span></div><div class='tb-class'>{esc(lesson['class_name'])} {esc(lesson['stream'] or '')}</div><div class='tb-meta'>{esc(lesson['teacher_name'])}</div><div class='tb-meta'>⌂ {room_label}</div>{manage_html}</div>"""
-                    cells.append(f"<td class='tb-cell' data-day-id='{int(day['id'])}' data-period-id='{int(period['id'])}' ondragover='event.preventDefault()' ondrop='dropTimetableLesson(event,this)'>{card}</td>")
-                elif key in occupied:
-                    continued = occupied[key]
-                    cells.append(f"<td class='tb-cell tb-continued' data-day-id='{int(day['id'])}' data-period-id='{int(period['id'])}' ondragover='event.preventDefault()' ondrop='dropTimetableLesson(event,this)'>↳ {esc(continued['subject_name'])} continues</td>")
+                    cells.append(f"<td class='tb-cell tb-continued' data-day-id='{int(day['id'])}' data-period-id='{int(period['id'])}' ondragover='event.preventDefault()' ondrop='dropTimetableLesson(event,this)'>{continued_html}</td>")
                 else:
                     cells.append(f"<td class='tb-cell tb-free' data-day-id='{int(day['id'])}' data-period-id='{int(period['id'])}' ondragover='event.preventDefault()' ondrop='dropTimetableLesson(event,this)'><span>Free period</span></td>")
             rows.append(f"<tr>{''.join(cells)}</tr>")
