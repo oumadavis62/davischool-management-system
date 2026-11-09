@@ -38,16 +38,22 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
             return None
         return get_school_obj(request)
 
-    def redirect_setup(profile_id=0, message="", error=False, focus=""):
+    def redirect_setup(profile_id=0, message="", error=False, focus="", request=None):
         parts = []
         if profile_id:
             parts.append("profile_id=" + str(int(profile_id)))
+        if focus == "requirements":
+            parts.append("tab=requirements")
         if message:
             parts.append("message=" + quote(str(message)))
         if error:
             parts.append("error=1")
         if focus:
             parts.append("focus=" + quote(str(focus)))
+        if request is not None:
+            tab_id = str(request.scope.get("davischool_tab_id") or request.query_params.get("ds_tab") or "").strip()
+            if tab_id:
+                parts.append("ds_tab=" + quote(tab_id, safe=""))
         suffix = ("?" + "&".join(parts)) if parts else ""
         anchor = "#tt-subject-requirements" if focus == "requirements" else ""
         return RedirectResponse("/app/timetable/setup" + suffix + anchor, 303)
@@ -1795,8 +1801,8 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
                         f"{max(0, int(lessons_per_week) - sum(int(row['duration_periods']) for row in existing) if pattern_mode == 'append' else int(lessons_per_week))} periods were available before this save."
                     )
                 save_requirement_session_pattern(con, int(school["id"]), profile_id, int(requirement["id"]), sessions)
-            return redirect_setup(profile_id, "Weekly lesson requirement and lesson pattern saved.", focus="requirements")
+            return redirect_setup(profile_id, "Weekly lesson requirement and lesson pattern saved.", focus="requirements", request=request)
         except (TimetableSetupError, ValueError) as exc:
             con.rollback()
-            return redirect_setup(profile_id, str(exc), True, focus="requirements")
+            return redirect_setup(profile_id, str(exc), True, focus="requirements", request=request)
         finally: con.close()
