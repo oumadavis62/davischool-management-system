@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from html import escape
+import json
 import logging
 from urllib.parse import quote
 
