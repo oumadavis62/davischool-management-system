@@ -484,8 +484,12 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
                 # A single configured lesson must fit the class's daily
                 # period ceiling on its own; otherwise no placement can ever
                 # satisfy the workload limit, regardless of the search order.
-                if (task.get("max_periods_per_day") is not None
-                        and int(task["duration"]) > int(task["max_periods_per_day"])):
+                if any(
+                    class_limits.get(class_id) is not None
+                    and class_limits[class_id]["max_periods_per_day"] is not None
+                    and int(task["duration"]) > int(class_limits[class_id]["max_periods_per_day"])
+                    for class_id in task.get("class_ids", [task["class_id"]])
+                ):
                     filtered("lesson_duration_exceeds_class_daily_limit")
                     continue
                 span = _period_span(periods, start_index, task["duration"])
@@ -693,8 +697,8 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
                                     existing["start_time"], existing["end_time"]):
                         continue
                     if (
-                        int(task["class_id"]) in existing["classes"]
-                        or int(task["teacher_id"]) in existing["teachers"]
+                        set(task.get("class_ids", [task["class_id"]])) & existing["classes"]
+                        or set(task.get("teacher_ids", [task["teacher_id"]])) & existing["teachers"]
                         or (room_id is not None and existing["room_id"] == int(room_id))
                     ):
                         blocked_candidates.add((
@@ -818,13 +822,24 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
             if subject_day.get(key, 0) >= int(task["max_lessons_per_day"]):
                 return reject("configured_subject_daily_limit")
         max_week = task.get("max_lessons_per_week")
-        if max_week is not None and class_week.get(class_id, 0) >= int(max_week):
-            return reject("configured_class_weekly_limit")
-        max_day_periods = task.get("max_periods_per_day")
-        if max_day_periods is not None:
-            used = class_day_periods.get((class_id, day_id), 0)
-            if used + int(candidate.get("duration", 1)) > int(max_day_periods):
-                return reject("configured_class_daily_period_limit")
+        for linked_class_id in class_ids:
+            linked_limit = class_limits.get(linked_class_id)
+            weekly_limit = (
+                int(linked_limit["max_lessons_per_week"])
+                if linked_limit is not None and linked_limit["max_lessons_per_week"] is not None
+                else (int(max_week) if max_week is not None and linked_class_id == class_id else None)
+            )
+            if weekly_limit is not None and class_week.get(linked_class_id, 0) >= weekly_limit:
+                return reject("configured_linked_class_weekly_limit")
+            daily_limit = (
+                int(linked_limit["max_periods_per_day"])
+                if linked_limit is not None and linked_limit["max_periods_per_day"] is not None
+                else (int(max_day_periods) if max_day_periods is not None and linked_class_id == class_id else None)
+            )
+            if daily_limit is not None:
+                used = class_day_periods.get((linked_class_id, day_id), 0)
+                if used + int(candidate.get("duration", 1)) > daily_limit:
+                    return reject("configured_linked_class_daily_period_limit")
         start, end = candidate["start_time"], candidate["end_time"]
         for linked_class_id in class_ids:
             for interval in class_intervals.get((linked_class_id, day_id), ()):
