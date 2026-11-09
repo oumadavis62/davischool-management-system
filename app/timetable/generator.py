@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from bisect import bisect_left, insort
 import json
 import time
 from typing import Any
@@ -29,6 +30,20 @@ def _now() -> str:
 
 def _overlap(a_start: str, a_end: str, b_start: str, b_end: str) -> bool:
     return str(a_start) < str(b_end) and str(a_end) > str(b_start)
+
+
+def _interval_list_overlaps(intervals, start: str, end: str) -> bool:
+    """Check a sorted, non-overlapping resource interval list in logarithmic time."""
+    position = bisect_left(intervals, (str(start), ""))
+    index = position - 1
+    while index >= 0:
+        prior_start, prior_end = intervals[index]
+        if str(prior_end) <= str(start):
+            break
+        if _overlap(start, end, prior_start, prior_end):
+            return True
+        index -= 1
+    return position < len(intervals) and str(intervals[position][0]) < str(end)
 
 
 def _period_span(periods, start_index: int, duration: int):
@@ -767,17 +782,18 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
                 bump(subject_day, (class_id, int(item["subject_id"]), teacher_id, day_id), amount)
             key = (class_id, day_id)
             if amount > 0:
-                class_intervals.setdefault(key, []).append(interval)
+                insort(class_intervals.setdefault(key, []), interval)
             else:
                 values = class_intervals.get(key, [])
-                if interval in values:
-                    values.remove(interval)
+                position = bisect_left(values, interval)
+                if position < len(values) and values[position] == interval:
+                    values.pop(position)
                 if not values:
                     class_intervals.pop(key, None)
         for teacher_id in teacher_ids:
             key = (teacher_id, day_id)
             if amount > 0:
-                teacher_intervals.setdefault(key, []).append(interval)
+                insort(teacher_intervals.setdefault(key, []), interval)
             else:
                 values = teacher_intervals.get(key, [])
                 if interval in values:
@@ -788,7 +804,7 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
         if room_id is not None:
             key = (int(room_id), day_id)
             if amount > 0:
-                room_intervals.setdefault(key, []).append(interval)
+                insort(room_intervals.setdefault(key, []), interval)
             else:
                 values = room_intervals.get(key, [])
                 if interval in values:
@@ -842,18 +858,16 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
                     return reject("configured_linked_class_daily_period_limit")
         start, end = candidate["start_time"], candidate["end_time"]
         for linked_class_id in class_ids:
-            for interval in class_intervals.get((linked_class_id, day_id), ()):
-                if _overlap(start, end, interval[0], interval[1]):
-                    return reject("linked_class_already_has_a_lesson")
+            if _interval_list_overlaps(class_intervals.get((linked_class_id, day_id), ()), start, end):
+                return reject("linked_class_already_has_a_lesson")
         for linked_teacher_id in teacher_ids:
-            for interval in teacher_intervals.get((linked_teacher_id, day_id), ()):
-                if _overlap(start, end, interval[0], interval[1]):
-                    return reject("lead_or_co_teacher_has_an_overlapping_lesson")
+            if _interval_list_overlaps(teacher_intervals.get((linked_teacher_id, day_id), ()), start, end):
+                return reject("lead_or_co_teacher_has_an_overlapping_lesson")
         room_id = candidate.get("room_id")
-        if room_id is not None:
-            for interval in room_intervals.get((int(room_id), day_id), ()):
-                if _overlap(start, end, interval[0], interval[1]):
-                    return reject("room_already_booked")
+        if room_id is not None and _interval_list_overlaps(
+            room_intervals.get((int(room_id), day_id), ()), start, end
+        ):
+            return reject("room_already_booked")
         return True
 
     nodes = 0
