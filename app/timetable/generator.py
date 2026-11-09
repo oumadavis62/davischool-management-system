@@ -402,6 +402,7 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
             "start_time": span[0]["start_time"],
             "end_time": span[-1]["end_time"],
             "period_no": int(span[0]["period_no"]),
+            "period_end_no": int(span[-1]["period_no"]),
             "fixed": True,
         })
     for class_id, limit in class_limits.items():
@@ -418,6 +419,13 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
         for second in fixed[i + 1:]:
             if int(first["day_id"]) != int(second["day_id"]):
                 continue
+            teacher_adjacent = (
+                int(first["teacher_id"]) == int(second["teacher_id"])
+                and (int(first["period_end_no"]) + 1 == int(second["period_no"])
+                     or int(second["period_end_no"]) + 1 == int(first["period_no"]))
+            )
+            if teacher_adjacent:
+                raise TimetableSetupError("Existing manually scheduled lessons place the same teacher in consecutive periods. Leave at least one period between separate lessons.")
             if _overlap(first["start_time"], first["end_time"], second["start_time"], second["end_time"]):
                 if int(first["class_id"]) == int(second["class_id"]) or int(first["teacher_id"]) == int(second["teacher_id"]) or (
                     first["room_id"] is not None and second["room_id"] is not None and int(first["room_id"]) == int(second["room_id"])
@@ -486,6 +494,7 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
                     "start_time": span[0]["start_time"],
                     "end_time": span[-1]["end_time"],
                     "period_no": int(period["period_no"]),
+                    "period_end_no": int(span[-1]["period_no"]),
                     "preferred": any((task["teacher_id"], day_id, int(p["id"])) in preferred for p in span),
                     "explicitly_available": (
                         all((task["teacher_id"], day_id, int(p["id"])) not in fallback_only for p in span)
@@ -674,7 +683,9 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
         day_id = int(item["day_id"])
         duration = int(item.get("duration", 1))
         subject_key = (class_id, int(item["subject_id"]), teacher_id, day_id)
-        interval = (str(item["start_time"]), str(item["end_time"]))
+        interval = (str(item["start_time"]), str(item["end_time"]),
+                    int(item.get("period_no", 0)),
+                    int(item.get("period_end_no", item.get("period_no", 0))))
         bump(class_week, class_id, amount)
         bump(class_day_periods, (class_id, day_id), amount * duration)
         bump(subject_day, subject_key, amount)
@@ -725,8 +736,13 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
         for interval in class_intervals.get((class_id, day_id), ()):
             if _overlap(start, end, interval[0], interval[1]):
                 return False
+        candidate_start_period = int(candidate.get("period_no", 0))
+        candidate_end_period = int(candidate.get("period_end_no", candidate_start_period))
         for interval in teacher_intervals.get((teacher_id, day_id), ()):
             if _overlap(start, end, interval[0], interval[1]):
+                return False
+            if (interval[3] + 1 == candidate_start_period
+                    or candidate_end_period + 1 == interval[2]):
                 return False
         room_id = candidate.get("room_id")
         if room_id is not None:
