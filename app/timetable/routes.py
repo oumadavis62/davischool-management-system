@@ -1495,9 +1495,10 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
             return redirect_setup(
                 profile_id,
                 f"Subject requirements applied: {selected} subject(s), {created} class/teacher requirements added; {preserved} existing customized requirements preserved.",
+                focus="requirements",
             )
         except (TimetableSetupError, ValueError) as exc:
-            return redirect_setup(profile_id, str(exc), True)
+            return redirect_setup(profile_id, str(exc), True, focus="requirements")
         finally:
             con.close()
 
