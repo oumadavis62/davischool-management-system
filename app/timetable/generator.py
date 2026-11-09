@@ -10,7 +10,7 @@ from app.timetable.setup import TimetableSetupError, _profile
 from app.timetable.session_engine import _validate_constraints
 
 
-ENGINE_VERSION = "1.7"
+ENGINE_VERSION = "1.8"
 DEFAULT_NODE_LIMIT = 10_000_000
 GENERATION_TIME_LIMIT_SECONDS = 20.0
 
@@ -781,11 +781,13 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
     assigned = set()
     last_rank_by_group = {}
 
+    active_deadline = deadline
+
     def search(fallback: bool = False) -> bool:
         nonlocal nodes, exhausted, exhausted_reason
-        if time.monotonic() >= deadline:
+        if time.monotonic() >= active_deadline:
             exhausted = True
-            exhausted_reason = "deadline"
+            exhausted_reason = "deadline" if active_deadline >= deadline else "strict_pass_budget"
             return False
         if len(assigned) >= len(tasks):
             return True
@@ -878,12 +880,17 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
                 return False
         return False
 
-    # Preserve the existing policy: exhaust explicitly available slots first,
-    # then retry with fallback slots only if no complete strict solution exists.
+    # Reserve time for the fallback pass. Previously the strict pass could
+    # consume the entire shared deadline, meaning fallback-only slots were
+    # never considered even when they could complete the timetable.
+    strict_started_at = time.monotonic()
+    remaining_budget = max(0.0, deadline - strict_started_at)
+    active_deadline = min(deadline, strict_started_at + remaining_budget * 0.60)
     generated = search(False)
     strict_nodes = nodes
     strict_stop_reason = exhausted_reason
-    if not generated and strict_stop_reason != "deadline" and time.monotonic() < deadline:
+    strict_elapsed = round(time.monotonic() - strict_started_at, 3)
+    if not generated and time.monotonic() < deadline:
         placements[:] = list(fixed)
         class_week.clear()
         class_day_periods.clear()
@@ -896,6 +903,7 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
         nodes = 0
         exhausted = False
         exhausted_reason = None
+        active_deadline = deadline
         assigned.clear()
         last_rank_by_group.clear()
         generated = search(True)
