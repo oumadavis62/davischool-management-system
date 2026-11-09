@@ -431,13 +431,6 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
         for second in fixed[i + 1:]:
             if int(first["day_id"]) != int(second["day_id"]):
                 continue
-            teacher_adjacent = (
-                int(first["teacher_id"]) == int(second["teacher_id"])
-                and (int(first["period_end_no"]) + 1 == int(second["period_no"])
-                     or int(second["period_end_no"]) + 1 == int(first["period_no"]))
-            )
-            if teacher_adjacent:
-                raise TimetableSetupError("Existing manually scheduled lessons place the same teacher in consecutive periods. Leave at least one period between separate lessons.")
             if _overlap(first["start_time"], first["end_time"], second["start_time"], second["end_time"]):
                 if int(first["class_id"]) == int(second["class_id"]) or int(first["teacher_id"]) == int(second["teacher_id"]) or (
                     first["room_id"] is not None and second["room_id"] is not None and int(first["room_id"]) == int(second["room_id"])
@@ -1452,13 +1445,6 @@ def generate_advanced_instructional_sessions(connection: Any, school_id: int,
         for placed in planned:
             other = placed["task"]
             other_option = placed["option"]
-            if (set(task["teachers"]) & set(other["teachers"])
-                    and int(option["day_id"]) == int(other_option["day_id"])):
-                option_end_period = int(option.get("period_end_no", option["period_no"]))
-                other_end_period = int(other_option.get("period_end_no", other_option["period_no"]))
-                if (option_end_period + 1 == int(other_option["period_no"])
-                        or other_end_period + 1 == int(option["period_no"])):
-                    return False
             if not overlaps(option, other_option):
                 continue
             if (set(task["classes"]) & set(other["classes"])
@@ -1922,12 +1908,6 @@ def generate_dated_advanced_sessions(connection: Any, school_id: int, profile_id
             other_task = item["task"]
             if other["date"] != option["date"]:
                 continue
-            shared_teachers = set(task["teachers"]) & set(other_task["teachers"])
-            if shared_teachers and option.get("period_no") is not None and other.get("period_no") is not None:
-                option_end = int(option.get("period_end_no", option["period_no"]))
-                other_end = int(other.get("period_end_no", other["period_no"]))
-                if option_end + 1 == int(other["period_no"]) or other_end + 1 == int(option["period_no"]):
-                    return False
             if not _overlap(option["start"], option["end"], other["start"], other["end"]):
                 continue
             if (set(task["classes"]) & set(other_task["classes"])
