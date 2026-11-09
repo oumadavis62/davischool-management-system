@@ -38,10 +38,14 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
             return None
         return get_school_obj(request)
 
-    def redirect_setup(profile_id=0, message="", error=False, focus="", request=None):
+    def redirect_setup(profile_id=0, message="", error=False, focus="", request=None, tab="", section=""):
         parts = []
         if profile_id:
             parts.append("profile_id=" + str(int(profile_id)))
+        if tab:
+            parts.append("tab=" + quote(str(tab), safe=""))
+        if section:
+            parts.append("section=" + quote(str(section), safe=""))
         if message:
             parts.append("message=" + quote(str(message)))
         if error:
@@ -1440,9 +1444,13 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
                         )
             cur.execute(f"DELETE FROM {table} WHERE {where}", params)
             con.commit()
+            if kind == "requirement":
+                return redirect_setup(profile_id, "Subject requirement deleted.", request=request, tab="requirements", section="subject")
             return redirect_setup(profile_id, "Setup row deleted.")
         except (TimetableSetupError, ValueError) as exc:
             con.rollback()
+            if kind == "requirement":
+                return redirect_setup(profile_id, str(exc), True, request=request, tab="requirements", section="subject")
             return redirect_setup(profile_id, str(exc), True)
         finally:
             con.close()
@@ -1679,10 +1687,10 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
             return redirect_setup(
                 profile_id,
                 f"Subject requirements applied: {selected} subject(s), {created} class/teacher requirements added; {preserved} existing customized requirements preserved.",
-                request=request,
+                request=request, tab="requirements", section="subject",
             )
         except (TimetableSetupError, ValueError) as exc:
-            return redirect_setup(profile_id, str(exc), True, request=request)
+            return redirect_setup(profile_id, str(exc), True, request=request, tab="requirements", section="subject")
         finally:
             con.close()
 
@@ -1797,8 +1805,8 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
                         f"{max(0, int(lessons_per_week) - sum(int(row['duration_periods']) for row in existing) if pattern_mode == 'append' else int(lessons_per_week))} periods were available before this save."
                     )
                 save_requirement_session_pattern(con, int(school["id"]), profile_id, int(requirement["id"]), sessions)
-            return redirect_setup(profile_id, "Weekly lesson requirement and lesson pattern saved.", request=request)
+            return redirect_setup(profile_id, "Weekly lesson requirement and lesson pattern saved.", request=request, tab="requirements", section="subject")
         except (TimetableSetupError, ValueError) as exc:
             con.rollback()
-            return redirect_setup(profile_id, str(exc), True, request=request)
+            return redirect_setup(profile_id, str(exc), True, request=request, tab="requirements", section="subject")
         finally: con.close()
