@@ -936,7 +936,7 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
         fallback_nodes = int(fallback_nodes)
         exhausted = True
 
-snapshot = {
+    snapshot = {
         "profile_id": profile_id,
         "engine_version": ENGINE_VERSION,
         "days": [{"id": int(d["id"]), "code": d["day_code"]} for d in days],
