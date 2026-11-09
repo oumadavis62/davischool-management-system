@@ -104,6 +104,16 @@ class CpSatTimetableTests(unittest.TestCase):
         )
         self.assertEqual(result["status"], "INFEASIBLE")
 
+    def test_candidate_specific_room_options_are_respected(self):
+        first = dict(candidate(1, 1, "08:00", "08:40"), allowed_room_ids=[7])
+        second = dict(candidate(1, 1, "08:00", "08:40"), allowed_room_ids=[8])
+        result = solve(
+            [task(1, teacher_id=1), task(2, teacher_id=2, subject_id=11)],
+            [[first], [second]],
+        )
+        self.assertIn(result["status"], ("OPTIMAL", "FEASIBLE"))
+        self.assertEqual({item["room_id"] for item in result["placements"]}, {7, 8})
+
     def test_class_daily_period_limit_respects_double_duration(self):
         result = solve(
             [task(1, duration=2)],
