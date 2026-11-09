@@ -128,14 +128,25 @@ def register_timetable_generator_routes(app, get_db, get_school_obj, module_page
             form.action = actionUrl.pathname + actionUrl.search + actionUrl.hash;
             return true;
         }
+        function ttActiveTabSessionId() {
+            let id = '';
+            try { id = sessionStorage.getItem('davischool_tab_id') || ''; } catch (_) {}
+            if (!/^[A-Za-z0-9_-]{16,64}$/.test(id)) id = TT_TAB_SESSION_ID || '';
+            if (!/^[A-Za-z0-9_-]{16,64}$/.test(id)) {
+                try { id = new URL(window.location.href).searchParams.get('ds_tab') || ''; } catch (_) {}
+            }
+            return /^[A-Za-z0-9_-]{16,64}$/.test(id) ? id : '';
+        }
         async function ttRunGenerator(button, action, profileId, mode) {
             if (button.dataset.busy === '1') return;
-            const payload = new URLSearchParams({profile_id: String(profileId)});
-            const target = new URL(action, window.location.origin);
-            if (ttTabSessionId) {
-                target.searchParams.set('ds_tab', ttTabSessionId);
-                payload.set('ds_tab', ttTabSessionId);
+            const tabId = ttActiveTabSessionId();
+            if (!tabId) {
+                alert('Your secure tab session is not ready. Reload the timetable generator from the dashboard, then try again. No timetable changes have been made.');
+                return;
             }
+            const payload = new URLSearchParams({profile_id: String(profileId), ds_tab: tabId});
+            const target = new URL(action, window.location.origin);
+            target.searchParams.set('ds_tab', tabId);
             if (mode === 'dated') {
                 const start = document.getElementById('tt-start-date');
                 const end = document.getElementById('tt-end-date');
@@ -177,8 +188,14 @@ def register_timetable_generator_routes(app, get_db, get_school_obj, module_page
                     const detail = (await response.text()).slice(0, 500);
                     throw new Error('Server returned HTTP ' + response.status + (detail ? ': ' + detail : ''));
                 }
-                if (response.redirected && response.url) window.location.assign(response.url);
-                else window.location.reload();
+                if (response.redirected && response.url) {
+                    const finalUrl = new URL(response.url, window.location.origin);
+                    if (finalUrl.origin !== window.location.origin ||
+                        !finalUrl.pathname.startsWith('/app/timetable/automatic')) {
+                        throw new Error('The server did not accept this tab session and redirected away from the timetable generator. Your existing timetable has not been changed.');
+                    }
+                    window.location.assign(finalUrl.toString());
+                } else window.location.reload();
             } catch (error) {
                 button.disabled = false;
                 button.dataset.busy = '';
@@ -270,7 +287,7 @@ def register_timetable_generator_routes(app, get_db, get_school_obj, module_page
         run_rows = "".join(render_run_row(r) for r in runs) or "<tr><td colspan='6' class='ag-muted'>No generation runs yet.</td></tr>"
         ready = bool(days and periods and (requirements or advanced_instructional_requirements) and not read_only)
         action_html = (
-            f"""<form method='post' action='{esc(generate_action)}' class='ag-generate-form' onsubmit="return ttBindTabSession(this) && confirm('Generate a complete timetable using the current setup? Existing manual lessons will be preserved.');"><input type='hidden' name='profile_id' value='{pid}'>{tab_field}<button type='submit' class='ag-btn' {'disabled' if not tab_id else ''}>⚡ Generate complete timetable</button></form>"""
+            f"""<div class='ag-generate-form'><button type='button' class='ag-btn' onclick="ttRunGenerator(this,'/app/timetable/automatic/generate',{pid},'complete')" {'disabled' if not tab_id else ''}>⚡ Generate complete timetable</button></div>"""
             if ready else
             (f"""<div class='ag-warning'>This profile is {esc(selected['status']).replace('_',' ')} and is read-only. Create a new draft revision before generating or changing its timetable.</div><a class='ag-btn secondary' href='/app/timetable/publishing?profile_id={pid}'>Create Revision</a>""" if read_only else
              f"""<div class='ag-warning'>Complete the setup requirements first: add instructional days, teaching periods and a weekly requirement for every current class-subject-teacher allocation.</div><a class='ag-btn secondary' href='/app/timetable/setup?profile_id={pid}'>Complete Setup</a>""")
