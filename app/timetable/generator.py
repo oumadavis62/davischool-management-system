@@ -1398,8 +1398,8 @@ def generate_advanced_instructional_sessions(connection: Any, school_id: int,
         candidates.append(options)
 
     # Candidate construction above completes every database-backed lookup.
-    # Release its read transaction before recursive search, which is entirely
-    # in memory and can otherwise leave Supabase table locks open for minutes.
+    # Release the read transaction before CP-SAT optimisation so this solver
+    # does not hold Supabase table locks while exploring candidate placements.
     connection.commit()
 
     from collections import defaultdict
@@ -1801,7 +1801,7 @@ def generate_dated_advanced_sessions(connection: Any, school_id: int, profile_id
                              int(selected[-1]["period_no"] or 0)),
                         ).fetchall()
                     ] if selected[0]["period_no"] is not None else []
-                    if period_ids and teachers:
+                    if period_ids and task["teachers"]:
                         marks = ",".join("?" for _ in period_ids)
                         unavailable = cur.execute(
                             """SELECT 1 FROM ds_timetable_teacher_availability
@@ -1866,7 +1866,7 @@ def generate_dated_advanced_sessions(connection: Any, school_id: int, profile_id
                 for slot_id in slot_ids:
                     by_class_slot[(int(class_id), date_key, slot_id)].append(var)
                 by_class_week[(int(class_id), str(task["week"]))].append(var)
-                by_class_date_periods[(int(class_id), date_key)].append((var, max(1, int(option["duration"] or 1))))
+                by_class_date_periods[(int(class_id), date_key)].append((var, max(1, len(option.get("slots", [])))))
             for teacher_id in task["teachers"]:
                 for slot_id in slot_ids:
                     by_teacher_slot[(int(teacher_id), date_key, slot_id)].append(var)
