@@ -114,6 +114,95 @@ class CpSatTimetableTests(unittest.TestCase):
         self.assertIn(result["status"], ("OPTIMAL", "FEASIBLE"))
         self.assertEqual({item["room_id"] for item in result["placements"]}, {7, 8})
 
+    def test_school_scale_weekly_schedule_with_145_remaining_sessions(self):
+        # Mirrors the live school's 4 active classes, 36 requirements,
+        # 152 required periods, five days and eight teaching periods.
+        requirements = [
+            (1, 1, 6, 5, []), (1, 2, 9, 5, []), (1, 3, 4, 4, []),
+            (1, 4, 4, 5, []), (1, 5, 5, 4, []), (1, 6, 3, 5, []),
+            (1, 8, 3, 4, []), (1, 9, 8, 4, []), (1, 10, 8, 4, []),
+            (2, 1, 1, 5, []), (2, 2, 8, 5, []), (2, 3, 3, 4, []),
+            (2, 4, 4, 2, [2]), (2, 5, 8, 4, []), (2, 6, 1, 5, []),
+            (2, 8, 3, 4, []), (2, 9, 10, 4, []), (2, 10, 2, 4, []),
+            (5, 1, 6, 5, []), (5, 2, 9, 5, []), (5, 3, 3, 4, []),
+            (5, 4, 1, 3, [2, 1]), (5, 5, 9, 4, []), (5, 6, 9, 5, []),
+            (5, 8, 7, 4, []), (5, 9, 10, 4, []), (5, 10, 7, 4, []),
+            (6, 1, 10, 5, []), (6, 2, 8, 5, []), (6, 3, 2, 4, []),
+            (6, 4, 4, 2, [2]), (6, 5, 5, 4, []), (6, 6, 10, 5, []),
+            (6, 8, 9, 4, []), (6, 9, 2, 4, []), (6, 10, 7, 4, []),
+        ]
+        periods = [
+            ("08:20", "09:00"), ("09:00", "09:40"),
+            ("09:50", "10:30"), ("10:30", "11:10"),
+            ("11:30", "12:10"), ("12:10", "12:50"),
+            ("14:00", "14:40"), ("14:40", "15:20"),
+        ]
+        fixed = []
+        fixed_subjects = {(1, 1), (2, 1), (5, 1), (6, 1)}
+        for class_id, subject_id, teacher_id, _weekly, _pattern in requirements:
+            if (class_id, subject_id) not in fixed_subjects:
+                continue
+            period_no = 2 if class_id == 5 else 1
+            start, end = periods[period_no - 1]
+            fixed.append({
+                "class_id": class_id, "subject_id": subject_id,
+                "teacher_id": teacher_id, "day_id": 1,
+                "period_id": period_no, "period_no": period_no,
+                "start_time": start, "end_time": end,
+                "duration": 1, "room_id": None,
+            })
+
+        solver_tasks = []
+        candidate_lookup = {}
+        for class_id, subject_id, teacher_id, weekly, pattern in requirements:
+            durations = list(pattern) if pattern else [1] * weekly
+            if (class_id, subject_id) in fixed_subjects:
+                durations.remove(1)
+            for duration in durations:
+                task_index = len(solver_tasks)
+                solver_tasks.append({
+                    "class_id": class_id, "class_ids": [class_id],
+                    "teacher_id": teacher_id, "teacher_ids": [teacher_id],
+                    "subject_id": subject_id, "duration": duration,
+                    "max_lessons_per_day": 1,
+                    "occurrence": task_index + 1,
+                })
+                domain = []
+                starts = [3] if (
+                    duration == 2 and
+                    ((class_id == 5 and subject_id == 4) or (class_id == 6 and subject_id == 4))
+                ) else ([1, 3, 5, 7] if duration == 2 else list(range(1, 9)))
+                for day in range(1, 6):
+                    for period_no in starts:
+                        end_period = period_no + duration - 1
+                        start_time = periods[period_no - 1][0]
+                        end_time = periods[end_period - 1][1]
+                        domain.append({
+                            "day_id": day, "period_id": period_no,
+                            "period_no": period_no, "start_time": start_time,
+                            "end_time": end_time, "duration": duration,
+                            "preferred": duration == 2 and period_no == 3,
+                            "explicitly_available": True,
+                        })
+                candidate_lookup[task_index] = domain
+
+        result = solve_timetable(
+            solver_tasks, candidate_lookup, lambda _task: [None],
+            fixed, set(),
+            {class_id: {"max_lessons_per_week": 40, "max_periods_per_day": 8}
+             for class_id in (1, 2, 5, 6)},
+            time.monotonic() + 25, workers=4,
+        )
+        self.assertIn(result["status"], ("OPTIMAL", "FEASIBLE"), result)
+        self.assertEqual(len(result["placements"]), 145)
+        combined = fixed + result["placements"]
+        for class_id in (1, 2, 5, 6):
+            self.assertEqual(
+                sum(int(item["duration"]) for item in combined
+                    if class_id in item.get("class_ids", [item["class_id"]])),
+                {1: 40, 2: 37, 5: 38, 6: 37}[class_id],
+            )
+
     def test_class_daily_period_limit_respects_double_duration(self):
         result = solve(
             [task(1, duration=2)],
