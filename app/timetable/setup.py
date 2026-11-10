@@ -58,7 +58,7 @@ def create_profile(connection: Any, school_id: int, name: str, academic_year: st
             raise TimetableSetupError("Academic end date must be after the start date.")
     cur = connection.cursor()
     exists = cur.execute(
-        "SELECT id FROM ds_timetable_profiles WHERE school_id=? AND academic_year=? AND term=? AND profile_type=? AND status<>'archived' AND revision_of_profile_id IS NULL",
+        "SELECT id FROM ds_timetable_profiles WHERE school_id=? AND academic_year=? AND term=? AND profile_type=? AND status<>'archived'",
         (school_id, academic_year, term, profile_type),
     ).fetchone()
     if exists:
