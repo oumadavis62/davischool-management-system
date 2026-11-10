@@ -308,10 +308,18 @@ def register_timetable_builder_routes(app, get_db, get_school_obj, module_page):
             body = f"""<style>.tb-empty{{max-width:800px;margin:30px auto;background:white;padding:30px;border-radius:16px;text-align:center}}</style><div class='tb-empty'><h2>No timetable profile yet</h2><p>Create an academic-year and term profile before building the weekly timetable.</p><a href='/app/timetable/setup' class='btn'>Open Timetable Setup</a></div>"""
             return module_page(request, "Timetable Builder", "timetable", body)
 
-        allocation_options = "".join(
-            f"<option value='{int(a['class_id'])}|{int(a['subject_id'])}|{int(a['teacher_id'])}'>{esc(a['class_name'])} {esc(a['stream'] or '')} · {esc(a['subject_name'])} · {esc(a['teacher_name'])} ({esc(a['lessons_per_week'])}/week, {esc(a['duration_periods'])} period)</option>"
-            for a in allocations
-        )
+        allocation_option_rows = []
+        for a in allocations:
+            allocation_class_label = str(a["class_name"]) + (" " + str(a["stream"] or "")).rstrip()
+            allocation_option_rows.append(
+                f"<option value='{int(a['class_id'])}|{int(a['subject_id'])}|{int(a['teacher_id'])}' "
+                f"data-class-id='{int(a['class_id'])}' data-class-label='{esc(allocation_class_label)}' "
+                f"data-subject-id='{int(a['subject_id'])}' data-subject-label='{esc(a['subject_name'])}' "
+                f"data-teacher-id='{int(a['teacher_id'])}' data-teacher-label='{esc(a['teacher_name'])}'>"
+                f"{esc(allocation_class_label)} · {esc(a['subject_name'])} · {esc(a['teacher_name'])} "
+                f"({esc(a['lessons_per_week'])}/week, {esc(a['duration_periods'])} period)</option>"
+            )
+        allocation_options = "".join(allocation_option_rows)
         day_options = "".join(
             f"<option value='{int(d['id'])}' {'selected' if int(d['id'])==int(day_id) else ''}>{esc(d['day_name'])}</option>"
             for d in days
@@ -464,7 +472,7 @@ def register_timetable_builder_routes(app, get_db, get_school_obj, module_page):
                 rows.append(f"<tr{row_class}>{''.join(cells)}</tr>")
         grid = f"<div class='tb-grid-scroll'><table class='tb-grid'><thead><tr>{''.join(headers)}</tr></thead><tbody>{''.join(rows)}</tbody></table></div>{''.join(manage_modals)}" if days and periods else "<div class='tb-empty'>Configure at least one instructional day and one teaching period in Timetable Setup.</div>"
         add_form = (
-            f"""<section class='tb-panel'><div><span class='tb-kicker'>MANUAL SCHEDULING</span><h3>Add a lesson</h3><p>Choose an existing class, subject and allocated teacher. Lesson duration follows the weekly requirement.</p></div><form method='post' action='/app/timetable/builder/add{('?' + tab_qs) if tab_qs else ''}' class='tb-add-form'><input type='hidden' name='profile_id' value='{pid}'><label class='wide'>Class · subject · teacher<select name='allocation' required><option value=''>Select configured requirement</option>{allocation_options}</select></label><label>Day<select name='day_id' required><option value=''>Select day</option>{day_options}</select></label><label>Start period<select name='period_id' required><option value=''>Select period</option>{period_options}</select></label><label>Room<select name='room_id'>{room_options}</select></label><button class='tb-btn'>＋ Add lesson</button></form></section>"""
+            f"""<section class='tb-panel'><div><span class='tb-kicker'>MANUAL SCHEDULING</span><h3>Add a lesson</h3><p>Choose an existing class, subject and allocated teacher. Lesson duration follows the weekly requirement.</p></div><form method='post' action='/app/timetable/builder/add{('?' + tab_qs) if tab_qs else ''}' class='tb-add-form tb-add-lesson-form'><input type='hidden' name='profile_id' value='{pid}'><div class='tb-allocation-filters' data-builder-allocation-filters><label>Class / stream<select data-builder-allocation-filter='class' required><option value=''>Choose class / stream</option></select></label><label>Teacher<select data-builder-allocation-filter='teacher' required><option value=''>Choose teacher</option></select></label><label>Subject<select data-builder-allocation-filter='subject' required><option value=''>Choose subject</option></select></label><p class='tb-allocation-match' data-builder-allocation-match>Choose a class, teacher or subject. The other fields will narrow to valid configured allocations and fill automatically when only one match remains.</p></div><select name='allocation' data-builder-allocation-source hidden><option value=''>Select configured requirement</option>{allocation_options}</select><label>Day<select name='day_id' required><option value=''>Select day</option>{day_options}</select></label><label>Start period<select name='period_id' required><option value=''>Select period</option>{period_options}</select></label><label>Room<select name='room_id'>{room_options}</select></label><button class='tb-btn'>＋ Add lesson</button></form></section>"""
             if not read_only and allocations and days and periods else
             (f"<section class='tb-panel'><h3>Published timetable is read-only</h3><p>Create a new draft revision before making changes.</p><a class='tb-btn' href='/app/timetable/publishing?profile_id={pid}'>Create Revision</a></section>" if read_only else
              "<section class='tb-panel'><h3>Complete setup first</h3><p>Configure school days, teaching periods and weekly class-subject requirements before placing lessons.</p><a class='tb-btn' href='/app/timetable/setup'>Open Timetable Setup</a></section>")
@@ -673,10 +681,10 @@ def register_timetable_builder_routes(app, get_db, get_school_obj, module_page):
         .tb-toolbar.tb-toolbar{{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 14px}}.tb-tool-button{{border:1px solid #cfe2d2;border-radius:10px;background:#fff;color:#286743;padding:10px 13px;font-size:11px;font-weight:850;cursor:pointer;box-shadow:0 2px 7px rgba(35,83,51,.05)}}.tb-tool-button:hover{{background:#eaf5ec;border-color:#9fc9a7}}.tb-swap-help{{margin:0 0 14px;color:#62796a;font-size:12px;line-height:1.5}}.tb-swap-selects{{display:grid;grid-template-columns:1fr;gap:11px}}.tb-swap-choice{{display:grid;grid-template-columns:30px minmax(0,1fr);gap:9px;align-items:start;padding:12px;border:1px solid #dce9de;border-radius:13px;background:#fff}}.tb-swap-step{{display:flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:50%;background:#e8f4e9;color:#24683e;font-size:12px;font-weight:900}}.tb-swap-choice-content{{display:flex;flex-direction:column;gap:9px;min-width:0}}.tb-swap-choice-content>strong{{color:#315440;font-size:13px}}.tb-swap-filters{{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px}}.tb-swap-filters label,.tb-swap-choice-content>label{{display:flex;flex-direction:column;gap:5px;min-width:0;color:#315440;font-size:11px;font-weight:850}}.tb-swap-choice select{{width:100%;min-width:0;padding:10px 11px;border:1px solid #d5e4d7;border-radius:9px;background:#fbfdfb;color:#234638;font-size:13px}}.tb-swap-search,.tb-swap-choice select{{width:100%;min-width:0;padding:10px 11px;border:1px solid #d5e4d7;border-radius:9px;background:#fbfdfb;color:#234638;font-size:13px}}.tb-swap-preview{{display:block;padding:9px 11px;border-radius:9px;background:#f0f7f1;color:#315b3e;font-size:11px;font-weight:700;line-height:1.5;white-space:normal}}.tb-swap-direction{{text-align:center;color:#6b9b77;font-size:19px;font-weight:900;line-height:12px}}.tb-swap-note{{padding:9px 11px;border-left:3px solid #83b78d;background:#f2f8f3;color:#587260;font-size:11px;line-height:1.5}}.tb-swap-selects button{{justify-self:start}}.tb-modal-dialog>.tb-panel{{margin:0 0 12px}}.tb-modal-dialog .tb-table-scroll{{max-height:52vh;overflow:auto}}
         .tb-modal{{position:fixed;inset:0;z-index:10060;display:none;align-items:center;justify-content:center;padding:18px;background:rgba(20,43,30,.5);backdrop-filter:blur(5px)}}.tb-modal.is-open{{display:flex;animation:tbFade .16s ease-out}}.tb-modal-dialog{{width:min(680px,100%);max-height:88vh;overflow:auto;padding:25px;background:linear-gradient(145deg,#fff,#f3f9f3);border:1px solid #d5e6d8;border-radius:22px;box-shadow:0 24px 70px rgba(18,52,31,.25);animation:tbPop .18s ease-out}}
         .tb-modal-head{{display:flex;justify-content:space-between;align-items:flex-start;gap:14px;margin-bottom:19px}}.tb-modal-head h3{{font-size:20px;margin:4px 0;color:#214a34}}.tb-modal-head p{{font-size:12px;color:#718477;margin:0}}.tb-modal-close{{border:0;width:36px;height:36px;border-radius:11px;background:#eaf4eb;color:#326a43;font-size:22px;cursor:pointer;flex:none}}
-        .tb-modal .tb-add-form{{grid-template-columns:repeat(2,minmax(0,1fr))}}.tb-modal .tb-add-form label.wide,.tb-modal .tb-add-form button{{grid-column:1/-1}}.tb-modal .tb-actions form{{display:grid;grid-template-columns:1fr 1fr;gap:11px}}.tb-modal .tb-actions form button{{grid-column:1/-1}}.tb-manage-button{{border:0;background:transparent;color:#17643e;font-size:10px;font-weight:900;text-decoration:underline;padding:2px 4px;cursor:pointer;white-space:nowrap}}.tb-modal .tb-actions label{{min-width:0}}
+        .tb-modal .tb-add-form{{grid-template-columns:repeat(2,minmax(0,1fr))}}.tb-modal .tb-add-form label.wide,.tb-modal .tb-add-form button{{grid-column:1/-1}}.tb-allocation-filters{{grid-column:1/-1;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px;padding:11px;border:1px solid #dce9de;border-radius:12px;background:#f7fbf7}}.tb-allocation-filters label{{display:flex;flex-direction:column;gap:5px;min-width:0;color:#315440;font-size:11px;font-weight:850}}.tb-allocation-match{{grid-column:1/-1;margin:0!important;padding:7px 9px;border-radius:8px;background:#edf6ee;color:#52705a;font-size:10px!important}}.tb-allocation-match.is-matched{{background:#e5f4e8;color:#17633b;font-weight:800}}.tb-allocation-match.is-error{{background:#fff1f0;color:#a12828}}.tb-modal .tb-actions form{{display:grid;grid-template-columns:1fr 1fr;gap:11px}}.tb-modal .tb-actions form button{{grid-column:1/-1}}.tb-manage-button{{border:0;background:transparent;color:#17643e;font-size:10px;font-weight:900;text-decoration:underline;padding:2px 4px;cursor:pointer;white-space:nowrap}}.tb-modal .tb-actions label{{min-width:0}}
         @keyframes tbFade{{from{{opacity:0}}to{{opacity:1}}}}@keyframes tbPop{{from{{opacity:0;transform:translateY(9px) scale(.985)}}to{{opacity:1;transform:translateY(0) scale(1)}}}}
         @media(max-width:900px){{.tb-add-form{{grid-template-columns:1fr 1fr}}.tb-add-form label.wide{{grid-column:1/-1}}}}
-        @media(max-width:600px){{.tb-summary{{grid-template-columns:1fr 1fr}}.tb-summary>div:last-child{{grid-column:1/-1}}.tb-toolbar{{align-items:stretch}}.tb-profile-select{{width:100%}}.tb-profile-select select{{min-width:0;width:100%}}.tb-wrap{{padding:12px;border-radius:17px}}.tb-hero{{padding:21px 17px}}.tb-hero h2{{font-size:23px}}.tb-add-form,.tb-modal .tb-add-form,.tb-modal .tb-actions form{{grid-template-columns:1fr}}.tb-add-form label.wide,.tb-modal .tb-add-form label.wide,.tb-modal .tb-add-form button,.tb-modal .tb-actions form button{{grid-column:auto}}.tb-modal{{padding:10px}}.tb-modal-dialog{{padding:20px 16px;border-radius:18px}}.tb-hero>div:last-child{{width:100%}}.tb-hero>div:last-child a{{flex:1}}}}
+        @media(max-width:600px){{.tb-summary{{grid-template-columns:1fr 1fr}}.tb-summary>div:last-child{{grid-column:1/-1}}.tb-toolbar{{align-items:stretch}}.tb-profile-select{{width:100%}}.tb-profile-select select{{min-width:0;width:100%}}.tb-wrap{{padding:12px;border-radius:17px}}.tb-hero{{padding:21px 17px}}.tb-hero h2{{font-size:23px}}.tb-add-form,.tb-modal .tb-add-form,.tb-modal .tb-actions form{{grid-template-columns:1fr}}.tb-allocation-filters{{grid-template-columns:1fr}}.tb-add-form label.wide,.tb-modal .tb-add-form label.wide,.tb-modal .tb-add-form button,.tb-modal .tb-actions form button{{grid-column:auto}}.tb-modal{{padding:10px}}.tb-modal-dialog{{padding:20px 16px;border-radius:18px}}.tb-hero>div:last-child{{width:100%}}.tb-hero>div:last-child a{{flex:1}}}}
         </style>
         <div class='tb-wrap'><header class='tb-hero'><div><span class='tb-kicker'>DAVISCHOOL · TIMETABLE WORKSPACE</span><h2>Manual Timetable Builder</h2><p>Drag to move · Select a tool for other actions.</p></div></header>{notice}<div class='tb-toolbar'>{profile_selector}<div class='tb-profile-context'><strong>{esc(selected['name'])}</strong><span>{esc(selected['academic_year'])} · {esc(selected['term'])}</span></div></div><nav class='tb-toolbar' aria-label='Builder tools'>{builder_tool_buttons}</nav>{grid}{builder_modals}</div>
         <script>
@@ -705,6 +713,46 @@ def register_timetable_builder_routes(app, get_db, get_school_obj, module_page):
             }}
             start.addEventListener('change',syncRange);end.addEventListener('change',syncRange);syncRange();
           }});
+          const addLessonForm=document.querySelector('#tb-modal-add .tb-add-lesson-form');
+          if(addLessonForm){{
+            const source=addLessonForm.querySelector('[data-builder-allocation-source]');
+            const filters={{class:addLessonForm.querySelector('[data-builder-allocation-filter="class"]'),teacher:addLessonForm.querySelector('[data-builder-allocation-filter="teacher"]'),subject:addLessonForm.querySelector('[data-builder-allocation-filter="subject"]')}};
+            const note=addLessonForm.querySelector('[data-builder-allocation-match]');
+            const rows=Array.from(source.options).filter(option=>option.value).map(option=>({{option:option,value:option.value,classId:option.dataset.classId,classLabel:option.dataset.classLabel,teacherId:option.dataset.teacherId,teacherLabel:option.dataset.teacherLabel,subjectId:option.dataset.subjectId,subjectLabel:option.dataset.subjectLabel}}));
+            const fields=['class','teacher','subject'];
+            const idField={{class:'classId',teacher:'teacherId',subject:'subjectId'}};
+            const labelField={{class:'classLabel',teacher:'teacherLabel',subject:'subjectLabel'}};
+            const unique=(items,key,label)=>{{const found=new Map();items.forEach(row=>found.set(row[key],row[label]));return Array.from(found,([value,text])=>({{value,text}})).sort((a,b)=>a.text.localeCompare(b.text));}};
+            const matching=(selected,except)=>rows.filter(row=>fields.every(key=>key===except||!selected[key]||row[idField[key]]===selected[key]));
+            const fill=(select,items,placeholder,selected)=>{{select.innerHTML='';const first=document.createElement('option');first.value='';first.textContent=placeholder;select.appendChild(first);items.forEach(item=>{{const option=document.createElement('option');option.value=item.value;option.textContent=item.text;select.appendChild(option);}});select.value=items.some(item=>item.value===selected)?selected:'';}};
+            const refresh=(changed)=>{{
+              const selected={{}};fields.forEach(key=>selected[key]=filters[key].value);
+              let candidates=matching(selected);
+              if(!candidates.length&&changed){{
+                fields.forEach(key=>{{if(key!==changed)selected[key]='';}});
+                candidates=matching(selected);
+              }}
+              for(let pass=0;pass<3;pass++){{
+                candidates=matching(selected);
+                fields.forEach(key=>{{if(!selected[key]){{const choices=unique(candidates,idField[key],labelField[key]);if(choices.length===1)selected[key]=choices[0].value;}}}});
+              }}
+              candidates=matching(selected);
+              fields.forEach(key=>{{
+                const choices=unique(matching(selected,key),idField[key],labelField[key]);
+                fill(filters[key],choices,key==='class'?'Choose class / stream':key==='teacher'?'Choose teacher':'Choose subject',selected[key]);
+                selected[key]=filters[key].value;
+              }});
+              candidates=matching(selected);
+              const exact=candidates.length===1?candidates[0]:null;
+              source.value=exact?exact.value:'';
+              if(exact){{note.textContent='Matched: '+exact.classLabel+' · '+exact.subjectLabel+' · '+exact.teacherLabel+'. You can now choose the day and period.';note.classList.add('is-matched');note.classList.remove('is-error');}}
+              else if(!candidates.length){{note.textContent='No configured allocation matches these filters. Change one selection.';note.classList.remove('is-matched');note.classList.add('is-error');}}
+              else{{note.textContent=candidates.length+' configured allocations match. Choose another filter to narrow to one.';note.classList.remove('is-matched','is-error');}}
+            }};
+            fields.forEach(key=>filters[key].addEventListener('change',()=>refresh(key)));
+            addLessonForm.addEventListener('submit',event=>{{if(!source.value){{event.preventDefault();note.textContent='Please narrow the filters until one valid class, teacher and subject allocation is matched.';note.classList.add('is-error');}}}});
+            refresh('');
+          }}
           const swapModal=document.getElementById('tb-modal-swap');
           if(swapModal){{
             const lessonSelects=Array.from(swapModal.querySelectorAll('[data-swap-lesson]'));
