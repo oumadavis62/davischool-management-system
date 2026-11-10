@@ -66,7 +66,11 @@ def create_profile(connection: Any, school_id: int, name: str, academic_year: st
             raise TimetableSetupError("A main school timetable already exists for this academic year and term. Create a revision from its published profile instead.")
     else:
         exists = cur.execute(
-            "SELECT id FROM ds_timetable_profiles WHERE school_id=? AND academic_year=? AND term=? AND profile_type=? AND name=? AND status<>'archived'",
+            """SELECT p.id FROM ds_timetable_profiles p
+               LEFT JOIN ds_timetable_profiles root
+                 ON root.id=COALESCE(p.revision_of_profile_id,p.id)
+               WHERE p.school_id=? AND p.academic_year=? AND p.term=?
+                 AND p.profile_type=? AND root.name=? AND p.status<>'archived'""",
             (school_id, academic_year, term, profile_type, name),
         ).fetchone()
         if exists:
