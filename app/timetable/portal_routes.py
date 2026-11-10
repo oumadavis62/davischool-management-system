@@ -149,7 +149,7 @@ def build_teacher_timetable_grid(view: dict) -> str:
 
     rows = []
     for day in days:
-        cells = ["<th class='tp-day-col'>" + escape(str(day["day_name"])) + "</th>"]
+        cells = ["<th class='tp-day-col'>" + escape(str(day.get("day_code") or day["day_name"])) + "</th>"]
         merged = set()
         for pos, (_, kind, item) in enumerate(timeline):
             if kind == "break":
