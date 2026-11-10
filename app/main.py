@@ -2719,7 +2719,7 @@ def parent_portal(request: Request):
             "<button type='button' class='parent-nav-btn active' data-section='overview' onclick=\"parentShow('overview')\">Overview</button>"
             "<button type='button' class='parent-nav-btn' data-section='academics' onclick=\"parentShow('academics')\">Academics</button>"
             "<button type='button' class='parent-nav-btn' data-section='fees' onclick=\"parentShow('fees')\">Fees</button>"
-            "<a class='parent-nav-btn' href='/app/timetable' style='text-decoration:none'>My Timetable</a>"
+            "<a class='parent-nav-btn' href='/app/timetable/my' style='text-decoration:none'>My Timetable</a>"
             "</nav>" + overview + academics + fees + "</div>"
             "<script>function parentShow(section){document.querySelectorAll('.parent-panel').forEach(function(p){p.hidden=p.id!=='parent-'+section;});document.querySelectorAll('.parent-nav-btn').forEach(function(b){b.classList.toggle('active',b.dataset.section===section);});window.scrollTo({top:0,behavior:'smooth'});}</script>"
         )
@@ -3524,7 +3524,7 @@ def role_portal(request:Request):
     if role=='teacher':
         t=cur.execute('SELECT * FROM teachers WHERE id=? AND school_id=?',(teacher_id,school['id'])).fetchone() if teacher_id else None
         alloc=cur.execute('SELECT ta.*,s.name subject,c.name class_name,c.stream FROM teacher_allocations ta JOIN subjects s ON s.id=ta.subject_id JOIN classes c ON c.id=ta.class_id WHERE ta.teacher_id=? AND ta.school_id=?',(teacher_id,school['id'])).fetchall() if teacher_id else []
-        body=f"<div class='card'><h2>👨‍🏫 Teacher Portal</h2><p>Welcome {t['name'] if t else request.session.get('name','Teacher')}.</p><table><tr><th>Subject</th><th>Class</th><th>Stream</th></tr>"+''.join(f"<tr><td>{a['subject']}</td><td>{a['class_name']}</td><td>{a['stream'] or ''}</td></tr>" for a in alloc)+"</table><div style='margin-top:12px;display:flex;gap:8px;flex-wrap:wrap'><a class='btn' href='/school/record-marks'>✏️ Record Marks</a><a class='btn secondary' href='/app/timetable'>📅 My Timetable</a></div></div>"
+        body=f"<div class='card'><h2>👨‍🏫 Teacher Portal</h2><p>Welcome {t['name'] if t else request.session.get('name','Teacher')}.</p><table><tr><th>Subject</th><th>Class</th><th>Stream</th></tr>"+''.join(f"<tr><td>{a['subject']}</td><td>{a['class_name']}</td><td>{a['stream'] or ''}</td></tr>" for a in alloc)+"</table><div style='margin-top:12px;display:flex;gap:8px;flex-wrap:wrap'><a class='btn' href='/school/record-marks'>✏️ Record Marks</a><a class='btn secondary' href='/app/timetable/my'>📅 My Timetable</a></div></div>"
     else:
         st=cur.execute('SELECT * FROM students WHERE id=? AND school_id=?',(student_id,school['id'])).fetchone() if student_id else None
         marks=cur.execute('SELECT sub.name subject,e.name exam,m.marks,e.term,e.year FROM marks m JOIN subjects sub ON sub.id=m.subject_id JOIN exams e ON e.id=m.exam_id WHERE m.student_id=? AND m.school_id=? ORDER BY e.year DESC,e.id DESC',(student_id,school['id'])).fetchall() if student_id else []
