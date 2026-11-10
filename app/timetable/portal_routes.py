@@ -271,7 +271,7 @@ def register_timetable_portal_routes(app, get_db):
                     sections.append(
                         "<section class='tp-card'><div class='tp-head'><div><h2>"
                         + escape(label) + "</h2><p>" + escape(str(profile["academic_year"]))
-                        + " · " + escape(str(profile["term"])) + " · " + escape(str(profile.get("profile_type") or "main").replace("_", " ").title()) + " · Revision "
+                        + " · " + escape(str(profile["term"])) + " · " + escape(str(profile["profile_type"] or "main").replace("_", " ").title()) + " · Revision "
                         + escape(str(profile["revision_no"] or 1)) + "</p></div><span>Published</span></div>"
                         + schedule_html + "</section>"
                     )
