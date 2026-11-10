@@ -151,4 +151,4 @@ def timetable_workspace(request, body):
       }
       </script>
     """
-    return marker + intro + body
+    return global_nav + marker + intro + body
