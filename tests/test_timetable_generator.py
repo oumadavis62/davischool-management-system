@@ -78,6 +78,17 @@ class TimetableGeneratorTests(unittest.TestCase):
         self.assertNotEqual(int(rows[0]["period_no"]) + 1, int(rows[1]["period_no"]))
         self.assertNotEqual(int(rows[0]["subject_id"]), int(rows[1]["subject_id"]))
 
+    def test_manual_double_span_accepts_equivalent_time_formats(self):
+        from app.timetable.generator import _period_span
+
+        periods = [
+            {"id": 9, "period_no": 1, "period_type": "lesson",
+             "start_time": "08:20:00", "end_time": "09:00:00"},
+            {"id": 10, "period_no": 2, "period_type": "lesson",
+             "start_time": "09:00", "end_time": "09:40"},
+        ]
+        self.assertEqual(_period_span(periods, 0, 2), periods)
+
     def test_generator_fills_weekly_requirement_and_assigns_room(self):
         result = generate_timetable(self.db, 1, self.profile_id, "admin@test")
         self.assertEqual(result["status"], "completed")
