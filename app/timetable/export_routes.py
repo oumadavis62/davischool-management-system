@@ -83,6 +83,8 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                 cl=row["class"]
                 cells.append("<th class='class'>" + escape(cl["class_name"] + ((" " + cl["stream"]) if cl["stream"] else "")) + "</th>")
             for cell in row["cells"]:
+                if cell["kind"] == "break_placeholder":
+                    continue
                 if cell["kind"] == "break":
                     b=cell["item"]
                     cells.append(f"<td class='break' rowspan='{cell['rowspan']}'><b>{escape(str(b['label']))}</b><br>{escape(str(b['start_time']))}–{escape(str(b['end_time']))}</td>")
@@ -186,7 +188,9 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                 cl=row["class"]
                 cells.append(Paragraph("<b>"+pdf_text(cl["class_name"] + ((" "+cl["stream"]) if cl["stream"] else ""))+"</b>",cell_style))
             for cell in row["cells"]:
-                if cell["kind"]=="break":
+                if cell["kind"]=="break_placeholder":
+                    cells.append("")
+                elif cell["kind"]=="break":
                     b=cell["item"]
                     cells.append(Paragraph("<b>"+pdf_text(b["label"])+"</b><br/>"+pdf_text(b["start_time"]+"–"+b["end_time"]),cell_style))
                     if cell["rowspan"]>1:
