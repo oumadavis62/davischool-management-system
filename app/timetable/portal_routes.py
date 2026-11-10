@@ -261,6 +261,56 @@ def register_timetable_portal_routes(app, get_db):
                    ORDER BY academic_year DESC,term DESC,published_at DESC,id DESC""",
                 (school_id,),
             ).fetchall()
+            # Keep the teacher's page focused on one published timetable.
+            # Filters are derived from published profiles, so unavailable options
+            # can never be selected and unpublished drafts are never exposed.
+            all_profiles = list(profiles)
+            years = sorted({str(p["academic_year"]) for p in all_profiles}, reverse=True)
+            terms = sorted({str(p["term"]) for p in all_profiles})
+            profile_types = sorted({
+                str(p["profile_type"] or "main") for p in all_profiles
+            })
+            selected_year = request.query_params.get("academic_year") or (years[0] if years else "")
+            selected_term = request.query_params.get("term") or (
+                str(all_profiles[0]["term"]) if all_profiles else ""
+            )
+            selected_type = request.query_params.get("profile_type") or (
+                str(all_profiles[0]["profile_type"] or "main") if all_profiles else ""
+            )
+            if role == "teacher" and all_profiles:
+                profiles = [
+                    p for p in all_profiles
+                    if str(p["academic_year"]) == selected_year
+                    and str(p["term"]) == selected_term
+                    and str(p["profile_type"] or "main") == selected_type
+                ]
+            else:
+                profiles = all_profiles
+
+            def filter_options(values, selected, label_fn=lambda value: value):
+                return "".join(
+                    "<option value='" + escape(value, quote=True) + "'"
+                    + (" selected" if value == selected else "") + ">"
+                    + escape(label_fn(value)) + "</option>"
+                    for value in values
+                )
+
+            filter_html = ""
+            if role == "teacher" and all_profiles:
+                type_label = lambda value: value.replace("_", " ").title()
+                filter_html = (
+                    "<form class='tp-filters' method='get' action='/app/timetable/my'>"
+                    "<label>Academic Year<select name='academic_year' onchange='this.form.submit()'>"
+                    + filter_options(years, selected_year)
+                    + "</select></label>"
+                    "<label>Term<select name='term' onchange='this.form.submit()'>"
+                    + filter_options(terms, selected_term)
+                    + "</select></label>"
+                    "<label>Timetable Type<select name='profile_type' onchange='this.form.submit()'>"
+                    + filter_options(profile_types, selected_type, type_label)
+                    + "</select></label></form>"
+                )
+
             sections = []
             for profile in profiles:
                 for view_type, target_id, label in targets:
@@ -312,6 +362,7 @@ def register_timetable_portal_routes(app, get_db):
             "body{margin:0;background:#f1f7f1;color:#173d2b;font:14px Arial,sans-serif}"
             ".tp-wrap{max-width:1250px;margin:auto;padding:22px}.tp-hero{margin-bottom:18px}"
             ".tp-hero h1{margin:0 0 6px;font-size:26px}.tp-hero-top{display:flex;align-items:center;justify-content:space-between;gap:12px}.tp-sidebar-toggle{width:36px;height:36px;flex:0 0 36px;border:1px solid #cfe0d2;border-radius:10px;background:#fff;color:#245b39;font-size:19px;cursor:pointer;display:grid;place-items:center}.tp-sidebar-toggle:hover{background:#e8f4eb}.tp-hero p,.tp-head p{color:#64748b;margin:0;font-size:12px}"
+            ".tp-filters{display:flex;flex-wrap:wrap;gap:12px;align-items:end;background:#fff;border:1px solid #dce9de;border-radius:14px;padding:13px 15px;margin:0 0 14px}.tp-filters label{display:flex;flex-direction:column;gap:5px;min-width:145px;flex:1;color:#315b3e;font-size:11px;font-weight:700}.tp-filters select{width:100%;min-height:38px;border:1px solid #cfe0d2;border-radius:9px;background:#f8fbf8;color:#173d2b;padding:7px 10px;font-size:13px;outline-color:#347b50}"
             ".tp-additional{margin-top:16px}.tp-additional h3{font-size:15px;margin:0 0 9px;color:#245b39}.tp-card{background:#fff;border:1px solid #dce9de;border-radius:14px;padding:16px;margin:14px 0}"
             ".tp-head{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:12px}"
             ".tp-head h2{font-size:17px;margin:0 0 5px}.tp-head span{background:#eaf5ec;color:#17633b;padding:6px 10px;border-radius:18px;font-size:10px;font-weight:bold}"
@@ -321,7 +372,10 @@ def register_timetable_portal_routes(app, get_db):
             "@media(max-width:600px){.tp-wrap{padding:12px}.tp-hero h1{font-size:22px}.tp-card{padding:11px}.tp-grid-scroll{border-radius:11px}}"
             "</style></head><body><main class='tp-wrap'><header class='tp-hero'><div class='tp-hero-top'><h1>My Timetable</h1><button class='tp-sidebar-toggle' type='button' aria-label='Hide Sidebar' title='Hide Sidebar' onclick='(function(){var docs=[document];try{if(window.parent&&window.parent!==window)docs.push(window.parent.document)}catch(e){}for(var d of docs){var b=Array.from(d.querySelectorAll(`button,a,[role=button]`)).find(function(x){var t=((x.innerText||x.getAttribute(`aria-label`)||x.getAttribute(`title`)||``).trim()).toLowerCase();return t===`hide sidebar`||t===`show sidebar`||t.includes(`hide sidebar`)||t.includes(`show sidebar`)});if(b){b.click();return}}})();'><span aria-hidden='true'>◧</span></button></div>"
             "<p>Latest published timetable · DaviSchool</p></header>"
-            + ("<div class='tp-notice'>" + escape(message) + "</div>" if message else "")
+            + filter_html
+            + ("<div class='tp-notice'>" + escape(message) + "</div>" if message else
+               ("<div class='tp-notice'>No published timetable matches these filters.</div>"
+                if role == "teacher" and all_profiles and not profiles else ""))
             + "".join(sections)
             + "</main></body></html>"
         )
