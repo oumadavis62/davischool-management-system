@@ -46,6 +46,13 @@ def _interval_list_overlaps(intervals, start: str, end: str) -> bool:
     return position < len(intervals) and str(intervals[position][0]) < str(end)
 
 
+def _period_time_key(value):
+    # PostgreSQL adapters may return TIME values as datetime.time while the
+    # SQLite test adapter returns strings. Compare the clock value consistently.
+    value = str(value or "").strip()
+    return value[:5]
+
+
 def _period_span(periods, start_index: int, duration: int):
     span = periods[start_index:start_index + duration]
     if len(span) != duration:
@@ -57,7 +64,7 @@ def _period_span(periods, start_index: int, duration: int):
             previous = span[i - 1]
             if int(period["period_no"]) != int(previous["period_no"]) + 1:
                 return None
-            if str(previous["end_time"]) != str(period["start_time"]):
+            if _period_time_key(previous["end_time"]) != _period_time_key(period["start_time"]):
                 return None
     return span
 
