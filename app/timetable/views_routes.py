@@ -340,8 +340,11 @@ def register_timetable_view_routes(app, get_db, get_school_obj, module_page):
         @media print{{.tv-wrap{{padding:0;max-width:none;background:#fff}}.tv-wrap .tv-grid-scroll{{overflow:visible;border:1px solid #999}}.tv-wrap .tb-grid{{min-width:0}}.tv-wrap .tb-grid thead th{{position:static;background:#347b50!important;color:#fff!important}}.tv-wrap .tb-grid .tb-cell{{min-width:0}}}}
         /* Match the teacher portal's non-main programme density; main stays unchanged. */
         .tv-wrap .tb-grid-compact{{min-width:500px;table-layout:fixed}}
-        .tv-wrap .tb-grid-compact .tb-day-heading{{width:42px;min-width:42px;max-width:42px;padding:5px 2px;font-size:9px;overflow-wrap:anywhere}}
-        .tv-wrap .tb-grid-compact .tb-class-heading{{left:42px}}
+        /* Specialized timetable: keep the day and class/stream identifiers compact. */
+        .tv-wrap .tb-grid-compact .tb-day-heading{{width:30px;min-width:30px;max-width:30px;padding:4px 1px;font-size:8px;overflow-wrap:anywhere;white-space:normal}}
+        .tv-wrap .tb-grid-compact .tb-class-heading{{width:48px;min-width:48px;max-width:48px;left:30px;padding:4px 2px;font-size:8px;line-height:1.05;overflow-wrap:anywhere}}
+        .tv-wrap .tb-grid-compact .tb-class-name{{font-size:8px;line-height:1.05}}
+        .tv-wrap .tb-grid-compact .tb-stream-name{{font-size:7px;line-height:1.05;margin-top:1px}}
         .tv-wrap .tb-grid-compact thead th.tb-break-heading{{width:34px;min-width:34px;max-width:34px;padding:5px 1px;font-size:8px;overflow-wrap:anywhere;white-space:normal}}
         .tv-wrap .tb-grid-compact .tb-break-cell{{width:34px;min-width:34px;max-width:34px;padding:4px 2px}}
         .tv-wrap .tb-grid .tb-break-cell b{{writing-mode:vertical-rl;text-orientation:mixed;display:block;width:100%;height:100%;min-height:100%;text-align:justify;text-align-last:justify;vertical-align:middle;line-height:1;font-size:18px;font-weight:900;letter-spacing:.12em;white-space:nowrap}}
