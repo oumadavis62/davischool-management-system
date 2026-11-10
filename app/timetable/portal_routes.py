@@ -206,11 +206,31 @@ def build_teacher_timetable_grid(view: dict) -> str:
             else:
                 cells.append("<td class='tp-free'></td>")
         rows.append("<tr>" + "".join(cells) + "</tr>")
-    return (
+    grid_html = (
         "<div class='tp-grid-scroll'><table class='tp-grid'><thead><tr>"
         + "".join(headers) + "</tr></thead><tbody>" + "".join(rows)
         + "</tbody></table></div>"
     )
+    additional_rows = build_portal_timetable_rows({
+        "lessons": [],
+        "advanced_sessions": view.get("advanced_sessions", []),
+    })
+    additional_html = ""
+    if additional_rows:
+        rendered = "".join(
+            "<tr><td>" + escape(row["date_day"]) + "</td><td>" + escape(row["time"])
+            + "</td><td><b>" + escape(row["subject"]) + "</b><small> " + escape(row["layer"])
+            + "</small></td><td>" + escape(row["class_group"]) + "</td><td>"
+            + escape(row["teachers"]) + "</td><td>" + escape(row["venue"]) + "</td></tr>"
+            for row in additional_rows
+        )
+        additional_html = (
+            "<section class='tp-additional'><h3>Additional and dated sessions</h3>"
+            "<div class='tp-scroll'><table><thead><tr><th>Date / Day</th><th>Time</th>"
+            "<th>Subject / Activity</th><th>Class / Group</th><th>Teachers</th><th>Room</th>"
+            "</tr></thead><tbody>" + rendered + "</tbody></table></div></section>"
+        )
+    return grid_html + additional_html
 
 
 def register_timetable_portal_routes(app, get_db):
@@ -292,7 +312,7 @@ def register_timetable_portal_routes(app, get_db):
             "body{margin:0;background:#f1f7f1;color:#173d2b;font:14px Arial,sans-serif}"
             ".tp-wrap{max-width:1250px;margin:auto;padding:22px}.tp-hero{margin-bottom:18px}"
             ".tp-hero h1{margin:0 0 6px;font-size:26px}.tp-hero-top{display:flex;align-items:center;justify-content:space-between;gap:12px}.tp-sidebar-toggle{width:36px;height:36px;flex:0 0 36px;border:1px solid #cfe0d2;border-radius:10px;background:#fff;color:#245b39;font-size:19px;cursor:pointer;display:grid;place-items:center}.tp-sidebar-toggle:hover{background:#e8f4eb}.tp-hero p,.tp-head p{color:#64748b;margin:0;font-size:12px}"
-            ".tp-card{background:#fff;border:1px solid #dce9de;border-radius:14px;padding:16px;margin:14px 0}"
+            ".tp-additional{margin-top:16px}.tp-additional h3{font-size:15px;margin:0 0 9px;color:#245b39}.tp-card{background:#fff;border:1px solid #dce9de;border-radius:14px;padding:16px;margin:14px 0}"
             ".tp-head{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:12px}"
             ".tp-head h2{font-size:17px;margin:0 0 5px}.tp-head span{background:#eaf5ec;color:#17633b;padding:6px 10px;border-radius:18px;font-size:10px;font-weight:bold}"
             ".tp-scroll,.tp-grid-scroll{overflow:auto;border:1px solid #dce8de;border-radius:14px;background:#fff}"
