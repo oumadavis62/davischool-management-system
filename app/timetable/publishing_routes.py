@@ -190,11 +190,26 @@ def register_timetable_publishing_routes(app, get_db, get_school_obj, module_pag
         finally:
             con.close()
 
-    # Compatibility endpoint: some wrapped timetable pages or older cached clients
-    # submit the confirmation form to the workspace URL itself. Treat that POST as
-    # the same explicit submit-for-approval action instead of returning HTTP 405.
+    # Compatibility endpoint for clients that post either workflow action to
+    # the workspace URL. Resolve the action from the persisted profile state:
+    # drafts are submitted for approval; pending profiles are approved and published.
+    # This prevents a stale/wrapped form from re-submitting an already-pending draft.
     @app.post("/app/timetable/publishing")
     def timetable_publishing_submit_compat(request: Request, profile_id: int = Form(...)):
+        school = school_for(request)
+        if not school:
+            return RedirectResponse("/", 303)
+        con = get_db()
+        try:
+            profile = con.execute(
+                "SELECT status FROM ds_timetable_profiles WHERE id=? AND school_id=?",
+                (profile_id, int(school["id"])),
+            ).fetchone()
+            status = str(profile["status"] or "draft").strip().lower() if profile else ""
+        finally:
+            con.close()
+        if status == "pending_approval":
+            return timetable_approve_and_publish(request, profile_id)
         return timetable_submit_for_approval(request, profile_id)
 
     @app.post("/app/timetable/publishing/publish")
