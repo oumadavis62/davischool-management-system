@@ -205,6 +205,14 @@ def _load_advanced_sessions(cur, school_id: int, profile_id: int, view_type: str
                ORDER BY st.session_id,t.name""",
             (school_id, *session_ids),
         ).fetchall()
+        learner_rows = cur.execute(
+            """SELECT sl.session_id,s.name
+               FROM ds_timetable_session_learners sl
+               JOIN students s ON s.id=sl.student_id AND s.school_id=sl.school_id
+               WHERE sl.school_id=? AND sl.session_id IN (""" + placeholders + """)
+               ORDER BY sl.session_id,s.name""",
+            (school_id, *session_ids),
+        ).fetchall()
         class_names = {}
         for linked in class_rows:
             label = str(linked["name"]) + ((" " + str(linked["stream"])) if linked["stream"] else "")
@@ -212,8 +220,14 @@ def _load_advanced_sessions(cur, school_id: int, profile_id: int, view_type: str
         teacher_names = {}
         for linked in teacher_rows:
             teacher_names.setdefault(int(linked["session_id"]), []).append(str(linked["name"]))
+        learner_names = {}
+        for linked in learner_rows:
+            learner_names.setdefault(int(linked["session_id"]), []).append(str(linked["name"]))
         for session in sessions:
+            session["learner_names"] = ", ".join(learner_names.get(int(session["id"]), []))
             session["class_names"] = ", ".join(class_names.get(int(session["id"]), []))
+            if not session["class_names"] and session["learner_names"]:
+                session["class_names"] = "Individual: " + session["learner_names"]
             session["teacher_names"] = ", ".join(teacher_names.get(int(session["id"]), []))
     dated = [str(row["session_date"]) for row in sessions
              if row["session_date"] and str(row.get("day_code") or "").upper() in {"SAT", "SUN"}]
