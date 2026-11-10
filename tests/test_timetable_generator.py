@@ -540,6 +540,21 @@ class TimetableSchoolSnapshotIntegrationTests(unittest.TestCase):
         ).fetchall()
         self.assertEqual(len(generated), 145)
         self.assertEqual(sum(int(row["duration_periods"]) for row in generated), 148)
+        # Every school-wide double/triple reserves its occupied periods,
+        # even when the lessons belong to different classes.
+        extended_slots = set()
+        for row in generated:
+            duration = int(row["duration_periods"] or 1)
+            if duration <= 1:
+                continue
+            start_no = next(
+                number for number, period_id in self.periods.items()
+                if period_id == int(row["period_id"])
+            )
+            for period_no in range(start_no, start_no + duration):
+                key = (int(row["day_id"]), period_no)
+                self.assertNotIn(key, extended_slots)
+                extended_slots.add(key)
         self.assertEqual(
             self.db.execute(
                 "SELECT COUNT(*) total FROM ds_timetable_lessons WHERE profile_id=? AND generation_run_id IS NULL AND status='scheduled'",
