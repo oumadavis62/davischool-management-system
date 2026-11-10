@@ -470,16 +470,40 @@ def submit_for_approval(connection: Any, school_id: int, profile_id: int, actor:
         raise TimetableSetupError("Timetable is not ready for approval: " + " ".join(readiness["errors"][:4]))
     now = _now()
     cur.execute(
-        "UPDATE ds_timetable_profiles SET status='pending_approval',updated_at=? WHERE id=? AND school_id=?",
+        """UPDATE ds_timetable_profiles
+           SET status='pending_approval',updated_at=?
+           WHERE id=? AND school_id=? AND status='draft'""",
         (now,profile_id,school_id),
     )
+    if getattr(cur, "rowcount", 0) != 1:
+        connection.rollback()
+        raise TimetableSetupError(
+            "The timetable status was not changed. Refresh the profile and try submitting again."
+        )
     cur.execute(
         """INSERT INTO ds_timetable_change_log
            (school_id,profile_id,action,before_json,after_json,changed_by,changed_at)
            VALUES(?,?,?,?,?,?,?)""",
         (school_id,profile_id,"SUBMIT_FOR_APPROVAL",json.dumps({"status":"draft"}),json.dumps({"status":"pending_approval"}),actor,now),
     )
+    saved = cur.execute(
+        "SELECT status FROM ds_timetable_profiles WHERE id=? AND school_id=?",
+        (profile_id,school_id),
+    ).fetchone()
+    if not saved or str(saved["status"]) != "pending_approval":
+        connection.rollback()
+        raise TimetableSetupError(
+            "The database did not save the pending-approval status. No submission was recorded."
+        )
     connection.commit()
+    persisted = cur.execute(
+        "SELECT status FROM ds_timetable_profiles WHERE id=? AND school_id=?",
+        (profile_id,school_id),
+    ).fetchone()
+    if not persisted or str(persisted["status"]) != "pending_approval":
+        raise TimetableSetupError(
+            "The submission could not be verified after saving. Please refresh and try again."
+        )
     return readiness
 
 
