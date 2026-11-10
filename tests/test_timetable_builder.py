@@ -137,6 +137,22 @@ class TimetableBuilderTests(unittest.TestCase):
         row = self.db.execute("SELECT day_id FROM ds_timetable_lessons WHERE id=?", (first,)).fetchone()
         self.assertEqual(row["day_id"], self.day_tue)
 
+    def test_manage_move_can_change_lesson_to_single_double_or_triple_by_end_period(self):
+        lesson_id = place_lesson(self.db, 1, self.profile_id, 20, 30, 10, self.day_mon, self.p1)
+        move_lesson(self.db, 1, self.profile_id, lesson_id, self.day_tue, self.p3, "admin@test", None, self.p3)
+        row = self.db.execute("SELECT day_id,period_id,duration_periods FROM ds_timetable_lessons WHERE id=?", (lesson_id,)).fetchone()
+        self.assertEqual(tuple(row), (self.day_tue, self.p3, 1))
+        move_lesson(self.db, 1, self.profile_id, lesson_id, self.day_wed, self.p1, "admin@test", None, self.p2)
+        row = self.db.execute("SELECT day_id,period_id,duration_periods FROM ds_timetable_lessons WHERE id=?", (lesson_id,)).fetchone()
+        self.assertEqual(tuple(row), (self.day_wed, self.p1, 2))
+
+    def test_manage_move_rejects_invalid_period_ranges(self):
+        lesson_id = place_lesson(self.db, 1, self.profile_id, 20, 30, 10, self.day_mon, self.p1)
+        with self.assertRaises(TimetableSetupError):
+            move_lesson(self.db, 1, self.profile_id, lesson_id, self.day_tue, self.p3, "admin@test", None, self.p1)
+        with self.assertRaises(TimetableSetupError):
+            move_lesson(self.db, 1, self.profile_id, lesson_id, self.day_tue, self.p1, "admin@test", None, self.p4)
+
     def test_move_and_delete_are_audited(self):
         lesson_id = place_lesson(self.db, 1, self.profile_id, 20, 30, 10, self.day_mon, self.p1, self.room_id)
         move_lesson(self.db, 1, self.profile_id, lesson_id, self.day_tue, self.p1, "admin@test")
