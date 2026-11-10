@@ -6,6 +6,7 @@ from app.timetable.schema import ensure_timetable_schema
 from app.timetable.setup import create_profile, save_day, save_period, save_room, save_class_requirement, save_break
 from app.timetable.builder import place_lesson
 from app.timetable.views import get_timetable_view
+from app.timetable.export_grid import build_export_grid
 
 
 class TimetableViewTests(unittest.TestCase):
@@ -158,6 +159,33 @@ class TimetableViewTests(unittest.TestCase):
         self.assertEqual(len(result["dated_instructional_sessions"]), 1)
         self.assertEqual(result["dated_instructional_sessions"][0]["session_date"], "2027-01-04")
         self.assertEqual(result["dated_instructional_sessions"][0]["class_names"], "Grade 7 Blue")
+
+
+    def test_export_grid_preserves_double_lesson_colspan_and_class_rows(self):
+        result = get_timetable_view(self.db, 1, self.profile_id, "school")
+        result["lessons"][0]["duration_periods"] = 2
+        layout = build_export_grid(result, "school")
+        lesson_cell = next(cell for cell in layout["rows"][0]["cells"] if cell["kind"] == "lesson")
+        self.assertEqual(lesson_cell["span"], 2)
+        self.assertTrue(layout["show_class_column"])
+        self.assertEqual(len(layout["rows"]), len(result["days"]) * 2)
+
+    def test_export_resource_grid_embeds_class_stream_in_day_rows(self):
+        result = get_timetable_view(self.db, 1, self.profile_id, "teacher", 10)
+        layout = build_export_grid(result, "teacher")
+        self.assertTrue(layout["resource_view"])
+        self.assertFalse(layout["show_class_column"])
+        self.assertEqual(len(layout["rows"]), len(result["days"]))
+        lesson_cell = next(cell for cell in layout["rows"][0]["cells"] if cell["kind"] == "lesson")
+        self.assertEqual(lesson_cell["lessons"][0]["class_name"], "Grade 7")
+        self.assertEqual(lesson_cell["lessons"][0]["stream"], "Blue")
+
+    def test_room_export_grid_uses_resource_rows(self):
+        result = get_timetable_view(self.db, 1, self.profile_id, "room", self.room_id)
+        layout = build_export_grid(result, "room")
+        self.assertTrue(layout["room_view"])
+        self.assertEqual(len(layout["rows"]), len(result["days"]))
+        self.assertEqual(layout["rows"][0]["cells"][0]["kind"], "lesson")
 
     def test_views_reject_cross_school_targets(self):
         with self.assertRaises(Exception):
