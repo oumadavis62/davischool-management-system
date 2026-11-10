@@ -306,6 +306,8 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
     # anchors. Regeneration schedules every weekly requirement afresh and
     # replaces these rows only after a complete solution has been found.
     manual = []
+    manual_counts = {}
+    manual_durations = {}
     previous_generated = cur.execute(
         """SELECT * FROM ds_timetable_lessons
            WHERE school_id=? AND profile_id=? AND generation_run_id IS NOT NULL AND status='scheduled'""",
@@ -1230,7 +1232,7 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
             "candidate_slot_count_max": max((x["candidate_slots_before_conflicts"] for x in requirement_diagnostics), default=0),
             "diagnostic_note": "Rejection totals count repeated solver checks, not unique timetable cells. Counts are aggregated across occurrences sharing the same class/subject/teacher requirement. A timeout identifies the search limit reached, not proof that the timetable is mathematically impossible.",
             "required_lessons": total_required,
-            "manual_lessons_kept": len(manual),
+            "manual_lessons_kept": len(manual_to_replace),
             "unscheduled_lessons": len(tasks),
             "search_nodes": int(strict_nodes + fallback_nodes),
             "optimisation_nodes": int(optimisation_nodes),
@@ -1321,7 +1323,8 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
         "status": "completed",
         "message": "The timetable was fully regenerated. Previous manual and automatic placements were replaced.",
         "required_lessons": total_required,
-        "manual_lessons_kept": len(manual),
+        "manual_lessons_kept": 0,
+        "manual_lessons_replaced": len(manual_to_replace),
         "generated_lessons": len(generated),
         "total_scheduled_lessons": len(generated),
         "search_nodes": nodes,
