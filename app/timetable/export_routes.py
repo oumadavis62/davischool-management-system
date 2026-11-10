@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from io import BytesIO
+from html import escape
 import logging
 import re
 from xml.sax.saxutils import escape as xml_escape
