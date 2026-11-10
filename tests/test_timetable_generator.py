@@ -50,6 +50,34 @@ class TimetableGeneratorTests(unittest.TestCase):
     def tearDown(self):
         self.db.close()
 
+    def test_teacher_has_a_rest_period_between_different_subjects_in_same_class(self):
+        # Keep one instructional day and three teaching periods so the only
+        # valid way to place two different subjects is to leave a period free.
+        self.db.execute(
+            "UPDATE ds_timetable_days SET is_instructional=0 WHERE day_code='TUE'"
+        )
+        save_period(self.db, 1, self.profile_id, 3, "Period 3", "09:20", "10:00")
+        save_class_requirement(
+            self.db, 1, self.profile_id, 20, 30, 10, 1, 1, 1, False
+        )
+        self.db.execute("INSERT INTO subjects VALUES(31,1,'Integrated Science')")
+        self.db.execute("INSERT INTO teacher_allocations VALUES(2,1,10,31,20)")
+        save_class_requirement(
+            self.db, 1, self.profile_id, 20, 31, 10, 1, 1, 1, False
+        )
+        result = generate_timetable(self.db, 1, self.profile_id, "admin@test")
+        self.assertEqual(result["status"], "completed")
+        rows = self.db.execute(
+            """SELECT l.subject_id,p.period_no
+               FROM ds_timetable_lessons l
+               JOIN ds_timetable_periods p ON p.id=l.period_id
+               WHERE l.generation_run_id=? ORDER BY p.period_no""",
+            (result["run_id"],),
+        ).fetchall()
+        self.assertEqual(len(rows), 2)
+        self.assertNotEqual(int(rows[0]["period_no"]) + 1, int(rows[1]["period_no"]))
+        self.assertNotEqual(int(rows[0]["subject_id"]), int(rows[1]["subject_id"]))
+
     def test_generator_fills_weekly_requirement_and_assigns_room(self):
         result = generate_timetable(self.db, 1, self.profile_id, "admin@test")
         self.assertEqual(result["status"], "completed")

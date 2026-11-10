@@ -666,6 +666,28 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
             item["teachers"].add(int(row["teacher_id"]))
     existing_sessions = list(existing_by_id.values())
 
+    # Fixed instructional subject occupancy for each teacher/class pair.
+    fixed_teacher_class_subject_period = defaultdict(set)
+    for item in fixed:
+        fixed_span = _period_span(
+            periods, period_index[int(item["period_id"])], int(item["duration"])
+        )
+        for period in fixed_span or []:
+            fixed_teacher_class_subject_period[
+                (int(item["class_id"]), int(item["teacher_id"]), int(item["day_id"]), int(period["period_no"]))
+            ].add(int(item["subject_id"]))
+    for session in existing_sessions:
+        if session.get("day_id") is None or session.get("schedule_layer") != "instructional" or session.get("subject_id") is None:
+            continue
+        for period in periods:
+            if _overlap(str(period["start_time"]), str(period["end_time"]),
+                        session["start_time"], session["end_time"]):
+                for class_id in session["classes"]:
+                    for teacher_id in session["teachers"]:
+                        fixed_teacher_class_subject_period[
+                            (int(class_id), int(teacher_id), int(session["day_id"]), int(period["period_no"]))
+                        ].add(int(session["subject_id"]))
+
     # Preserve the existing database transaction boundary: all input reads
     # finish before the CPU-intensive constraint solve begins.
     connection.commit()
@@ -749,6 +771,7 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
         variable_meta = {}
         by_class_period = defaultdict(list)
         by_teacher_period = defaultdict(list)
+        by_teacher_class_period_subject = defaultdict(list)
         by_room_period = defaultdict(list)
         by_subject_day = defaultdict(list)
         by_subject_teacher_day = defaultdict(list)
@@ -788,6 +811,28 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
                         if room_id is not None and ((int(room_id), day_id, pid) in fixed_room_periods or (int(room_id), day_id, pid) in shared_room_periods):
                             conflict = True
                             break
+                    # Leave a free period when this teacher changes subjects
+                    # within the same class; the gap can be used for another class.
+                    candidate_period_nos = range(
+                        int(candidate["period_no"]),
+                        int(candidate["period_no"]) + len(period_ids),
+                    )
+                    for class_id in class_ids:
+                        for teacher_id in teacher_ids:
+                            for period_no in candidate_period_nos:
+                                for adjacent_no in (period_no - 1, period_no + 1):
+                                    adjacent_subjects = fixed_teacher_class_subject_period.get(
+                                        (class_id, teacher_id, day_id, adjacent_no), set()
+                                    )
+                                    if any(value != int(task["subject_id"]) for value in adjacent_subjects):
+                                        conflict = True
+                                        break
+                                if conflict:
+                                    break
+                            if conflict:
+                                break
+                        if conflict:
+                            break
                     if conflict:
                         continue
                     if any((cid, int(task["subject_id"]), day_id) in fixed_subject_days for cid in class_ids):
@@ -809,6 +854,11 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
                     for tid in teacher_ids:
                         for pid in period_ids:
                             by_teacher_period[(tid, day_id, pid)].append(var)
+                        for cid in class_ids:
+                            for period_no in candidate_period_nos:
+                                by_teacher_class_period_subject[
+                                    (cid, tid, day_id, period_no, int(task["subject_id"]))
+                                ].append(var)
                         by_teacher_day_periods[(tid, day_id)].append((var, len(period_ids)))
                     if room_id is not None:
                         for pid in period_ids:
@@ -852,6 +902,29 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
             for values in group.values():
                 if len(values) > 1:
                     model.Add(sum(values) <= 1)
+
+        # Different subjects taught by the same teacher to the same class
+        # cannot occupy adjacent periods. Same-subject double/triple blocks
+        # remain consecutive because they share one subject key.
+        teacher_class_period_subjects = defaultdict(lambda: defaultdict(list))
+        for (class_id, teacher_id, day_id, period_no, subject_id), values in by_teacher_class_period_subject.items():
+            teacher_class_period_subjects[(class_id, teacher_id, day_id, period_no)][subject_id].extend(values)
+        teacher_class_keys = {
+            (class_id, teacher_id, day_id)
+            for class_id, teacher_id, day_id, _period_no in teacher_class_period_subjects
+        }
+        for class_id, teacher_id, day_id in teacher_class_keys:
+            period_numbers = sorted(
+                period_no for cid, tid, day, period_no in teacher_class_period_subjects
+                if cid == class_id and tid == teacher_id and day == day_id
+            )
+            for period_no in period_numbers:
+                current_subjects = teacher_class_period_subjects[(class_id, teacher_id, day_id, period_no)]
+                next_subjects = teacher_class_period_subjects.get((class_id, teacher_id, day_id, period_no + 1), {})
+                for subject_id, current_vars in current_subjects.items():
+                    for next_subject_id, next_vars in next_subjects.items():
+                        if subject_id != next_subject_id:
+                            model.Add(sum(current_vars) + sum(next_vars) <= 1)
 
         for key, values in by_subject_teacher_day.items():
             class_id, subject_id, teacher_id, day_id = key
