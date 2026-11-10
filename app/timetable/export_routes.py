@@ -184,6 +184,8 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                 cells.append(Paragraph("<b>"+pdf_text(row["day"]["day_name"])+"</b>",cell_style))
                 if row["day_rowspan"]>1:
                     span_commands.append(("SPAN",(0,row_index),(0,row_index+row["day_rowspan"]-1)))
+            else:
+                cells.append("")
             if layout["show_class_column"]:
                 cl=row["class"]
                 cells.append(Paragraph("<b>"+pdf_text(cl["class_name"] + ((" "+cl["stream"]) if cl["stream"] else ""))+"</b>",cell_style))
@@ -343,7 +345,7 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
             [(str(br["start_time"]), "break", br) for br in result.get("breaks", [])],
             key=lambda item: (item[0], 0 if item[1] == "period" else 1),
         )
-        last_col = 1 + len(timeline)
+        last_col = 1 + (1 if view_type == 'school' else 0) + len(timeline)
         sheet.merge_cells(start_row=1,start_column=1,end_row=1,end_column=last_col)
         sheet.cell(1,1,str(school["name"] or "School"))
         sheet.cell(1,1).font = Font(bold=True,size=16,color="174A31")
@@ -382,6 +384,9 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
             if layout["show_class_column"]:
                 cl=row["class"]; sheet.cell(row_index,col,cl["class_name"]+((" "+cl["stream"]) if cl["stream"] else "")); col+=1
             for cell in row["cells"]:
+                if cell["kind"]=="break_placeholder":
+                    col += 1
+                    continue
                 target=sheet.cell(row_index,col)
                 if cell["kind"]=="break":
                     b=cell["item"]; target.value=b["label"]+"\n"+b["start_time"]+"–"+b["end_time"]
