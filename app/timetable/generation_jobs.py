@@ -190,9 +190,9 @@ def _execute_job(get_db, job):
                 deadline=deadline
             )
             created_advanced_ids = list(advanced_result.get("session_ids") or [])
+            _delete_sessions(con, school_id, profile_id, advanced_result.get("previous_session_ids") or [])
 
         if profile_type != "main" and advanced_result and not int(legacy_count or 0):
-            _delete_sessions(con, school_id, profile_id, advanced_result.get("previous_session_ids") or [])
             con.execute(
                 "DELETE FROM ds_timetable_lessons WHERE school_id=? AND profile_id=? AND status='scheduled'",
                 (school_id, profile_id),
