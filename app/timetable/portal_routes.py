@@ -45,7 +45,7 @@ def get_portal_timetable_targets(connection, school_id: int, role: str,
         label = str(student["name"]) + " · " + str(student["class_name"] or "Class")
         if student["stream"]:
             label += " " + str(student["stream"])
-        return [("class", int(student["class_id"]), label)]
+        return [("student", int(student["id"]), label)]
     if role == "parent":
         if not user_id:
             return []
@@ -59,7 +59,7 @@ def get_portal_timetable_targets(connection, school_id: int, role: str,
             (int(school_id), int(user_id)),
         ).fetchall()
         return [
-            ("class", int(row["class_id"]),
+            ("student", int(row["id"]),
              str(row["name"]) + " · " + str(row["class_name"] or "Class")
              + ((" " + str(row["stream"])) if row["stream"] else ""))
             for row in rows
