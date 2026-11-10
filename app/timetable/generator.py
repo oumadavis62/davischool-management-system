@@ -302,9 +302,11 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
     ).fetchall()
 
     manual_counts = {}
+    manual_durations = {}
     for lesson in manual:
         key = (int(lesson["class_id"]), int(lesson["subject_id"]), int(lesson["teacher_id"]))
         manual_counts[key] = manual_counts.get(key, 0) + 1
+        manual_durations.setdefault(key, []).append(int(lesson["duration_periods"] or 1))
 
     class_limits = {
         int(row["class_id"]): row for row in cur.execute(
@@ -340,10 +342,6 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
                ) ORDER BY session_no""",
             (school_id, profile_id, school_id, profile_id, key[0], key[1], key[2]),
         ).fetchall()
-        if configured_pattern and already:
-            raise TimetableSetupError(
-                "A configured weekly lesson pattern cannot be combined with manually placed lessons for the same subject. Clear those manual placements or remove the pattern first."
-            )
         expected_periods = weekly * duration
         pattern_periods = sum(int(x["duration_periods"] or 1) for x in configured_pattern)
         if configured_pattern and pattern_periods != expected_periods:
@@ -362,6 +360,24 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
                  "co_teacher_ids": [int(v) for v in json.loads(x["co_teacher_ids_json"] or "[]") if int(v) > 0]}
                 for x in configured_pattern
             ]
+            remaining = len(planned_sessions)
+            # Manual placements consume matching occurrences from the saved
+            # pattern. Keep their exact duration/preferences fixed and let the
+            # solver schedule only the pattern entries that remain.
+            for manual_duration in manual_durations.get(key, []):
+                match = next(
+                    (index for index, item in enumerate(planned_sessions)
+                     if int(item["duration"]) == int(manual_duration)),
+                    None,
+                )
+                if match is None:
+                    raise TimetableSetupError(
+                        "A manually placed lesson for class ID " + str(key[0])
+                        + ", subject ID " + str(key[1]) + " occupies "
+                        + str(manual_duration) + " period(s), but the saved weekly pattern has no matching session. "
+                        + "Adjust the pattern or the manual lesson duration."
+                    )
+                planned_sessions.pop(match)
             remaining = len(planned_sessions)
         else:
             # Start with the non-manual weekly occurrences; shared sessions
