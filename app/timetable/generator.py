@@ -1810,7 +1810,7 @@ def generate_advanced_instructional_sessions(connection: Any, school_id: int,
                 "SELECT * FROM ds_timetable_profiles WHERE id=? AND school_id=?",
                 (profile_id, school_id),
             ).fetchone()
-            cross_conflicts = _cross_profile_conflicts(cur, school_id, profile_for_conflicts)
+            cross_conflicts = _cross_profile_conflicts(cur, school_id, profile_for_conflicts, created)
             if cross_conflicts:
                 raise TimetableSetupError("Advanced generation found cross-timetable conflicts: " + " ".join(cross_conflicts[:3]))
         old_rows = cur.execute(
@@ -2208,7 +2208,7 @@ def generate_dated_advanced_sessions(connection: Any, school_id: int, profile_id
             "SELECT * FROM ds_timetable_profiles WHERE id=? AND school_id=?",
             (profile_id, school_id),
         ).fetchone()
-        cross_conflicts = _cross_profile_conflicts(cur, school_id, profile_for_conflicts)
+        cross_conflicts = _cross_profile_conflicts(cur, school_id, profile_for_conflicts, created)
         if cross_conflicts:
             raise TimetableSetupError("Dated generation found cross-timetable conflicts: " + " ".join(cross_conflicts[:3]))
     except Exception:
