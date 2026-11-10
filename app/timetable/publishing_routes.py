@@ -81,7 +81,7 @@ def register_timetable_publishing_routes(app, get_db, get_school_obj, module_pag
         pid = int(selected["id"]) if selected else 0
         notice = f"<div class='pub-alert {'error' if error else 'success'}'>{esc(message)}</div>" if message else ""
         profile_options = "".join(
-            f"<option value='{int(p['id'])}' {'selected' if selected and int(p['id'])==pid else ''}>{esc(p['academic_year'])} · {esc(p['term'])} — {esc(p['name'])} ({esc(p['status'])})</option>"
+            f"<option value='{int(p['id'])}' {'selected' if selected and int(p['id'])==pid else ''}>{esc(p['academic_year'])} · {esc(p['term'])} — {esc(p['name'])} · {esc(str(p['profile_type'] or 'main').replace('_',' ').title())} ({esc(p['status'])})</option>"
             for p in profiles
         )
         if not selected:
@@ -155,7 +155,7 @@ def register_timetable_publishing_routes(app, get_db, get_school_obj, module_pag
         <div class='pub-wrap'>
           <div class='pub-hero'><div><span class='pub-kicker'>DAVISCHOOL · TIMETABLE CONTROL</span><h2>Review & Publish</h2><p>Check timetable quality, approve the final schedule and maintain its version history.</p></div><div class='pub-actions'><button type='button' class='pub-btn secondary' data-open='pub-profile-dialog'>Select profile</button>{action_html or "<span class='pub-muted'>No workflow action is available for this profile.</span>"}</div></div>
           {notice}
-          <section class='pub-card'><div class='pub-card-head'><div><span class='pub-kicker'>ACTIVE WORKSPACE</span><h3>{esc(selected['name'])}</h3><p>{esc(selected['academic_year'])} · {esc(selected['term'])} · Revision {int(selected['revision_no'] or 1)}</p></div><span class='pub-state {'good' if status=='published' else 'bad' if status=='pending_approval' else ''}'>{esc(status.replace('_',' ').upper())}</span></div><div class='pub-profile-line'><span>Current profile selected</span><button type='button' class='pub-btn secondary' data-open='pub-compare-dialog' {'disabled' if len(versions)<2 else ''}>Compare versions</button></div></section>
+          <section class='pub-card'><div class='pub-card-head'><div><span class='pub-kicker'>ACTIVE WORKSPACE</span><h3>{esc(selected['name'])}</h3><p>{esc(selected['academic_year'])} · {esc(selected['term'])} · {esc(str(selected['profile_type'] or 'main').replace('_',' ').title())} · Revision {int(selected['revision_no'] or 1)}</p></div><span class='pub-state {'good' if status=='published' else 'bad' if status=='pending_approval' else ''}'>{esc(status.replace('_',' ').upper())}</span></div><div class='pub-profile-line'><span>Current profile selected</span><button type='button' class='pub-btn secondary' data-open='pub-compare-dialog' {'disabled' if len(versions)<2 else ''}>Compare versions</button></div></section>
           {readiness_html}
           <section class='pub-card'><div class='pub-card-head'><div><span class='pub-kicker'>VERSION CONTROL</span><h3>Published timetable history</h3></div><span class='pub-state'>{len(versions)} saved version{'s' if len(versions)!=1 else ''}</span></div><div class='pub-table-scroll'><table><tr><th>Version</th><th>Profile</th><th>Revision</th><th>Published at</th><th>Published by</th></tr>{version_rows}</table></div></section>
         </div>{profile_modal}{compare_modal}{action_modal}
