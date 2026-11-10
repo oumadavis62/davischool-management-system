@@ -674,10 +674,10 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
         )
         for period in fixed_span or []:
             fixed_teacher_class_subject_period[
-                (int(item["class_id"]), int(item["teacher_id"]), int(period["period_no"]))
+                (int(item["class_id"]), int(item["teacher_id"]), int(item["day_id"]), int(period["period_no"]))
             ].add(int(item["subject_id"]))
     for session in existing_sessions:
-        if session.get("schedule_layer") != "instructional" or session.get("subject_id") is None:
+        if session.get("day_id") is None or session.get("schedule_layer") != "instructional" or session.get("subject_id") is None:
             continue
         for period in periods:
             if _overlap(str(period["start_time"]), str(period["end_time"]),
@@ -685,7 +685,7 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
                 for class_id in session["classes"]:
                     for teacher_id in session["teachers"]:
                         fixed_teacher_class_subject_period[
-                            (int(class_id), int(teacher_id), int(period["period_no"]))
+                            (int(class_id), int(teacher_id), int(session["day_id"]), int(period["period_no"]))
                         ].add(int(session["subject_id"]))
 
     # Preserve the existing database transaction boundary: all input reads
@@ -822,7 +822,7 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
                             for period_no in candidate_period_nos:
                                 for adjacent_no in (period_no - 1, period_no + 1):
                                     adjacent_subjects = fixed_teacher_class_subject_period.get(
-                                        (class_id, teacher_id, adjacent_no), set()
+                                        (class_id, teacher_id, day_id, adjacent_no), set()
                                     )
                                     if any(value != int(task["subject_id"]) for value in adjacent_subjects):
                                         conflict = True
@@ -857,7 +857,7 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
                         for cid in class_ids:
                             for period_no in candidate_period_nos:
                                 by_teacher_class_period_subject[
-                                    (cid, tid, period_no, int(task["subject_id"]))
+                                    (cid, tid, day_id, period_no, int(task["subject_id"]))
                                 ].append(var)
                         by_teacher_day_periods[(tid, day_id)].append((var, len(period_ids)))
                     if room_id is not None:
@@ -907,20 +907,20 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
         # cannot occupy adjacent periods. Same-subject double/triple blocks
         # remain consecutive because they share one subject key.
         teacher_class_period_subjects = defaultdict(lambda: defaultdict(list))
-        for (class_id, teacher_id, period_no, subject_id), values in by_teacher_class_period_subject.items():
-            teacher_class_period_subjects[(class_id, teacher_id, period_no)][subject_id].extend(values)
+        for (class_id, teacher_id, day_id, period_no, subject_id), values in by_teacher_class_period_subject.items():
+            teacher_class_period_subjects[(class_id, teacher_id, day_id, period_no)][subject_id].extend(values)
         teacher_class_keys = {
-            (class_id, teacher_id)
-            for class_id, teacher_id, _period_no in teacher_class_period_subjects
+            (class_id, teacher_id, day_id)
+            for class_id, teacher_id, day_id, _period_no in teacher_class_period_subjects
         }
-        for class_id, teacher_id in teacher_class_keys:
+        for class_id, teacher_id, day_id in teacher_class_keys:
             period_numbers = sorted(
-                period_no for cid, tid, period_no in teacher_class_period_subjects
-                if cid == class_id and tid == teacher_id
+                period_no for cid, tid, day, period_no in teacher_class_period_subjects
+                if cid == class_id and tid == teacher_id and day == day_id
             )
             for period_no in period_numbers:
-                current_subjects = teacher_class_period_subjects[(class_id, teacher_id, period_no)]
-                next_subjects = teacher_class_period_subjects.get((class_id, teacher_id, period_no + 1), {})
+                current_subjects = teacher_class_period_subjects[(class_id, teacher_id, day_id, period_no)]
+                next_subjects = teacher_class_period_subjects.get((class_id, teacher_id, day_id, period_no + 1), {})
                 for subject_id, current_vars in current_subjects.items():
                     for next_subject_id, next_vars in next_subjects.items():
                         if subject_id != next_subject_id:
