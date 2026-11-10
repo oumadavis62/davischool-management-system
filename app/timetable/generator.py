@@ -1805,7 +1805,7 @@ def generate_advanced_instructional_sessions(connection: Any, school_id: int,
         old_rows = cur.execute(
             """SELECT id FROM ds_timetable_sessions
                WHERE school_id=? AND profile_id=? AND schedule_layer='instructional'
-                 AND generation_run_id IS NOT NULL AND generation_run_id<>? AND status='scheduled'"""
+                 AND generation_run_id IS NOT NULL AND generation_run_id<>? AND status='scheduled'""",
             (school_id, profile_id, run_id),
         ).fetchall()
         old_ids = [int(row["id"]) for row in old_rows]
