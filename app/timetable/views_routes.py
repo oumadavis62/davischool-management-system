@@ -339,19 +339,19 @@ def register_timetable_view_routes(app, get_db, get_school_obj, module_page):
         @media(max-width:600px){{.tv-wrap{{padding:10px;border-radius:16px}}.tv-wrap .tv-grid-scroll{{border-radius:11px}}}}
         @media print{{.tv-wrap{{padding:0;max-width:none;background:#fff}}.tv-wrap .tv-grid-scroll{{overflow:visible;border:1px solid #999}}.tv-wrap .tb-grid{{min-width:0}}.tv-wrap .tb-grid thead th{{position:static;background:#347b50!important;color:#fff!important}}.tv-wrap .tb-grid .tb-cell{{min-width:0}}}}
         /* Match the teacher portal's non-main programme density; main stays unchanged. */
-        .tv-wrap .tb-grid-compact{min-width:500px;table-layout:fixed}
-        .tv-wrap .tb-grid-compact thead th.tb-period-heading{width:41px;min-width:41px;max-width:41px;padding:5px 2px;font-size:9px;overflow-wrap:anywhere}
-        .tv-wrap .tb-grid-compact tbody td.tb-cell{width:41px;min-width:41px;max-width:41px;padding:2px;overflow:hidden}
-        .tv-wrap .tb-grid-compact .tb-lesson{padding:3px 2px;min-height:48px;gap:1px;border-left-width:2px;border-radius:5px}
-        .tv-wrap .tb-grid-compact .tb-subject-initials{font-size:9px;letter-spacing:0}
-        .tv-wrap .tb-grid-compact .tb-lesson-top{font-size:8px;gap:1px}
-        .tv-wrap .tb-grid-compact .tb-lesson-top span{top:2px;right:2px;font-size:7px;padding:1px 3px}
-        .tv-wrap .tb-grid-compact .tb-meta{font-size:7px;line-height:1.05}
-        .tv-wrap .tb-grid-compact .tb-teacher-initials{min-width:15px;height:13px;padding:0 2px;font-size:7px}
-        .tv-wrap .tb-grid-compact .tb-continued-item{padding:2px;font-size:7px;line-height:1.1}
-        .tv-wrap .tb-grid-compact .tb-break-heading,.tv-wrap .tb-grid-compact .tb-break-cell{width:115px;min-width:115px;max-width:115px}
-        .tv-wrap .tb-grid .tb-break-cell b{writing-mode:vertical-rl;text-orientation:mixed;display:inline-block;vertical-align:middle;line-height:1.1}
-        .tv-wrap .tb-grid .tb-week-break{vertical-align:middle!important}
+        .tv-wrap .tb-grid-compact{{min-width:500px;table-layout:fixed}}
+        .tv-wrap .tb-grid-compact thead th.tb-period-heading{{width:41px;min-width:41px;max-width:41px;padding:5px 2px;font-size:9px;overflow-wrap:anywhere}}
+        .tv-wrap .tb-grid-compact tbody td.tb-cell{{width:41px;min-width:41px;max-width:41px;padding:2px;overflow:hidden}}
+        .tv-wrap .tb-grid-compact .tb-lesson{{padding:3px 2px;min-height:48px;gap:1px;border-left-width:2px;border-radius:5px}}
+        .tv-wrap .tb-grid-compact .tb-subject-initials{{font-size:9px;letter-spacing:0}}
+        .tv-wrap .tb-grid-compact .tb-lesson-top{{font-size:8px;gap:1px}}
+        .tv-wrap .tb-grid-compact .tb-lesson-top span{{top:2px;right:2px;font-size:7px;padding:1px 3px}}
+        .tv-wrap .tb-grid-compact .tb-meta{{font-size:7px;line-height:1.05}}
+        .tv-wrap .tb-grid-compact .tb-teacher-initials{{min-width:15px;height:13px;padding:0 2px;font-size:7px}}
+        .tv-wrap .tb-grid-compact .tb-continued-item{{padding:2px;font-size:7px;line-height:1.1}}
+        .tv-wrap .tb-grid-compact .tb-break-heading,.tv-wrap .tb-grid-compact .tb-break-cell{{width:115px;min-width:115px;max-width:115px}}
+        .tv-wrap .tb-grid .tb-break-cell b{{writing-mode:vertical-rl;text-orientation:mixed;display:inline-block;vertical-align:middle;line-height:1.1}}
+        .tv-wrap .tb-grid .tb-week-break{{vertical-align:middle!important}}
         </style>
         <div class='tv-wrap'><div class='tv-hero'><div><span class='tv-kicker'>DAVISCHOOL · TIMETABLE VIEWS</span><h2>Timetable Views</h2><p>Inspect the published or draft timetable by school, class, teacher or room.</p></div></div>{notice}
         <div class='tv-actions tv-view-actions'><button type='button' class='tv-btn' onclick="document.getElementById('tv-filter-dialog').showModal()">Choose timetable view</button><button type='button' class='tv-btn secondary' onclick="document.getElementById('tv-export-dialog').showModal()">Export / print</button></div>
