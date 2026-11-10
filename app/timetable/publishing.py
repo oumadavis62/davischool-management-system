@@ -221,7 +221,11 @@ def validate_timetable_for_publication(connection: Any, school_id: int, profile_
     placements = []
     for lesson in lessons:
         key = (int(lesson["class_id"]),int(lesson["subject_id"]),int(lesson["teacher_id"]))
-        lesson_counts[key] = lesson_counts.get(key,0) + 1
+        # Weekly requirements are measured in occupied teaching periods.
+        # A double/triple block must therefore contribute its full duration,
+        # while daily max-lesson rules continue to count lesson occurrences.
+        duration = int(lesson["duration_periods"] or 1)
+        lesson_counts[key] = lesson_counts.get(key,0) + duration
         daily_key = key + (int(lesson["day_id"]),)
         daily_counts[daily_key] = daily_counts.get(daily_key,0) + 1
         if key not in allocation_keys:
@@ -234,7 +238,6 @@ def validate_timetable_for_publication(connection: Any, school_id: int, profile_
         if start_index is None:
             errors.append("A scheduled lesson references a period outside this timetable profile.")
             continue
-        duration = int(lesson["duration_periods"] or 1)
         span = periods[start_index:start_index + duration]
         valid_span = len(span) == duration
         if valid_span:
@@ -270,10 +273,13 @@ def validate_timetable_for_publication(connection: Any, school_id: int, profile_
 
     for key, requirement in requirement_map.items():
         actual = lesson_counts.get(key,0)
-        expected = int(requirement["lessons_per_week"] or 0)
+        expected = (
+            int(requirement["lessons_per_week"] or 0)
+            * int(requirement["duration_periods"] or 1)
+        )
         if actual != expected:
             errors.append(
-                "A weekly requirement is not fully scheduled (class ID %s, subject ID %s: %s of %s lessons)."
+                "A weekly requirement is not fully scheduled (class ID %s, subject ID %s: %s of %s required periods)."
                 % (key[0],key[1],actual,expected)
             )
         max_per_day = int(requirement["max_lessons_per_day"]) if requirement["max_lessons_per_day"] is not None else 0
