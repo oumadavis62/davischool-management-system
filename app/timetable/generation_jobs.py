@@ -130,6 +130,27 @@ def _delete_sessions(con, school_id: int, profile_id: int, session_ids) -> None:
     )
 
 
+
+def _reconcile_profile_runs(con, school_id: int, profile_id: int, current_job_id: int) -> int:
+    """Close abandoned solver rows when no other job owns this profile."""
+    other_job = con.execute(
+        """SELECT id FROM ds_timetable_generation_jobs
+           WHERE school_id=? AND profile_id=? AND status='running' AND id<>?
+           LIMIT 1""",
+        (int(school_id), int(profile_id), int(current_job_id)),
+    ).fetchone()
+    if other_job:
+        return 0
+    cur = con.execute(
+        """UPDATE ds_timetable_generation_runs
+           SET status='failed', finished_at=CURRENT_TIMESTAMP
+           WHERE school_id=? AND profile_id=? AND status='running'""",
+        (int(school_id), int(profile_id)),
+    )
+    con.commit()
+    return int(getattr(cur, "rowcount", 0) or 0)
+
+
 def _execute_job(get_db, job):
     job_id = int(job["id"])
     school_id = int(job["school_id"])
@@ -143,6 +164,9 @@ def _execute_job(get_db, job):
     advanced_result = None
     created_advanced_ids = []
     try:
+        # A previous worker may have died after creating a run row. Reconcile
+        # it before the solver's running-run guard is evaluated.
+        _reconcile_profile_runs(con, school_id, profile_id, job_id)
         _set_job(get_db, job_id, stage="checking requirements")
         advanced_count = con.execute(
             """SELECT COUNT(*) FROM ds_timetable_scheduling_requirements
@@ -181,9 +205,17 @@ def _execute_job(get_db, job):
             )
             con.execute("UPDATE ds_timetable_generation_jobs SET finished_at=CURRENT_TIMESTAMP WHERE id=?", (job_id,))
             con.commit()
+            _reconcile_profile_runs(con, school_id, profile_id, job_id)
             return
 
         if advanced_result:
+            # Normalized sessions and ordinary lessons form one generation.
+            con.execute(
+                """UPDATE ds_timetable_generation_runs
+                   SET status='completed', finished_at=CURRENT_TIMESTAMP
+                   WHERE id=? AND school_id=? AND status='running'""",
+                (int(advanced_result["run_id"]), school_id),
+            )
             previous_ids = list(advanced_result.get("previous_session_ids") or [])
             _delete_sessions(con, school_id, profile_id, previous_ids)
             con.commit()
@@ -205,6 +237,7 @@ def _execute_job(get_db, job):
                SET finished_at=CURRENT_TIMESTAMP WHERE id=?""", (job_id,)
         )
         con.commit()
+        _reconcile_profile_runs(con, school_id, profile_id, job_id)
     except Exception as exc:
         log.exception(
             "Background timetable generation failed (job_id=%s school_id=%s profile_id=%s)",
@@ -213,6 +246,7 @@ def _execute_job(get_db, job):
         try:
             con.rollback()
             _delete_sessions(con, school_id, profile_id, created_advanced_ids)
+            _reconcile_profile_runs(con, school_id, profile_id, job_id)
             if advanced_result and advanced_result.get("run_id"):
                 con.execute(
                     """UPDATE ds_timetable_generation_runs
@@ -296,7 +330,18 @@ def start_generation_worker(get_db) -> None:
     try:
         ensure_generation_jobs_table(setup)
         # A process restart means no previous in-process consumer can still be
-        # executing. Requeue interrupted jobs so they resume automatically.
+        # executing. Close its orphaned solver rows before requeuing interrupted jobs.
+        interrupted = setup.execute(
+            """SELECT DISTINCT school_id, profile_id
+               FROM ds_timetable_generation_jobs WHERE status='running'"""
+        ).fetchall()
+        for item in interrupted:
+            setup.execute(
+                """UPDATE ds_timetable_generation_runs
+                   SET status='failed', finished_at=CURRENT_TIMESTAMP
+                   WHERE school_id=? AND profile_id=? AND status='running'""",
+                (int(item["school_id"]), int(item["profile_id"])),
+            )
         setup.execute(
             """UPDATE ds_timetable_generation_jobs
                SET status='queued', stage='resuming after service restart'
