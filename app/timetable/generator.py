@@ -350,7 +350,7 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
             raise TimetableSetupError(
                 "The saved lesson mix for class ID " + str(key[0]) + ", subject ID " + str(key[1])
                 + " currently uses " + str(pattern_periods) + " of " + str(expected_periods)
-                + " required weekly periods. Add the remaining single/double sessions before generating."
+                + " required weekly periods. Add the remaining single, double, triple or quadruple sessions before generating."
             )
         if configured_pattern:
             # A saved pattern is the exact list of lesson sessions. The weekly
