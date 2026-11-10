@@ -430,6 +430,12 @@ def register_timetable_builder_routes(app, get_db, get_school_obj, module_page):
                             move_period_opts = "".join(
                                 f"<option value='{int(p['id'])}' {'selected' if int(p['id'])==int(lesson['period_id']) else ''}>{esc(p['label'])} ({esc(p['start_time'])})</option>" for p in periods
                             )
+                            lesson_start_index = period_index.get(int(lesson['period_id']), 0)
+                            lesson_end_index = min(len(periods) - 1, lesson_start_index + max(1, int(lesson['duration_periods'] or 1)) - 1)
+                            lesson_end_period_id = int(periods[lesson_end_index]['id']) if periods else 0
+                            move_end_period_opts = "".join(
+                                f"<option value='{int(p['id'])}' {'selected' if int(p['id'])==lesson_end_period_id else ''}>{esc(p['label'])} ({esc(p['end_time'])})</option>" for p in periods
+                            )
                             move_room_opts = "<option value=''>Keep current room</option>" + "".join(
                                 f"<option value='{int(r['id'])}' {'selected' if lesson['room_id'] is not None and int(r['id'])==int(lesson['room_id']) else ''}>{esc(r['name'])}</option>" for r in rooms
                             )
@@ -437,7 +443,7 @@ def register_timetable_builder_routes(app, get_db, get_school_obj, module_page):
                             if not read_only:
                                 manage_id = f"tb-manage-{int(lesson['id'])}"
                                 manage_html = f"<button type='button' class='tb-manage-button' data-modal-open='{manage_id}'>Manage</button>"
-                                manage_modals.append(f"""<div class='tb-modal' id='{manage_id}' aria-hidden='true'><div class='tb-modal-dialog' role='dialog' aria-modal='true' aria-labelledby='{manage_id}-title'><div class='tb-modal-head'><div><span class='tb-kicker'>LESSON ACTIONS</span><h3 id='{manage_id}-title'>Manage lesson</h3><p>{esc(lesson['class_name'])}{(' · ' + esc(lesson['stream'])) if lesson['stream'] else ''} · {esc(lesson['subject_name'])}</p></div><button type='button' class='tb-modal-close' data-modal-close aria-label='Close'>×</button></div><section class='tb-panel'><form method='post' action='/app/timetable/builder/move' class='tb-add-form'><input type='hidden' name='profile_id' value='{pid}'><input type='hidden' name='lesson_id' value='{int(lesson['id'])}'><input type='hidden' name='ds_tab' value='{esc(tab_id)}'><label class='wide'>Move to day<select name='day_id'>{move_day_opts}</select></label><label class='wide'>Start period<select name='period_id'>{move_period_opts}</select></label><label class='wide'>Room<select name='room_id'>{move_room_opts}</select></label><button class='tb-small'>Move lesson</button></form><form method='post' action='/app/timetable/builder/delete' onsubmit="return confirm('Remove this lesson from the timetable?')"><input type='hidden' name='profile_id' value='{pid}'><input type='hidden' name='lesson_id' value='{int(lesson['id'])}'><input type='hidden' name='ds_tab' value='{esc(tab_id)}'><button class='tb-delete'>Delete lesson</button></form></section></div></div>""")
+                                manage_modals.append(f"""<div class='tb-modal' id='{manage_id}' aria-hidden='true'><div class='tb-modal-dialog' role='dialog' aria-modal='true' aria-labelledby='{manage_id}-title'><div class='tb-modal-head'><div><span class='tb-kicker'>LESSON ACTIONS</span><h3 id='{manage_id}-title'>Manage lesson</h3><p>{esc(lesson['class_name'])}{(' · ' + esc(lesson['stream'])) if lesson['stream'] else ''} · {esc(lesson['subject_name'])}</p></div><button type='button' class='tb-modal-close' data-modal-close aria-label='Close'>×</button></div><section class='tb-panel'><form method='post' action='/app/timetable/builder/move' class='tb-add-form'><input type='hidden' name='profile_id' value='{pid}'><input type='hidden' name='lesson_id' value='{int(lesson['id'])}'><input type='hidden' name='ds_tab' value='{esc(tab_id)}'><label class='wide'>Move to day<select name='day_id'>{move_day_opts}</select></label><label>Starting period<select name='period_id' data-move-start>{move_period_opts}</select></label><label>Ending period<select name='end_period_id' data-move-end>{move_end_period_opts}</select></label><small class='tb-move-duration' data-move-duration>Automatic lesson duration</small><label class='wide'>Room<select name='room_id'>{move_room_opts}</select></label><button class='tb-small'>Move lesson</button></form><form method='post' action='/app/timetable/builder/delete' onsubmit="return confirm('Remove this lesson from the timetable?')"><input type='hidden' name='profile_id' value='{pid}'><input type='hidden' name='lesson_id' value='{int(lesson['id'])}'><input type='hidden' name='ds_tab' value='{esc(tab_id)}'><button class='tb-delete'>Delete lesson</button></form></section></div></div>""")
                             teacher_color = safe_teacher_color(lesson["teacher_color"])
                             teacher_name_color = teacher_name_text_color(teacher_color)
                             teacher_initials = str(lesson["teacher_initials"] or "").strip().upper()
@@ -683,6 +689,22 @@ def register_timetable_builder_routes(app, get_db, get_school_obj, module_page):
             if(event.target.closest('[data-modal-close]')||event.target.classList.contains('tb-modal'))closeAll();
           }});
           document.addEventListener('keydown',function(event){{if(event.key==='Escape')closeAll();}});
+          document.querySelectorAll('.tb-modal form[action="/app/timetable/builder/move"]').forEach(function(form){{
+            const start=form.querySelector('[data-move-start]'),end=form.querySelector('[data-move-end]'),label=form.querySelector('[data-move-duration]');
+            if(!start||!end)return;
+            function syncRange(){{
+              const startIndex=start.selectedIndex,previous=end.value;let allowed=[];
+              Array.from(end.options).forEach(function(option,index){{
+                const valid=!!option.value&&index>=startIndex&&index<=startIndex+2;
+                option.disabled=!!option.value&&!valid;option.hidden=!!option.value&&!valid;
+                if(valid)allowed.push(option);
+              }});
+              if(!allowed.some(function(option){{return option.value===previous;}}))end.value=allowed.length?allowed[0].value:'';
+              const length=Math.max(1,end.selectedIndex-startIndex+1);
+              if(label)label.textContent=length===1?'Single lesson · 1 period':length===2?'Double lesson · 2 consecutive periods': 'Triple lesson · 3 consecutive periods';
+            }}
+            start.addEventListener('change',syncRange);end.addEventListener('change',syncRange);syncRange();
+          }});
           const swapModal=document.getElementById('tb-modal-swap');
           if(swapModal){{
             const lessonSelects=Array.from(swapModal.querySelectorAll('[data-swap-lesson]'));
@@ -995,12 +1017,12 @@ def register_timetable_builder_routes(app, get_db, get_school_obj, module_page):
         finally: con.close()
 
     @app.post("/app/timetable/builder/move")
-    def timetable_builder_move(request: Request, profile_id: int = Form(...), lesson_id: int = Form(...), day_id: int = Form(...), period_id: int = Form(...), room_id: str = Form("")):
+    def timetable_builder_move(request: Request, profile_id: int = Form(...), lesson_id: int = Form(...), day_id: int = Form(...), period_id: int = Form(...), room_id: str = Form(""), end_period_id: int = Form(0)):
         school = school_for(request)
         if not school: return RedirectResponse("/", 303)
         con = get_db()
         try:
-            move_lesson(con, int(school["id"]), profile_id, lesson_id, day_id, period_id, request.session.get("email", ""), int(room_id) if room_id.strip() else None)
+            move_lesson(con, int(school["id"]), profile_id, lesson_id, day_id, period_id, request.session.get("email", ""), int(room_id) if room_id.strip() else None, end_period_id or None)
             return redirect_builder(profile_id, "Lesson moved successfully.")
         except (TimetableSetupError, ValueError) as exc:
             return redirect_builder(profile_id, str(exc), True)

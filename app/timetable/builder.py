@@ -35,7 +35,7 @@ def _overlap(start_a: str, end_a: str, start_b: str, end_b: str) -> bool:
     return str(start_a) < str(end_b) and str(end_a) > str(start_b)
 
 
-def _placement_context(cursor: Any, school_id: int, profile_id: int, class_id: int, subject_id: int, teacher_id: int, day_id: int, period_id: int, room_id: int | None, exclude_lesson_id: int = 0):
+def _placement_context(cursor: Any, school_id: int, profile_id: int, class_id: int, subject_id: int, teacher_id: int, day_id: int, period_id: int, room_id: int | None, exclude_lesson_id: int = 0, duration_override: int | None = None):
     _profile(cursor, school_id, profile_id)
     day = cursor.execute(
         """SELECT * FROM ds_timetable_days
@@ -61,7 +61,9 @@ def _placement_context(cursor: Any, school_id: int, profile_id: int, class_id: i
     ).fetchone()
     if not requirement:
         raise TimetableSetupError("Set the weekly lesson requirement for this class, subject and teacher before scheduling it.")
-    duration = int(requirement["duration_periods"] or 1)
+    duration = int(duration_override if duration_override is not None else (requirement["duration_periods"] or 1))
+    if duration < 1 or duration > 3:
+        raise TimetableSetupError("A manual lesson must occupy one, two or three consecutive teaching periods.")
     span = _period_span(cursor, school_id, profile_id, period_id, duration)
     first, last = span[0], span[-1]
     _validate_constraints(
@@ -194,7 +196,7 @@ def place_lesson(connection: Any, school_id: int, profile_id: int, class_id: int
     return lesson_id
 
 
-def move_lesson(connection: Any, school_id: int, profile_id: int, lesson_id: int, day_id: int, period_id: int, changed_by: str = "", room_id: int | None = None) -> None:
+def move_lesson(connection: Any, school_id: int, profile_id: int, lesson_id: int, day_id: int, period_id: int, changed_by: str = "", room_id: int | None = None, end_period_id: int | None = None) -> None:
     cur = connection.cursor()
     existing = cur.execute(
         "SELECT * FROM ds_timetable_lessons WHERE id=? AND school_id=? AND profile_id=? AND status='scheduled'",
@@ -202,12 +204,29 @@ def move_lesson(connection: Any, school_id: int, profile_id: int, lesson_id: int
     ).fetchone()
     if not existing:
         raise TimetableSetupError("The selected lesson no longer exists in this timetable.")
+    duration_override = None
+    if end_period_id is not None:
+        ordered_periods = cur.execute(
+            "SELECT id FROM ds_timetable_periods WHERE school_id=? AND profile_id=? AND period_type='lesson' ORDER BY period_no,id",
+            (school_id, profile_id),
+        ).fetchall()
+        period_ids = [int(row["id"]) for row in ordered_periods]
+        try:
+            start_index = period_ids.index(int(period_id))
+            end_index = period_ids.index(int(end_period_id))
+        except ValueError:
+            raise TimetableSetupError("Choose valid starting and ending teaching periods.")
+        duration_override = end_index - start_index + 1
+        if duration_override < 1 or duration_override > 3:
+            raise TimetableSetupError("Choose the same period for a Single, or two/three consecutive periods for a Double/Triple.")
     requirement, span = _placement_context(
         cur, school_id, profile_id, int(existing["class_id"]), int(existing["subject_id"]),
         int(existing["teacher_id"]), day_id, period_id,
         room_id if room_id is not None else (int(existing["room_id"]) if existing["room_id"] is not None else None),
-        exclude_lesson_id=lesson_id,
+        exclude_lesson_id=lesson_id, duration_override=duration_override,
     )
+    if end_period_id is not None and int(span[-1]["id"]) != int(end_period_id):
+        raise TimetableSetupError("The selected ending period is not part of a valid consecutive lesson block.")
     before = dict(existing)
     now = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
     cur.execute(
