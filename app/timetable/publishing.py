@@ -268,6 +268,8 @@ def validate_timetable_for_publication(connection: Any, school_id: int, profile_
     if not profile:
         raise TimetableSetupError("Select a timetable profile belonging to this school.")
     errors = []
+    is_main_profile = str(profile["profile_type"] or "main").strip().lower() == "main"
+    advanced_layer_filter = "schedule_layer='instructional'" if is_main_profile else "schedule_layer IN ('instructional','additional_learning')"
     if profile["status"] not in ("draft", "pending_approval"):
         errors.append("Only a draft or pending-approval timetable can be published.")
     active_run = cur.execute(
@@ -290,14 +292,12 @@ def validate_timetable_for_publication(connection: Any, school_id: int, profile_
     ).fetchall()
     advanced_requirements = cur.execute(
         """SELECT * FROM ds_timetable_scheduling_requirements
-           WHERE school_id=? AND profile_id=? AND is_active=1
-             AND schedule_layer='instructional' ORDER BY id""",
+           WHERE school_id=? AND profile_id=? AND is_active=1 AND """ + advanced_layer_filter + " ORDER BY id",
         (school_id, profile_id),
     ).fetchall()
     advanced_sessions = cur.execute(
         """SELECT * FROM ds_timetable_sessions
-           WHERE school_id=? AND profile_id=? AND status='scheduled'
-             AND schedule_layer='instructional' ORDER BY id""",
+           WHERE school_id=? AND profile_id=? AND status='scheduled' AND """ + advanced_layer_filter + " ORDER BY id",
         (school_id, profile_id),
     ).fetchall()
     session_classes = {}
@@ -360,7 +360,6 @@ def validate_timetable_for_publication(connection: Any, school_id: int, profile_
         (school_id,),
     ).fetchall()
     allocation_keys = {(int(a["class_id"]),int(a["subject_id"]),int(a["teacher_id"])) for a in allocations}
-    is_main_profile = str(profile["profile_type"] or "main").strip().lower() == "main"
     requirement_map = {
         (int(r["class_id"]),int(r["subject_id"]),int(r["teacher_id"])): r
         for r in requirements
