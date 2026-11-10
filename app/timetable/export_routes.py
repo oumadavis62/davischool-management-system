@@ -12,6 +12,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
 
 from app.timetable.views import get_timetable_view
 from app.timetable.setup import TimetableSetupError
+from app.timetable.export_grid import build_export_grid
 
 logger = logging.getLogger(__name__)
 
@@ -64,105 +65,68 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
         return starts, continued
 
     @app.get("/app/timetable/export/print", response_class=HTMLResponse)
-    def timetable_export_print(
-        request: Request,
-        profile_id: int,
-        view_type: str = "school",
-        class_id: int = 0,
-        teacher_id: int = 0,
-        room_id: int = 0,
-        remedial_display: str = "combined",
-    ):
+    def timetable_export_print(request: Request, profile_id: int, view_type: str = "school",
+        class_id: int = 0, teacher_id: int = 0, room_id: int = 0, remedial_display: str = "combined"):
         school, result, error = load_view(request, profile_id, view_type, class_id, teacher_id, room_id)
         if error:
             return error
-        timeline = sorted(
-            [(str(p["start_time"]), "period", p) for p in result["periods"]] +
-            [(str(br["start_time"]), "break", br) for br in result.get("breaks", [])],
-            key=lambda item: (item[0], 0 if item[1] == "period" else 1),
-        )
-        periods = [item for _, kind, item in timeline if kind == "period"]
-        period_index = {int(p["id"]): i for i, p in enumerate(periods)}
-        starts, continued = cell_map(result)
-        room_view = view_type == "room"
-        resource_view = view_type in ("teacher", "room")
-        class_rows = {}
-        for lesson in result["lessons"]:
-            class_rows.setdefault(int(lesson["class_id"]), lesson)
-        if view_type == "class" and result.get("target"):
-            class_rows = {int(result["target"]["id"]): None}
-        if view_type == "school":
-            class_rows = {int(row["class_id"]): row for row in result.get("allocation_classes", [])}
-            for lesson in result["lessons"]:
-                class_rows.setdefault(int(lesson["class_id"]), lesson)
-        if resource_view:
-            class_rows = {0: None}
-        if not class_rows:
-            class_rows = {0: None}
-        headers = ["Day"]
-        if view_type == "school":
-            headers.append("Class / Stream")
-        for _, kind, item in timeline:
-            headers.append(str(item["label"]) + " " + str(item["start_time"]) + "–" + str(item["end_time"]))
-        rows_html = []
-        for day in result["days"]:
-            for class_id_value, class_row in class_rows.items():
-                cells = ["<th>" + escape(str(day["day_name"])) + "</th>"]
-                if view_type == "school":
-                    if class_row is None:
-                        class_label = "—"
-                    else:
-                        class_name = field_value(class_row, "class_name", field_value(class_row, "name", ""))
-                        stream_name = field_value(class_row, "stream", "")
-                        class_label = str(class_name or "") + (" " + str(stream_name) if stream_name else "")
-                    cells.append("<th>" + escape(class_label) + "</th>")
-                for _, kind, item in timeline:
-                    if kind == "break":
-                        cells.append("<td class='break'>" + escape(str(item["label"])) + "</td>")
-                        continue
-                    period_id = int(item["id"])
-                    if resource_view:
-                        lessons = [
-                            lesson for lesson in result["lessons"]
-                            if int(lesson["day_id"]) == int(day["id"]) and int(lesson["period_id"]) == period_id
-                        ]
-                    else:
-                        lessons = starts.get((int(day["id"]), period_id), [])
-                        if view_type != "school":
-                            lessons = [lesson for lesson in lessons if int(lesson["class_id"]) == class_id_value]
-                    values = []
-                    for lesson in lessons:
-                        class_label = str(lesson["class_name"]) + (" " + str(lesson["stream"]) if lesson["stream"] else "")
-                        detail = "<b>" + escape(str(lesson["subject_name"])) + "</b>"
-                        if resource_view:
-                            detail += "<br>" + escape(class_label)
+        layout = build_export_grid(result, view_type)
+        timeline = layout["timeline"]
+        headers = ["Day"] + (["Class / Stream"] if layout["show_class_column"] else [])
+        headers += [str(item["label"]) + "<br>" + str(item["start_time"]) + "–" + str(item["end_time"]) for _,_,item in timeline]
+        body_rows = []
+        for row in layout["rows"]:
+            cells = []
+            if row["day_first"]:
+                cells.append(f"<th rowspan='{row['day_rowspan']}' class='day'>{escape(str(row['day']['day_name']))}</th>")
+            if layout["show_class_column"]:
+                cl=row["class"]
+                cells.append("<th class='class'>" + escape(cl["class_name"] + ((" " + cl["stream"]) if cl["stream"] else "")) + "</th>")
+            for cell in row["cells"]:
+                if cell["kind"] == "break_placeholder":
+                    continue
+                if cell["kind"] == "break":
+                    b=cell["item"]
+                    cells.append(f"<td class='break' rowspan='{cell['rowspan']}'><b>{escape(str(b['label']))}</b><br>{escape(str(b['start_time']))}–{escape(str(b['end_time']))}</td>")
+                elif cell["kind"] == "free":
+                    cells.append("<td class='free'></td>")
+                elif cell["kind"] == "continued":
+                    labels=[]
+                    for lesson in cell["lessons"]:
+                        labels.append("↳ " + escape(str(lesson["subject_name"])) + " continues")
+                    cells.append("<td class='continued'>" + "<br>".join(labels) + "</td>")
+                else:
+                    cards=[]
+                    for lesson in cell["lessons"]:
+                        subject=escape(str(lesson["subject_name"]))
+                        initials=escape(str(lesson.get("subject_initial") or subject[:3]).upper())
+                        detail=f"<b>{initials}</b> · {subject}<small>{int(lesson['duration_periods'] or 1)} period(s)</small>"
+                        if layout["resource_view"]:
+                            cl=escape(str(lesson["class_name"]) + ((" " + str(lesson["stream"])) if lesson["stream"] else ""))
+                            detail += f"<small>{cl}</small>"
                         if view_type != "teacher":
-                            detail += "<br>" + escape(str(lesson["teacher_name"]))
-                        if not room_view and lesson["room_name"]:
-                            detail += "<br>" + escape(str(lesson["room_name"]))
-                        values.append(detail)
-                    if not values:
-                        next_period = period_index.get(period_id)
-                        carry = []
-                        if next_period is not None:
-                            for lesson in result["lessons"]:
-                                start = period_index.get(int(lesson["period_id"]))
-                                if int(lesson["day_id"]) == int(day["id"]) and start is not None and start < next_period < start + max(1, int(lesson["duration_periods"] or 1)):
-                                    if not resource_view and view_type != "school" and int(lesson["class_id"]) != class_id_value:
-                                        continue
-                                    carry.append("↳ " + escape(str(lesson["subject_name"])) + " continues")
-                        values = carry or ["—"]
-                    cells.append("<td>" + "<br><hr>".join(values) + "</td>")
-                rows_html.append("<tr>" + "".join(cells) + "</tr>")
-        table_head = "".join("<th>" + escape(label) + "</th>" for label in headers)
-        school_name = escape(str(field_value(school, "name", "School")))
-        title = escape(str(result["title"]))
-        profile_meta = escape(str(result["profile"]["academic_year"]) + " · " + str(result["profile"]["term"]))
-        html = f"""<!doctype html><html><head><meta charset="utf-8"><title>{title}</title>
-        <style>body{{font:12px Arial,sans-serif;color:#173d2b;margin:18px}}h1{{font-size:18px;text-align:center;margin:0 0 5px}}h2{{font-size:14px;text-align:center;margin:0 0 5px}}p{{text-align:center;margin:0 0 14px;color:#526b59}}table{{width:100%;border-collapse:collapse;table-layout:fixed}}th,td{{border:1px solid #b9cbbb;padding:6px;vertical-align:top;overflow-wrap:anywhere}}thead th{{background:#17633b;color:#fff}}tbody th{{background:#edf5ee}}td.break{{background:#f1ead8;color:#75551d;text-align:center}}.actions{{display:flex;justify-content:center;gap:8px;margin:0 0 14px}}button{{padding:9px 16px;border:0;border-radius:7px;background:#17633b;color:white;font-weight:bold}}@page{{size:A4 landscape;margin:8mm}}@media print{{body{{margin:0}}.actions{{display:none}}tr{{break-inside:avoid}}}}</style></head>
-        <body><div class="actions"><button onclick="window.print()">Print timetable</button></div>
-        <h1>{school_name}</h1><h2>{title}</h2><p>{profile_meta}</p>
-        <table><thead><tr>{table_head}</tr></thead><tbody>{"".join(rows_html)}</tbody></table>
+                            detail += f"<small>{escape(str(lesson['teacher_name']))}</small>"
+                        if not layout["room_view"] and lesson.get("room_name"):
+                            detail += f"<small>⌂ {escape(str(lesson['room_name']))}</small>"
+                        cards.append("<div class='lesson'>" + detail + "</div>")
+                    cells.append(f"<td class='slot' colspan='{cell['span']}'>" + "".join(cards) + "</td>")
+            body_rows.append("<tr>" + "".join(cells) + "</tr>")
+        school_name=escape(str(field_value(school,"name","School")))
+        title=escape(str(result["title"]))
+        meta=escape(str(result["profile"]["academic_year"]) + " · " + str(result["profile"]["term"]))
+        header_html="".join("<th>"+h+"</th>" for h in headers)
+        html=f"""<!doctype html><html><head><meta charset="utf-8"><title>{title}</title>
+        <style>
+        @page{{size:A4 landscape;margin:7mm}}*{{box-sizing:border-box}}body{{font:10px Arial,sans-serif;color:#234638;margin:12px}}
+        h1,h2,p{{text-align:center;margin:3px}}h1{{font-size:17px}}h2{{font-size:13px}}p{{color:#647b6a;margin-bottom:12px}}
+        table{{width:100%;border-collapse:collapse;table-layout:fixed;min-width:900px}}th,td{{border:1px solid #c7d9ca;padding:4px;text-align:center;vertical-align:middle;overflow-wrap:anywhere}}
+        thead th{{background:#347b50;color:white;font-size:9px;padding:7px 3px}}th.day{{background:#edf5ee;color:#315b3e;width:65px}}th.class{{background:#f5f9f5;color:#315b3e;width:65px}}
+        td.slot{{background:#fff}}.lesson{{background:#e5f1e7;border:1px solid #b7d1bc;border-left:4px solid #347b50;border-radius:6px;padding:5px;margin:2px;font-size:9px;line-height:1.35}}
+        .lesson small{{display:block;color:#55705d;font-size:8px;margin-top:2px}}td.free{{background:#fbfdfb}}td.continued{{background:#f6faf6;color:#7b9480;font-size:8px}}
+        td.break{{background:#f1ead8;color:#75551d;font-weight:bold}}.actions{{text-align:center;margin-bottom:10px}}button{{padding:8px 15px;background:#17633b;color:#fff;border:0;border-radius:7px}}
+        @media print{{body{{margin:0}}.actions{{display:none}}tr{{break-inside:avoid}}table{{min-width:0}}}}
+        </style></head><body><div class="actions"><button onclick="window.print()">Print timetable</button></div>
+        <h1>{school_name}</h1><h2>{title}</h2><p>{meta}</p><table><thead><tr>{header_html}</tr></thead><tbody>{"".join(body_rows)}</tbody></table>
         <script>window.addEventListener("load",()=>setTimeout(()=>window.print(),250));</script></body></html>"""
         return HTMLResponse(html)
 
@@ -207,65 +171,70 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
             Paragraph(pdf_text(profile_meta), styles["Normal"]),
             Spacer(1,10),
         ])
-        starts, continued = cell_map(result)
-        timeline = sorted(
-            [(str(p["start_time"]), "period", p) for p in result["periods"]] +
-            [(str(br["start_time"]), "break", br) for br in result.get("breaks", [])],
-            key=lambda item: (item[0], 0 if item[1] == "period" else 1),
-        )
-        headers = [Paragraph("Day", header_style)]
-        for _, item_type, item in timeline:
-            headers.append(Paragraph(
-                "<b>" + pdf_text(str(item["label"])) + "</b><br/>" +
-                pdf_text(str(item["start_time"])) + " - " + pdf_text(str(item["end_time"])),
-                header_style,
-            ))
-        data = [headers]
-        break_col_indexes = [i + 1 for i, (_, kind, _) in enumerate(timeline) if kind == "break"]
-        for day in result["days"]:
-            row = [Paragraph("<b>" + pdf_text(str(day["day_name"])) + "</b>", cell_style)]
-            for _, item_type, item in timeline:
-                if item_type == "break":
-                    row.append(Paragraph("<b>" + pdf_text(str(item["label"])) + "</b><br/>" +
-                                         pdf_text(str(item["start_time"])) + " - " +
-                                         pdf_text(str(item["end_time"])), cell_style))
-                    continue
-                key = (int(day["id"]), int(item["id"]))
-                if key in starts:
-                    lines = []
-                    for lesson in starts[key]:
-                        class_label = str(lesson["class_name"]) + ((" " + str(lesson["stream"])) if lesson["stream"] else "")
-                        line = "<b>" + pdf_text(str(lesson["subject_name"])) + "</b><br/>" + pdf_text(class_label) + "<br/>" + pdf_text(str(lesson["teacher_name"]))
-                        if lesson["room_name"]:
-                            line += "<br/>" + pdf_text(str(lesson["room_name"]))
-                        lines.append(line)
-                    cell = "<br/><br/>".join(lines)
-                elif key in continued:
-                    cell = "Continues: " + pdf_text(str(continued[key]["subject_name"]))
+        layout = build_export_grid(result, view_type)
+        timeline = layout["timeline"]
+        data = [[Paragraph("Day", header_style)] + ([Paragraph("Class / Stream",header_style)] if layout["show_class_column"] else [])]
+        for _, kind, item in timeline:
+            label = "<b>" + pdf_text(str(item["label"])) + "</b><br/>" + pdf_text(str(item["start_time"])) + "–" + pdf_text(str(item["end_time"]))
+            data[0].append(Paragraph(label, header_style))
+        span_commands=[]
+        for row_index, row in enumerate(layout["rows"], start=1):
+            cells=[]
+            if row["day_first"]:
+                cells.append(Paragraph("<b>"+pdf_text(row["day"]["day_name"])+"</b>",cell_style))
+                if row["day_rowspan"]>1:
+                    span_commands.append(("SPAN",(0,row_index),(0,row_index+row["day_rowspan"]-1)))
+            else:
+                cells.append("")
+            if layout["show_class_column"]:
+                cl=row["class"]
+                cells.append(Paragraph("<b>"+pdf_text(cl["class_name"] + ((" "+cl["stream"]) if cl["stream"] else ""))+"</b>",cell_style))
+            for cell in row["cells"]:
+                if cell["kind"]=="break_placeholder":
+                    cells.append("")
+                elif cell["kind"]=="break":
+                    b=cell["item"]
+                    cells.append(Paragraph("<b>"+pdf_text(b["label"])+"</b><br/>"+pdf_text(b["start_time"]+"–"+b["end_time"]),cell_style))
+                    if cell["rowspan"]>1:
+                        col=len(cells)-1
+                        span_commands.append(("SPAN",(col,row_index),(col,row_index+cell["rowspan"]-1)))
+                elif cell["kind"]=="free":
+                    cells.append(Paragraph("—",cell_style))
+                elif cell["kind"]=="continued":
+                    cells.append(Paragraph("<br/>".join("↳ "+pdf_text(x["subject_name"])+" continues" for x in cell["lessons"]),cell_style))
                 else:
-                    cell = "—"
-                row.append(Paragraph(cell, cell_style))
-            data.append(row)
-        available_width = doc.width
-        first_width = 42
-        slot_width = max(1, (available_width - first_width) / max(1, len(timeline)))
-        table = Table(data, colWidths=[first_width] + [slot_width] * len(timeline), repeatRows=1)
-        table.setStyle(TableStyle([
+                    parts=[]
+                    for lesson in cell["lessons"]:
+                        class_label=str(lesson["class_name"])+((" "+str(lesson["stream"])) if lesson["stream"] else "")
+                        detail="<b>"+pdf_text(lesson["subject_name"])+"</b><br/>"+pdf_text(str(lesson["duration_periods"])+" period(s)")
+                        if layout["resource_view"]: detail += "<br/>"+pdf_text(class_label)
+                        if view_type!="teacher": detail += "<br/>"+pdf_text(lesson["teacher_name"])
+                        if not layout["room_view"] and lesson.get("room_name"): detail += "<br/>"+pdf_text(lesson["room_name"])
+                        parts.append(detail)
+                    cells.append(Paragraph("<br/><br/>".join(parts),cell_style))
+                    if cell["span"]>1:
+                        col=len(cells)-1
+                        span_commands.append(("SPAN",(col,row_index),(col+cell["span"]-1,row_index)))
+                        cells.extend([""] * (cell["span"]-1))
+            data.append(cells)
+        column_count=len(data[0])
+        first_width=42 if not layout["show_class_column"] else 76
+        slot_width=max(1,(doc.width-first_width-(65 if layout["show_class_column"] else 0))/max(1,len(timeline)))
+        widths=[first_width]+([65] if layout["show_class_column"] else [])+[slot_width]*len(timeline)
+        table=Table(data,colWidths=widths,repeatRows=1)
+        commands=[
             ("BACKGROUND",(0,0),(-1,0),colors.HexColor("#17633b")),
             ("TEXTCOLOR",(0,0),(-1,0),colors.white),
             ("GRID",(0,0),(-1,-1),0.35,colors.HexColor("#cbd8ce")),
             ("BACKGROUND",(0,1),(0,-1),colors.HexColor("#eef5ef")),
-            ("VALIGN",(0,0),(-1,-1),"TOP"),
-            ("LEFTPADDING",(0,0),(-1,-1),4),
-            ("RIGHTPADDING",(0,0),(-1,-1),4),
-            ("TOPPADDING",(0,0),(-1,-1),5),
-            ("BOTTOMPADDING",(0,0),(-1,-1),5),
-        ]))
-        for break_col in break_col_indexes:
-            table.setStyle(TableStyle([
-                ("BACKGROUND",(break_col,0),(break_col,-1),colors.HexColor("#f1ead8")),
-                ("TEXTCOLOR",(break_col,0),(break_col,-1),colors.HexColor("#75551d")),
-            ]))
+            ("VALIGN",(0,0),(-1,-1),"MIDDLE"),
+            ("LEFTPADDING",(0,0),(-1,-1),3),("RIGHTPADDING",(0,0),(-1,-1),3),
+            ("TOPPADDING",(0,0),(-1,-1),4),("BOTTOMPADDING",(0,0),(-1,-1),4),
+        ]+span_commands
+        for col,(_,kind,_) in enumerate(timeline,start=1+(1 if layout["show_class_column"] else 0)):
+            if kind=="break":
+                commands += [("BACKGROUND",(col,0),(col,-1),colors.HexColor("#f1ead8")),("TEXTCOLOR",(col,0),(col,-1),colors.HexColor("#75551d"))]
+        table.setStyle(TableStyle(commands))
         story.append(table)
 
         if result.get("dated_instructional_sessions"):
@@ -377,7 +346,7 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
             [(str(br["start_time"]), "break", br) for br in result.get("breaks", [])],
             key=lambda item: (item[0], 0 if item[1] == "period" else 1),
         )
-        last_col = 1 + len(timeline)
+        last_col = 1 + (1 if view_type == 'school' else 0) + len(timeline)
         sheet.merge_cells(start_row=1,start_column=1,end_row=1,end_column=last_col)
         sheet.cell(1,1,str(school["name"] or "School"))
         sheet.cell(1,1).font = Font(bold=True,size=16,color="174A31")
@@ -400,34 +369,49 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
             cell.font = Font(bold=True,color="FFFFFF")
             cell.fill = PatternFill("solid",fgColor="17633B")
             cell.alignment = Alignment(horizontal="center",vertical="center",wrap_text=True)
-        starts, continued = cell_map(result)
-        break_columns = {index + 2 for index, (_, kind, _) in enumerate(timeline) if kind == "break"}
-        row_index = header_row + 1
-        for day in result["days"]:
-            sheet.cell(row_index,1,str(day["day_name"]))
-            sheet.cell(row_index,1).font = Font(bold=True,color="315B3E")
-            for col, (_, item_type, item) in enumerate(timeline,2):
-                cell = sheet.cell(row_index,col)
-                if item_type == "break":
-                    cell.value = str(item["label"])
-                    cell.fill = PatternFill("solid",fgColor="F1EAD8")
-                    cell.font = Font(bold=True,color="75551D")
-                    cell.alignment = Alignment(horizontal="center",vertical="center",wrap_text=True)
+        layout=build_export_grid(result,view_type)
+        timeline=layout["timeline"]
+        headers=["Day"]+(["Class / Stream"] if layout["show_class_column"] else [])+[str(item["label"])+"\n"+str(item["start_time"])+"–"+str(item["end_time"]) for _,_,item in timeline]
+        for col,value in enumerate(headers,1):
+            c=sheet.cell(header_row,col,value); c.font=Font(bold=True,color="FFFFFF"); c.fill=PatternFill("solid",fgColor="17633B"); c.alignment=Alignment(horizontal="center",vertical="center",wrap_text=True)
+        break_columns=set()
+        row_index=header_row+1
+        for row in layout["rows"]:
+            col=1
+            if row["day_first"]:
+                sheet.cell(row_index,col,row["day"]["day_name"])
+                if row["day_rowspan"]>1: sheet.merge_cells(start_row=row_index,start_column=col,end_row=row_index+row["day_rowspan"]-1,end_column=col)
+            col+=1
+            if layout["show_class_column"]:
+                cl=row["class"]; sheet.cell(row_index,col,cl["class_name"]+((" "+cl["stream"]) if cl["stream"] else "")); col+=1
+            for cell in row["cells"]:
+                if cell["kind"]=="break_placeholder":
+                    col += 1
                     continue
-                key = (int(day["id"]),int(item["id"]))
-                if key in starts:
-                    lines = []
-                    for lesson in starts[key]:
-                        class_label = str(lesson["class_name"]) + ((" " + str(lesson["stream"])) if lesson["stream"] else "")
-                        lines.append(str(lesson["subject_name"]) + " — " + class_label + "\n" + str(lesson["teacher_name"]) + "\n" + str(lesson["room_name"] or "No room"))
-                    cell.value = "\n\n".join(lines)
-                elif key in continued:
-                    cell.value = "↳ " + str(continued[key]["subject_name"]) + " continues"
-                else:
-                    cell.value = ""
-                cell.alignment = Alignment(wrap_text=True,vertical="top")
-            sheet.row_dimensions[row_index].height = 48
-            row_index += 1
+                target=sheet.cell(row_index,col)
+                if cell["kind"]=="break":
+                    b=cell["item"]; target.value=b["label"]+"\n"+b["start_time"]+"–"+b["end_time"]
+                    target.fill=PatternFill("solid",fgColor="F1EAD8"); target.font=Font(bold=True,color="75551D")
+                    if cell["rowspan"]>1: sheet.merge_cells(start_row=row_index,start_column=col,end_row=row_index+cell["rowspan"]-1,end_column=col)
+                elif cell["kind"]=="continued":
+                    target.value="\n".join("↳ "+x["subject_name"]+" continues" for x in cell["lessons"])
+                elif cell["kind"]=="lesson":
+                    values=[]
+                    for lesson in cell["lessons"]:
+                        cl=str(lesson["class_name"])+((" "+str(lesson["stream"])) if lesson["stream"] else "")
+                        detail=str(lesson["subject_name"])+" ("+str(lesson["duration_periods"])+"P)"
+                        if layout["resource_view"]: detail+="\n"+cl
+                        if view_type!="teacher": detail+="\n"+str(lesson["teacher_name"])
+                        if not layout["room_view"] and lesson.get("room_name"): detail+="\n"+str(lesson["room_name"])
+                        values.append(detail)
+                    target.value="\n\n".join(values)
+                    if cell["span"]>1: sheet.merge_cells(start_row=row_index,start_column=col,end_row=row_index,end_column=col+cell["span"]-1)
+                target.alignment=Alignment(wrap_text=True,vertical="center",horizontal="center")
+                if cell["kind"]=="break": break_columns.add(col)
+                col += cell.get("span",1)
+            sheet.row_dimensions[row_index].height=58
+            row_index+=1
+        last_col=1+(1 if layout["show_class_column"] else 0)+len(timeline)
         sheet.column_dimensions["A"].width = 16
         for col in range(2,last_col+1):
             sheet.column_dimensions[get_column_letter(col)].width = 22
