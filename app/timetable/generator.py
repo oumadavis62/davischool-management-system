@@ -681,6 +681,8 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
     fixed_teacher_day_periods = {}
     fixed_subject_day_count = {}
     fixed_teacher_day_count = {}
+    # Fixed lessons also participate in cross-day subject/period distribution.
+    fixed_subject_period_days = defaultdict(set)
     for item in fixed:
         day_id = int(item["day_id"])
         class_id = int(item["class_id"])
@@ -695,6 +697,8 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
         fixed_class_day_periods[(class_id, day_id)] = fixed_class_day_periods.get((class_id, day_id), 0) + len(period_ids)
         fixed_teacher_day_periods[(teacher_id, day_id)] = fixed_teacher_day_periods.get((teacher_id, day_id), 0) + len(period_ids)
         for pid in period_ids:
+            period_no = int(period_by_id[pid]["period_no"])
+            fixed_subject_period_days[(class_id, subject_id, period_no)].add(day_id)
             fixed_class_periods.add((class_id, day_id, pid))
             fixed_teacher_periods.add((teacher_id, day_id, pid))
             if item.get("room_id") is not None:
@@ -727,7 +731,11 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
                 fixed_class_week[class_id] = fixed_class_week.get(class_id, 0) + 1
                 fixed_class_day_periods[(class_id, day_id)] = fixed_class_day_periods.get((class_id, day_id), 0) + len(session_periods)
                 if session.get("subject_id") is not None:
-                    subject_key = (int(class_id), int(session["subject_id"]), day_id)
+                    subject_id = int(session["subject_id"])
+                    subject_key = (int(class_id), subject_id, day_id)
+                    for pid in session_periods:
+                        period_no = int(period_by_id[pid]["period_no"])
+                        fixed_subject_period_days[(int(class_id), subject_id, period_no)].add(day_id)
                     for teacher_id in session["teachers"]:
                         cap_key = (int(class_id), int(session["subject_id"]), int(teacher_id), day_id)
                         fixed_subject_day_count[cap_key] = fixed_subject_day_count.get(cap_key, 0) + 1
@@ -744,6 +752,7 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
         by_room_period = defaultdict(list)
         by_subject_day = defaultdict(list)
         by_subject_teacher_day = defaultdict(list)
+        by_class_subject_period_day = defaultdict(list)
         by_class_day_periods = defaultdict(list)
         by_teacher_day_periods = defaultdict(list)
         by_class_week = defaultdict(list)
@@ -793,6 +802,8 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
                         for pid in period_ids:
                             by_class_period[(cid, day_id, pid)].append(var)
                         by_subject_day[(cid, int(task["subject_id"]), day_id)].append(var)
+                        for period_no in range(int(candidate["period_no"]), int(candidate["period_no"]) + len(period_ids)):
+                            by_class_subject_period_day[(cid, int(task["subject_id"]), period_no, day_id)].append(var)
                         by_class_day_periods[(cid, day_id)].append((var, len(period_ids)))
                         by_class_week[cid].append(var)
                     for tid in teacher_ids:
@@ -863,6 +874,32 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
                     + int(fixed_class_day_periods.get((class_id, day_id), 0))
                     <= int(limit["max_periods_per_day"])
                 )
+
+        # Discourage a class from studying the same subject in the same
+        # period on multiple weekdays (e.g. Mathematics in Period 6 every day).
+        # This is a soft objective: availability, manual placements, linked
+        # classes, double/triple spans and all conflict rules remain intact.
+        variable_days_by_subject_period = defaultdict(lambda: defaultdict(list))
+        for (class_id, subject_id, period_no, day_id), values in by_class_subject_period_day.items():
+            variable_days_by_subject_period[(class_id, subject_id, period_no)][day_id].extend(values)
+        subject_period_keys = set(fixed_subject_period_days) | set(variable_days_by_subject_period)
+        for key in subject_period_keys:
+            fixed_days = set(fixed_subject_period_days.get(key, set()))
+            day_variables = variable_days_by_subject_period.get(key, {})
+            repeated_days = []
+            for day_id, values in day_variables.items():
+                if day_id in fixed_days:
+                    continue
+                presence = model.NewBoolVar("subject{}_class{}_period{}_day{}_present".format(key[1], key[0], key[2], day_id))
+                model.Add(presence == sum(values))
+                repeated_days.append(presence)
+            if repeated_days:
+                total_days = len(fixed_days) + sum(repeated_days)
+                repeats = model.NewIntVar(0, len(days), "subject{}_class{}_period{}_repeat".format(key[1], key[0], key[2]))
+                model.AddMaxEquality(repeats, [total_days - 1, 0])
+                # Stronger than the ordinary period-order preference, but
+                # deliberately weaker than any hard scheduling constraint.
+                objective_terms.append((repeats, 300))
 
         # Balance daily teaching loads across the week. These are soft costs:
         # class, teacher, availability and room constraints remain hard.
