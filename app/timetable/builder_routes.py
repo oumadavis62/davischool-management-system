@@ -320,7 +320,14 @@ def register_timetable_builder_routes(app, get_db, get_school_obj, module_page):
                 f"({esc(a['lessons_per_week'])}/week, {esc(a['duration_periods'])} period)</option>"
             )
         allocation_options = "".join(allocation_option_rows)
-        allocation_classes = {int(a["class_id"]): (str(a["class_name"]) + (" " + str(a["stream"] or "")).rstrip()) for a in allocations}
+        # The class filter represents the school's configured classes/streams,
+        # not only classes that already have a teacher allocation and weekly
+        # requirement for this profile. Allocation matching remains enforced
+        # separately by the hidden source options and POST validation.
+        allocation_classes = {
+            int(c["id"]): (str(c["name"]) + (" " + str(c["stream"] or "")).rstrip())
+            for c in class_records
+        }
         allocation_class_filter_options = "<option value=''>Choose class / stream</option>" + "".join(
             f"<option value='{class_id}'>{esc(label)}</option>"
             for class_id, label in sorted(allocation_classes.items(), key=lambda item: item[1].casefold())
@@ -725,6 +732,10 @@ def register_timetable_builder_routes(app, get_db, get_school_obj, module_page):
             const note=addLessonForm.querySelector('[data-builder-allocation-match]');
             const rows=Array.from(source.options).filter(option=>option.value).map(option=>({{option:option,value:option.value,classId:option.dataset.classId,classLabel:option.dataset.classLabel,teacherId:option.dataset.teacherId,teacherLabel:option.dataset.teacherLabel,subjectId:option.dataset.subjectId,subjectLabel:option.dataset.subjectLabel}}));
             const fields=['class','teacher','subject'];
+            // Keep every configured class/stream visible even when it has no
+            // matching teacher allocation yet. Teacher and subject choices
+            // continue to be narrowed to valid allocation combinations.
+            const configuredClasses=Array.from(filters.class.options).slice(1).map(option=>({{value:option.value,text:option.textContent}}));
             const idField={{class:'classId',teacher:'teacherId',subject:'subjectId'}};
             const labelField={{class:'classLabel',teacher:'teacherLabel',subject:'subjectLabel'}};
             const unique=(items,key,label)=>{{const found=new Map();items.forEach(row=>found.set(row[key],row[label]));return Array.from(found,([value,text])=>({{value,text}})).sort((a,b)=>a.text.localeCompare(b.text));}};
@@ -743,7 +754,7 @@ def register_timetable_builder_routes(app, get_db, get_school_obj, module_page):
               }}
               candidates=matching(selected);
               fields.forEach(key=>{{
-                const choices=unique(matching(selected,key),idField[key],labelField[key]);
+                const choices=key==='class'?configuredClasses:unique(matching(selected,key),idField[key],labelField[key]);
                 fill(filters[key],choices,key==='class'?'Choose class / stream':key==='teacher'?'Choose teacher':'Choose subject',selected[key]);
                 selected[key]=filters[key].value;
               }});
