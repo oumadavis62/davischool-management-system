@@ -741,6 +741,16 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
             f"<option value='{class_id}'>{esc(label)}</option>"
             for class_id, label in sorted(allocated_class_labels.items(), key=lambda item: item[1].casefold())
         )
+        allocated_teacher_labels = {int(row["teacher_id"]): str(row["teacher_name"]) for row in allocations}
+        allocated_subject_labels = {int(row["subject_id"]): str(row["subject_name"]) for row in allocations}
+        requirement_teacher_options = "".join(
+            f"<option value='{teacher_id}'>{esc(label)}</option>"
+            for teacher_id, label in sorted(allocated_teacher_labels.items(), key=lambda item: item[1].casefold())
+        )
+        requirement_subject_options = "".join(
+            f"<option value='{subject_id}'>{esc(label)}</option>"
+            for subject_id, label in sorted(allocated_subject_labels.items(), key=lambda item: item[1].casefold())
+        )
         bulk_requirement_form = f"""
           <div class='tt-req-add-modal' id='tt-req-add-modal' role='dialog' aria-modal='true' aria-labelledby='tt-req-add-title' hidden>
             <div class='tt-req-add-dialog'>
@@ -754,10 +764,10 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
                   <select data-allocation-filter='class' required><option value=''>Choose class / stream</option>{requirement_class_options}</select>
                 </label>
                 <label>Teacher
-                  <select data-allocation-filter='teacher' required><option value=''>Choose teacher</option></select>
+                  <select data-allocation-filter='teacher' required><option value=''>Choose teacher</option>{requirement_teacher_options}</select>
                 </label>
                 <label class='wide'>Subject
-                  <select data-allocation-filter='subject' required><option value=''>Choose subject</option></select>
+                  <select data-allocation-filter='subject' required><option value=''>Choose subject</option>{requirement_subject_options}</select>
                   <small data-allocation-match>Choose any one filter first. The other fields will narrow to valid teacher allocations.</small>
                 </label>
                 <select name='allocation' data-allocation-source hidden>
