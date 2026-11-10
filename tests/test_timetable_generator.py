@@ -648,6 +648,10 @@ class TimetableSchoolSnapshotIntegrationTests(unittest.TestCase):
         result = generate_timetable(self.db, 1, self.profile_id, "snapshot-test")
         self.assertEqual(result["status"], "completed", result.get("message"))
         self.assertEqual(result["generated_lessons"], 149)
+        self.assertEqual(result["generated_session_blocks"], 149)
+        self.assertEqual(result["required_periods"], 152)
+        self.assertEqual(result["allocated_periods"], 152)
+        self.assertTrue(result["allocation_complete"])
         generated = self.db.execute(
             """SELECT class_id,subject_id,teacher_id,day_id,period_id,duration_periods
                FROM ds_timetable_lessons WHERE profile_id=? AND generation_run_id=?""",

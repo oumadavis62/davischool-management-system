@@ -1257,6 +1257,48 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
         return {"run_id": run_id, **summary}
 
     generated = [p for p in placements if not p.get("fixed")]
+    # A session block is not a period: doubles/triples occupy multiple periods,
+    # and a linked session fulfils the allocation for every participating class.
+    # Count the class-period workload, not just the number of solver variables.
+    required_periods = sum(
+        int(task["duration"]) * len(set(int(v) for v in task.get("class_ids", [task["class_id"]])))
+        for task in tasks
+    ) + sum(
+        sum(int(duration) for duration in durations)
+        for durations in normalized_coverage.values()
+    )
+    allocated_periods = sum(
+        int(item.get("duration") or 1) * len(set(int(v) for v in item.get("class_ids", [item["class_id"]])))
+        for item in generated
+    ) + sum(
+        sum(int(duration) for duration in durations)
+        for durations in normalized_coverage.values()
+    )
+    allocation_complete = allocated_periods == required_periods
+    if not allocation_complete:
+        summary = {
+            "status": "failed",
+            "message": (
+                "Timetable generation did not fill every required period: "
+                + str(allocated_periods) + " of " + str(required_periods)
+                + " class-periods were allocated. The previous timetable was retained."
+            ),
+            "required_lessons": total_required,
+            "required_periods": required_periods,
+            "allocated_periods": allocated_periods,
+            "allocation_complete": False,
+            "generated_lessons": len(generated),
+            "manual_lessons_kept": 0,
+            "manual_lessons_replaced": 0,
+            "failure_code": "period_allocation_mismatch",
+            "search_nodes": nodes,
+        }
+        cur.execute(
+            "UPDATE ds_timetable_generation_runs SET status='failed',result_summary_json=?,finished_at=? WHERE id=? AND school_id=?",
+            (json.dumps(summary, sort_keys=True), _now(), run_id, school_id),
+        )
+        connection.commit()
+        return {"run_id": run_id, **summary}
     # Keep the last complete timetable intact on every failure path. Once a
     # full replacement solution exists, archive and replace both prior
     # generated rows and manually placed draft rows.
@@ -1324,10 +1366,14 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
         "status": "completed",
         "message": "The timetable was fully regenerated. Previous manual and automatic placements were replaced.",
         "required_lessons": total_required,
+        "required_periods": required_periods,
+        "allocated_periods": allocated_periods,
+        "allocation_complete": allocation_complete,
+        "generated_lessons": len(generated),
+        "generated_session_blocks": len(generated),
+        "total_scheduled_lessons": len(generated),
         "manual_lessons_kept": 0,
         "manual_lessons_replaced": len(manual_to_replace),
-        "generated_lessons": len(generated),
-        "total_scheduled_lessons": len(generated),
         "search_nodes": nodes,
         "quality_score": quality_score,
     }
