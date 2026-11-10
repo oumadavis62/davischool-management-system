@@ -207,7 +207,7 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
              ON p.school_id=r.school_id AND p.profile_id=r.profile_id
             AND p.requirement_id=r.id
            WHERE r.school_id=? AND r.profile_id=? AND r.is_active=1
-             AND r.schedule_layer='instructional' AND r.subject_id IS NOT NULL
+             AND r.schedule_layer IN ('instructional','additional_learning') AND r.subject_id IS NOT NULL
            ORDER BY r.id,p.session_no""",
         (school_id, profile_id),
     ).fetchall()
@@ -1417,11 +1417,15 @@ def generate_advanced_instructional_sessions(connection: Any, school_id: int,
     deadline = deadline if deadline is not None else time.monotonic() + GENERATION_TIME_LIMIT_SECONDS
     cur = connection.cursor()
     _profile(cur, school_id, profile_id)
+    profile_details = cur.execute(
+        "SELECT * FROM ds_timetable_profiles WHERE id=? AND school_id=?",
+        (profile_id, school_id),
+    ).fetchone()
+    is_main_profile = str(profile_details["profile_type"] or "main").strip().lower() == "main"
+    advanced_layer_filter = "schedule_layer='instructional'" if is_main_profile else "schedule_layer IN ('instructional','additional_learning')"
     requirements = cur.execute(
         """SELECT * FROM ds_timetable_scheduling_requirements
-           WHERE school_id=? AND profile_id=? AND is_active=1
-             AND schedule_layer='instructional'
-           ORDER BY id""",
+           WHERE school_id=? AND profile_id=? AND is_active=1 AND """ + advanced_layer_filter + " ORDER BY id",
         (school_id, profile_id),
     ).fetchall()
     if not requirements:
@@ -1480,6 +1484,7 @@ def generate_advanced_instructional_sessions(connection: Any, school_id: int,
                 raise TimetableSetupError("Advanced instructional sessions must span one to four consecutive periods.")
             tasks.append({
                 "requirement_id": rid, "session_no": int(pattern["session_no"]),
+                "schedule_layer": str(req["schedule_layer"] or "instructional"),
                 "duration": duration, "classes": classes, "teachers": teachers,
                 "learners": learners, "subject_id": int(req["subject_id"]) if req["subject_id"] is not None else None,
                 "programme_id": int(req["programme_id"]) if req["programme_id"] is not None else None,
@@ -1510,7 +1515,7 @@ def generate_advanced_instructional_sessions(connection: Any, school_id: int,
         """SELECT * FROM ds_timetable_constraints
            WHERE school_id=? AND profile_id=? AND is_active=1
              AND constraint_type='prefer'
-             AND (schedule_layer='all' OR schedule_layer='instructional')
+             AND (schedule_layer='all' OR """ + advanced_layer_filter + """)
              AND (applies_to='all' OR applies_to='lesson')""",
         (school_id, profile_id),
     ).fetchall()
@@ -1597,7 +1602,7 @@ def generate_advanced_instructional_sessions(connection: Any, school_id: int,
                 if any(_overlap(start, end, str(br["start_time"]), str(br["end_time"])) for br in configured_breaks):
                     continue
                 try:
-                    _validate_constraints(cur, school_id, profile_id, "instructional", "lesson",
+                    _validate_constraints(cur, school_id, profile_id, task["schedule_layer"], "lesson",
                         task["subject_id"], task["classes"], task["teachers"], None,
                         day_id, int(period["id"]), start, end, None)
                 except TimetableSetupError:
@@ -1787,7 +1792,7 @@ def generate_advanced_instructional_sessions(connection: Any, school_id: int,
             task, option = item["task"], item["option"]
             created.append(create_scheduled_session(
                 connection, school_id, profile_id, option["start"], option["end"],
-                schedule_layer="instructional", session_type=task["session_type"],
+                schedule_layer=task["schedule_layer"], session_type=task["session_type"],
                 class_ids=task["classes"], teacher_ids=task["teachers"],
                 learner_ids=task["learners"], room_id=option["room_id"],
                 day_id=option["day_id"], period_id=option["period_id"],
@@ -1809,7 +1814,7 @@ def generate_advanced_instructional_sessions(connection: Any, school_id: int,
                 raise TimetableSetupError("Advanced generation found cross-timetable conflicts: " + " ".join(cross_conflicts[:3]))
         old_rows = cur.execute(
             """SELECT id FROM ds_timetable_sessions
-               WHERE school_id=? AND profile_id=? AND schedule_layer='instructional'
+               WHERE school_id=? AND profile_id=? AND """ + advanced_layer_filter + """
                  AND generation_run_id IS NOT NULL AND generation_run_id<>? AND status='scheduled'""",
             (school_id, profile_id, run_id),
         ).fetchall()
