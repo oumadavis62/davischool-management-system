@@ -192,10 +192,19 @@ def _execute_job(get_db, job):
             created_advanced_ids = list(advanced_result.get("session_ids") or [])
 
         if profile_type != "main" and advanced_result and not int(legacy_count or 0):
+            _delete_sessions(con, school_id, profile_id, advanced_result.get("previous_session_ids") or [])
             con.execute(
                 "DELETE FROM ds_timetable_lessons WHERE school_id=? AND profile_id=? AND status='scheduled'",
                 (school_id, profile_id),
             )
+            from app.timetable.publishing import _cross_profile_conflicts
+            profile_for_conflicts = con.execute(
+                "SELECT * FROM ds_timetable_profiles WHERE id=? AND school_id=?",
+                (profile_id, school_id),
+            ).fetchone()
+            cross_conflicts = _cross_profile_conflicts(con.cursor(), school_id, profile_for_conflicts)
+            if cross_conflicts:
+                raise TimetableSetupError("Generation found cross-timetable conflicts: " + " ".join(cross_conflicts[:3]))
             result = {
                 "status": "completed",
                 "run_id": int(advanced_result["run_id"]),
