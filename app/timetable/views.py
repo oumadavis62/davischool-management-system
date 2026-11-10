@@ -174,7 +174,7 @@ def _load_advanced_sessions(cur, school_id: int, profile_id: int, view_type: str
         params.append(target_id)
     where = (" AND " + " AND ".join(conditions)) if conditions else ""
     rows = cur.execute(
-        """SELECT s.*,d.day_code,d.day_name,sub.name subject_name,rm.name room_name,
+        """SELECT s.*,d.day_code,d.day_name,sub.name subject_name,sub.initial subject_initial,rm.name room_name,
                   p.name programme_name
            FROM ds_timetable_sessions s
            LEFT JOIN ds_timetable_days d ON d.id=s.day_id AND d.profile_id=s.profile_id
