@@ -180,7 +180,7 @@ def register_timetable_view_routes(app, get_db, get_school_obj, module_page):
                                 # One break-name cell spans every displayed weekday
                                 # row (and every class row in the whole-school view).
                                 break_rowspan = len(days) * (len(class_rows) if view_type == "school" else 1)
-                                cells.append(f"<td class='tb-break-cell tb-week-break' rowspan='{break_rowspan}'><b>{esc(item['label'])}</b></td>")
+                                cells.append(f"<td class='tb-break-cell tb-week-break' rowspan='{break_rowspan}'><b>{''.join('<i>' + ('&nbsp;' if ch.isspace() else esc(ch)) + '</i>' for ch in str(item['label']))}</b></td>")
                             continue
                         period = item
                         if int(period["id"]) in merged_period_ids:
@@ -354,8 +354,11 @@ def register_timetable_view_routes(app, get_db, get_school_obj, module_page):
         .tv-wrap .tb-grid-compact .tb-meta{{font-size:7px;line-height:1.05}}
         .tv-wrap .tb-grid-compact .tb-teacher-initials{{min-width:15px;height:13px;padding:0 2px;font-size:7px}}
         .tv-wrap .tb-grid-compact .tb-continued-item{{padding:2px;font-size:7px;line-height:1.1}}
-        .tv-wrap .tb-grid-compact .tb-break-heading,.tv-wrap .tb-grid-compact .tb-break-cell{{width:115px;min-width:115px;max-width:115px}}
-        .tv-wrap .tb-grid .tb-break-cell b{{writing-mode:vertical-rl;text-orientation:mixed;display:inline-block;vertical-align:middle;line-height:1.1}}
+        .tv-wrap .tb-grid-compact .tb-break-heading{{width:34px;min-width:34px;max-width:34px}}
+        .tv-wrap .tb-grid-compact .tb-break-cell{{width:34px;min-width:34px;max-width:34px;padding:0;position:relative}}
+        .tv-wrap .tb-grid .tb-break-cell b{{position:absolute;inset:3px 0;display:flex;flex-direction:column;justify-content:space-evenly;align-items:center;white-space:nowrap;overflow:hidden;line-height:1.0}}
+        .tv-wrap .tb-grid .tb-break-cell b i{{display:block;font-style:normal;font-size:clamp(20px,3.4vh,34px);font-weight:950;line-height:1;letter-spacing:0}}
+        .tv-wrap .tb-grid .tb-week-break{{vertical-align:middle!important}}
         .tv-wrap .tb-grid .tb-week-break{{vertical-align:middle!important}}
         </style>
         <div class='tv-wrap'><div class='tv-hero'><div><span class='tv-kicker'>DAVISCHOOL · TIMETABLE VIEWS</span><h2>Timetable Views</h2><p>Inspect the published or draft timetable by school, class, teacher or room.</p></div></div>{notice}
