@@ -405,7 +405,7 @@ def save_class_limits(connection: Any, school_id: int, profile_id: int,
     connection.commit()
 
 
-def save_class_requirement(connection: Any, school_id: int, profile_id: int, class_id: int, subject_id: int, teacher_id: int, lessons_per_week: int, duration_periods: int = 1, max_lessons_per_day: int | None = None, allow_double: bool = False) -> None:
+def save_class_requirement(connection: Any, school_id: int, profile_id: int, class_id: int, subject_id: int, teacher_id: int, lessons_per_week: int, duration_periods: int = 1, max_lessons_per_day: int | None = None, allow_double: bool = False, commit: bool = True) -> None:
     cur = connection.cursor()
     _profile(cur, school_id, profile_id)
     if not 1 <= int(lessons_per_week) <= 30 or not 1 <= int(duration_periods) <= 4:
@@ -439,7 +439,8 @@ def save_class_requirement(connection: Any, school_id: int, profile_id: int, cla
                VALUES(?,?,?,?,?,?,?,?,?)""",
             (school_id, profile_id, class_id, subject_id, teacher_id) + values,
         )
-    connection.commit()
+    if commit:
+        connection.commit()
 
 
 def save_subject_requirements(connection: Any, school_id: int, profile_id: int,
