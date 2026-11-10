@@ -603,7 +603,7 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
   <label>Link another class<select data-link-class><option value=''>Choose class to link</option>{class_group_options}</select></label>
   <label>Add co-teacher<select data-link-teacher><option value=''>Choose additional teacher</option>{teacher_group_options}</select></label>
  </div>
- <div class='tt-session-list' data-session-list><div class='tt-session-row'><span class='tt-session-number'>1</span><label>Lesson type<select data-session-duration><option value='1'>Single · 1 period</option><option value='2'>Double · 2 periods</option></select></label><button type='button' data-remove-session disabled>Remove</button></div></div>
+ <div class='tt-session-list' data-session-list><div class='tt-session-row'><span class='tt-session-number'>1</span><label>Lesson type<select data-session-duration><option value='1'>Single · 1 period</option><option value='2'>Double · 2 periods</option><option value='3'>Triple · 3 periods</option><option value='4'>Quadruple · 4 periods</option></select></label><label>Start period<select data-session-period><option value=''>Auto</option>{period_start_options}</select></label><label>Share class<select multiple data-session-classes>{class_group_options}</select></label><label>Co-teacher<select multiple data-session-teachers>{teacher_group_options}</select></label><small data-session-span>Auto placement</small><button type='button' data-remove-session disabled>Remove</button></div></div>
  <button type='button' class='tt-btn secondary' data-add-session>＋ Add another session</button>
  <input type='hidden' name='weekly_pattern' data-weekly-pattern ><input type='hidden' name='weekly_links' value='[]'><input type='hidden' name='pattern_mode' value='append'>
  <small>Choose single or double separately for each occurrence. Class and co-teacher choices are session planning controls.</small>
@@ -630,7 +630,7 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
               ed.addEventListener('click',e=>{{if(e.target.closest('[data-add-session]')){{list.appendChild(makeRow(1));sync();}}const rm=e.target.closest('[data-remove-session]');if(rm&&!rm.disabled){{rm.closest('.tt-session-row').remove();sync();}}}});
               ed.addEventListener('change',e=>{{if(e.target.matches('[data-session-duration],[data-session-period],[data-session-classes],[data-session-teachers]'))sync();}});
               const filter=()=>{{const c=(ed.querySelector('[data-class-filter]')?.value||'').toLowerCase(),t=(ed.querySelector('[data-teacher-filter]')?.value||'').toLowerCase();[...ed.querySelectorAll('[data-link-class] option')].forEach((o,i)=>{{if(i)o.hidden=!!(c&&!o.text.toLowerCase().includes(c));}});[...ed.querySelectorAll('[data-link-teacher] option')].forEach((o,i)=>{{if(i)o.hidden=!!(t&&!o.text.toLowerCase().includes(t));}});}};
-              ed.querySelectorAll('[data-class-filter],[data-teacher-filter]').forEach(x=>x.addEventListener('input',filter));sync();
+              ed.querySelectorAll('[data-class-filter],[data-teacher-filter]').forEach(x=>x.addEventListener('input',filter));sync();ed.closest('form')?.addEventListener('submit',()=>sync());
             }});
             const close=()=>{{modal.hidden=true;document.body.classList.remove('tt-modal-scroll-locked');}};
             root.addEventListener('click',event=>{{
