@@ -208,7 +208,7 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
              ON p.school_id=r.school_id AND p.profile_id=r.profile_id
             AND p.requirement_id=r.id
            WHERE r.school_id=? AND r.profile_id=? AND r.is_active=1
-             AND r.schedule_layer IN ('instructional','additional_learning') AND r.subject_id IS NOT NULL
+             AND """ + advanced_coverage_filter + """ AND r.subject_id IS NOT NULL
            ORDER BY r.id,p.session_no""",
         (school_id, profile_id),
     ).fetchall()
