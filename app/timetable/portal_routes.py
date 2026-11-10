@@ -148,16 +148,22 @@ def build_teacher_timetable_grid(view: dict) -> str:
             )
 
     rows = []
-    for day in days:
+    emitted_break_columns = set()
+    for day_index, day in enumerate(days):
         cells = ["<th class='tp-day-col'>" + escape(str(day.get("day_code") or day["day_name"])) + "</th>"]
         merged = set()
         for pos, (_, kind, item) in enumerate(timeline):
             if kind == "break":
-                cells.append(
-                    "<td class='tp-break-cell' aria-label='" + escape(str(item["label"]), quote=True)
-                    + " " + escape(str(item["start_time"])) + "–"
-                    + escape(str(item["end_time"])) + "'></td>"
-                )
+                # One vertically labelled cell spans every weekday row. The
+                # break time remains in the corresponding column header above.
+                if pos not in emitted_break_columns:
+                    if day_index == 0:
+                        cells.append(
+                            "<td class='tp-break-cell' rowspan='" + str(len(days))
+                            + "' aria-label='" + escape(str(item["label"]), quote=True)
+                            + "'><span>" + escape(str(item["label"])) + "</span></td>"
+                        )
+                    emitted_break_columns.add(pos)
                 continue
             period_id = int(item["id"])
             if period_id in merged:
@@ -388,7 +394,7 @@ def register_timetable_portal_routes(app, get_db):
             ".tp-head h2{font-size:17px;margin:0 0 5px}.tp-head span{background:#eaf5ec;color:#17633b;padding:6px 10px;border-radius:18px;font-size:10px;font-weight:bold}"
             ".tp-scroll,.tp-grid-scroll{overflow:auto;border:1px solid #dce8de;border-radius:14px;background:#fff}"
             ".tp-scroll table{border-collapse:collapse;width:100%;min-width:720px}.tp-scroll th,.tp-scroll td{text-align:left;padding:10px;border-bottom:1px solid #edf2ed;font-size:12px}.tp-scroll th{background:#f0f6f1;color:#315b3e}small{color:#64748b}"
-            ".tp-grid{width:100%;min-width:1000px;border-collapse:separate;border-spacing:0}.tp-grid thead th{background:linear-gradient(110deg,#347b50,#286743);color:#fff;padding:10px 8px;text-align:center;font-size:12px;position:sticky;top:0;min-width:135px;border-bottom:5px solid #b7d1bc}.tp-grid thead th b,.tp-grid thead th span{display:block}.tp-grid thead th span{font-size:10px;margin-top:4px;color:#e1efe4}.tp-grid .tp-day-col{width:56px;min-width:56px;max-width:56px;padding:6px 2px;background:#edf5ee;color:#315b3e;text-align:center;vertical-align:middle;position:sticky;left:0;z-index:2;white-space:normal;overflow-wrap:anywhere;font-size:10px}.tp-grid tbody th,.tp-grid tbody td{border-bottom:3px solid #c7d9ca}.tp-grid .tp-break-head,.tp-grid .tp-break-cell{min-width:70px;background:#f1ead8;color:#75551d;text-align:center;padding:8px}.tp-grid .tp-break-cell b,.tp-grid .tp-break-cell span{display:block}.tp-grid .tp-break-cell b{writing-mode:vertical-rl;margin:auto}.tp-grid .tp-break-cell span{font-size:9px;margin-top:5px}.tp-grid .tp-slot,.tp-grid .tp-free,.tp-grid .tp-continued{height:94px;min-width:125px;padding:5px;border-right:2px solid #b4cbb8;vertical-align:middle;text-align:center}.tp-grid .tp-free{background:#fbfdfb}.tp-grid .tp-continued{background:#f6faf6;color:#7b9480;font-size:10px}.tp-lesson{--lesson-color:#347b50;background:color-mix(in srgb,var(--lesson-color) 17%,white);border:1px solid color-mix(in srgb,var(--lesson-color) 48%,white);border-left:4px solid var(--lesson-color);border-radius:9px;padding:8px 7px;min-height:74px;display:flex;flex-direction:column;justify-content:center;gap:5px;color:#234638;box-shadow:0 2px 7px rgba(35,83,51,.07)}.tp-lesson-top{display:flex;justify-content:center;align-items:center;gap:8px}.tp-lesson-top b{font-size:12px}.tp-lesson-top span{font-size:9px;background:#d5e9d9;border-radius:10px;padding:2px 5px;white-space:nowrap}.tp-lesson-class{font-size:10px;font-weight:850;color:#315f43}.tp-lesson-room{font-size:9px;color:#55705d}.tp-empty,.tp-notice{padding:18px;background:#fff;border:1px dashed #cdddcf;border-radius:12px;color:#64748b}"
+            ".tp-grid{width:100%;min-width:1000px;border-collapse:separate;border-spacing:0}.tp-grid thead th{background:linear-gradient(110deg,#347b50,#286743);color:#fff;padding:10px 8px;text-align:center;font-size:12px;position:sticky;top:0;min-width:135px;border-bottom:5px solid #b7d1bc}.tp-grid thead th b,.tp-grid thead th span{display:block}.tp-grid thead th span{font-size:10px;margin-top:4px;color:#e1efe4}.tp-grid .tp-day-col{width:56px;min-width:56px;max-width:56px;padding:6px 2px;background:#edf5ee;color:#315b3e;text-align:center;vertical-align:middle;position:sticky;left:0;z-index:2;white-space:normal;overflow-wrap:anywhere;font-size:10px}.tp-grid tbody th,.tp-grid tbody td{border-bottom:3px solid #c7d9ca}.tp-grid .tp-break-head{min-width:70px;background:#f1ead8;color:#75551d;text-align:center;padding:8px}.tp-grid .tp-break-cell{min-width:42px;width:42px;background:#f1ead8;color:#75551d;text-align:center;vertical-align:middle;padding:8px 5px;border-bottom:3px solid #c7d9ca}.tp-grid .tp-break-cell span{display:block;writing-mode:vertical-rl;text-orientation:mixed;white-space:nowrap;font-size:11px;font-weight:800;letter-spacing:.04em;margin:auto}.tp-grid .tp-slot,.tp-grid .tp-free,.tp-grid .tp-continued{height:94px;min-width:125px;padding:5px;border-right:2px solid #b4cbb8;vertical-align:middle;text-align:center}.tp-grid .tp-free{background:#fbfdfb}.tp-grid .tp-continued{background:#f6faf6;color:#7b9480;font-size:10px}.tp-lesson{--lesson-color:#347b50;background:color-mix(in srgb,var(--lesson-color) 17%,white);border:1px solid color-mix(in srgb,var(--lesson-color) 48%,white);border-left:4px solid var(--lesson-color);border-radius:9px;padding:8px 7px;min-height:74px;display:flex;flex-direction:column;justify-content:center;gap:5px;color:#234638;box-shadow:0 2px 7px rgba(35,83,51,.07)}.tp-lesson-top{display:flex;justify-content:center;align-items:center;gap:8px}.tp-lesson-top b{font-size:12px}.tp-lesson-top span{font-size:9px;background:#d5e9d9;border-radius:10px;padding:2px 5px;white-space:nowrap}.tp-lesson-class{font-size:10px;font-weight:850;color:#315f43}.tp-lesson-room{font-size:9px;color:#55705d}.tp-empty,.tp-notice{padding:18px;background:#fff;border:1px dashed #cdddcf;border-radius:12px;color:#64748b}"
             "@media(max-width:600px){.tp-wrap{padding:12px}.tp-hero h1{font-size:22px}.tp-card{padding:11px}.tp-grid-scroll{border-radius:11px}}"
             "</style></head><body><main class='tp-wrap'><header class='tp-hero'><div class='tp-hero-top'><h1>My Timetable</h1><button class='tp-sidebar-toggle' type='button' aria-label='Hide Sidebar' title='Hide Sidebar' onclick='(function(){var docs=[document];try{if(window.parent&&window.parent!==window)docs.push(window.parent.document)}catch(e){}for(var d of docs){var b=Array.from(d.querySelectorAll(`button,a,[role=button]`)).find(function(x){var t=((x.innerText||x.getAttribute(`aria-label`)||x.getAttribute(`title`)||``).trim()).toLowerCase();return t===`hide sidebar`||t===`show sidebar`||t.includes(`hide sidebar`)||t.includes(`show sidebar`)});if(b){b.click();return}}})();'><span aria-hidden='true'>◧</span></button></div>"
             "<p>Latest published timetable · DaviSchool</p></header>"
