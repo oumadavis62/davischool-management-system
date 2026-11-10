@@ -103,6 +103,116 @@ def build_portal_timetable_rows(view: dict) -> list[dict]:
 
 
 
+def build_teacher_timetable_grid(view: dict) -> str:
+    """Render the teacher's personal timetable using the same weekly grid language as admin views."""
+    days = view.get("days", [])
+    periods = view.get("periods", [])
+    breaks = view.get("breaks", [])
+    lessons = view.get("lessons", [])
+    if not days or not periods:
+        return "<div class='tp-empty'>No weekly timetable grid is configured.</div>"
+
+    timeline = sorted(
+        [(str(p["start_time"]), "period", p) for p in periods]
+        + [(str(br["start_time"]), "break", br) for br in breaks],
+        key=lambda item: (item[0], 0 if item[1] == "period" else 1),
+    )
+    period_index = {int(p["id"]): i for i, p in enumerate(periods)}
+    by_slot = {}
+    occupied = {}
+    for lesson in lessons:
+        key = (int(lesson["day_id"]), int(lesson["period_id"]))
+        by_slot.setdefault(key, []).append(lesson)
+        start = period_index.get(int(lesson["period_id"]))
+        duration = max(1, int(lesson.get("duration_periods") or 1))
+        if start is not None:
+            for offset in range(1, duration):
+                if start + offset < len(periods):
+                    occupied.setdefault(
+                        (int(lesson["day_id"]), int(periods[start + offset]["id"])), []
+                    ).append(lesson)
+
+    headers = ["<th class='tp-day-col'>Day</th>"]
+    for _, kind, item in timeline:
+        if kind == "break":
+            headers.append(
+                "<th class='tp-break-head'><b>" + escape(str(item["label"]))
+                + "</b><span>" + escape(str(item["start_time"])) + "–"
+                + escape(str(item["end_time"])) + "</span></th>"
+            )
+        else:
+            headers.append(
+                "<th class='tp-period-head'><b>" + escape(str(item["label"]))
+                + "</b><span>" + escape(str(item["start_time"])) + "–"
+                + escape(str(item["end_time"])) + "</span></th>"
+            )
+
+    rows = []
+    for day in days:
+        cells = ["<th class='tp-day-col'>" + escape(str(day["day_name"])) + "</th>"]
+        merged = set()
+        for pos, (_, kind, item) in enumerate(timeline):
+            if kind == "break":
+                cells.append(
+                    "<td class='tp-break-cell'><b>" + escape(str(item["label"]))
+                    + "</b><span>" + escape(str(item["start_time"])) + "–"
+                    + escape(str(item["end_time"])) + "</span></td>"
+                )
+                continue
+            period_id = int(item["id"])
+            if period_id in merged:
+                continue
+            slot = by_slot.get((int(day["id"]), period_id), [])
+            continued = occupied.get((int(day["id"]), period_id), [])
+            if slot:
+                cards = []
+                span = 1
+                for lesson in slot:
+                    duration = max(1, int(lesson.get("duration_periods") or 1))
+                    start = period_index.get(period_id)
+                    span_periods = [periods[start + offset] for offset in range(duration)
+                                    if start is not None and start + offset < len(periods)]
+                    can_merge = len(span_periods) == duration and all(
+                        next((p for p, entry in enumerate(timeline)
+                              if entry[1] == "period" and int(entry[2]["id"]) == int(span_periods[offset]["id"])), -2) == pos + offset
+                        for offset in range(duration)
+                    )
+                    if can_merge and duration > span:
+                        span = duration
+                        merged.update(int(p["id"]) for p in span_periods[1:])
+                    color = str(lesson.get("teacher_color") or "#347b50")
+                    if not (len(color) == 7 and color.startswith("#")
+                            and all(ch in "0123456789abcdefABCDEF" for ch in color[1:])):
+                        color = "#347b50"
+                    class_label = str(lesson.get("class_name") or "Class")
+                    if lesson.get("stream"):
+                        class_label += " · " + str(lesson["stream"])
+                    room = str(lesson.get("room_name") or "Room not assigned")
+                    cards.append(
+                        "<article class='tp-lesson' style='--lesson-color:" + escape(color) + "'>"
+                        "<div class='tp-lesson-top'><b>" + escape(str(lesson.get("subject_name") or "Lesson"))
+                        + "</b><span>" + str(duration) + "P</span></div>"
+                        "<div class='tp-lesson-class'>" + escape(class_label) + "</div>"
+                        "<div class='tp-lesson-room'>⌂ " + escape(room) + "</div></article>"
+                    )
+                cells.append("<td class='tp-slot' colspan='" + str(span) + "'>" + "".join(cards) + "</td>")
+            elif continued:
+                cells.append(
+                    "<td class='tp-continued'>↳ " + " · ".join(
+                        escape(str(item.get("subject_name") or "Lesson")) + " continues"
+                        for item in continued
+                    ) + "</td>"
+                )
+            else:
+                cells.append("<td class='tp-free'></td>")
+        rows.append("<tr>" + "".join(cells) + "</tr>")
+    return (
+        "<div class='tp-grid-scroll'><table class='tp-grid'><thead><tr>"
+        + "".join(headers) + "</tr></thead><tbody>" + "".join(rows)
+        + "</tbody></table></div>"
+    )
+
+
 def register_timetable_portal_routes(app, get_db):
     @app.get("/app/timetable/my", response_class=HTMLResponse)
     def published_portal_timetable(request: Request):
@@ -140,25 +250,30 @@ def register_timetable_portal_routes(app, get_db):
                         # A profile without a usable day/period setup is not
                         # allowed to break access to other published profiles.
                         continue
-                    portal_rows = build_portal_timetable_rows(view)
-                    lesson_rows = []
-                    for row in portal_rows:
-                        lesson_rows.append(
-                            "<tr><td>" + escape(row["date_day"]) + "</td><td>"
-                            + escape(row["time"]) + "</td><td><b>" + escape(row["subject"])
-                            + "</b><br><small>" + escape(row["layer"]) + "</small></td><td>"
-                            + escape(row["class_group"]) + "</td><td>" + escape(row["teachers"])
-                            + "</td><td>" + escape(row["venue"]) + "</td></tr>"
+                    if role == "teacher":
+                        schedule_html = build_teacher_timetable_grid(view)
+                    else:
+                        portal_rows = build_portal_timetable_rows(view)
+                        lesson_rows = []
+                        for row in portal_rows:
+                            lesson_rows.append(
+                                "<tr><td>" + escape(row["date_day"]) + "</td><td>"
+                                + escape(row["time"]) + "</td><td><b>" + escape(row["subject"])
+                                + "</b><br><small>" + escape(row["layer"]) + "</small></td><td>"
+                                + escape(row["class_group"]) + "</td><td>" + escape(row["teachers"])
+                                + "</td><td>" + escape(row["venue"]) + "</td></tr>"
+                            )
+                        schedule_html = (
+                            "<div class='tp-scroll'><table><thead><tr><th>Date / Day</th><th>Time</th><th>Subject / Activity</th><th>Class</th><th>Teacher</th><th>Room</th></tr></thead><tbody>"
+                            + "".join(lesson_rows) + "</tbody></table></div>"
+                            if lesson_rows else "<p class='tp-empty'>No lessons are scheduled for this timetable.</p>"
                         )
                     sections.append(
                         "<section class='tp-card'><div class='tp-head'><div><h2>"
                         + escape(label) + "</h2><p>" + escape(str(profile["academic_year"]))
                         + " · " + escape(str(profile["term"])) + " · Revision "
                         + escape(str(profile["revision_no"] or 1)) + "</p></div><span>Published</span></div>"
-                        + ("<div class='tp-scroll'><table><thead><tr><th>Date / Day</th><th>Time</th><th>Subject / Activity</th><th>Class</th><th>Teacher</th><th>Room</th></tr></thead><tbody>"
-                           + "".join(lesson_rows) + "</tbody></table></div>"
-                           if lesson_rows else "<p class='tp-empty'>No lessons are scheduled for this timetable.</p>")
-                        + "</section>"
+                        + schedule_html + "</section>"
                     )
             if not targets:
                 message = ("This account is not linked to a teacher profile." if role == "teacher"
@@ -180,9 +295,10 @@ def register_timetable_portal_routes(app, get_db):
             ".tp-card{background:#fff;border:1px solid #dce9de;border-radius:14px;padding:16px;margin:14px 0}"
             ".tp-head{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:12px}"
             ".tp-head h2{font-size:17px;margin:0 0 5px}.tp-head span{background:#eaf5ec;color:#17633b;padding:6px 10px;border-radius:18px;font-size:10px;font-weight:bold}"
-            ".tp-scroll{overflow:auto}table{border-collapse:collapse;width:100%;min-width:720px}th,td{text-align:left;padding:10px;border-bottom:1px solid #edf2ed;font-size:12px}th{background:#f0f6f1;color:#315b3e}small{color:#64748b}"
-            ".tp-empty,.tp-notice{padding:18px;background:#fff;border:1px dashed #cdddcf;border-radius:12px;color:#64748b}"
-            "@media(max-width:600px){.tp-wrap{padding:12px}.tp-hero h1{font-size:22px}}"
+            ".tp-scroll,.tp-grid-scroll{overflow:auto;border:1px solid #dce8de;border-radius:14px;background:#fff}"
+            ".tp-scroll table{border-collapse:collapse;width:100%;min-width:720px}.tp-scroll th,.tp-scroll td{text-align:left;padding:10px;border-bottom:1px solid #edf2ed;font-size:12px}.tp-scroll th{background:#f0f6f1;color:#315b3e}small{color:#64748b}"
+            ".tp-grid{width:100%;min-width:1000px;border-collapse:separate;border-spacing:0}.tp-grid thead th{background:linear-gradient(110deg,#347b50,#286743);color:#fff;padding:10px 8px;text-align:center;font-size:12px;position:sticky;top:0;min-width:135px;border-bottom:5px solid #b7d1bc}.tp-grid thead th b,.tp-grid thead th span{display:block}.tp-grid thead th span{font-size:10px;margin-top:4px;color:#e1efe4}.tp-grid .tp-day-col{min-width:105px;background:#edf5ee;color:#315b3e;text-align:center;vertical-align:middle;position:sticky;left:0;z-index:2;white-space:nowrap}.tp-grid tbody th,.tp-grid tbody td{border-bottom:3px solid #c7d9ca}.tp-grid .tp-break-head,.tp-grid .tp-break-cell{min-width:70px;background:#f1ead8;color:#75551d;text-align:center;padding:8px}.tp-grid .tp-break-cell b,.tp-grid .tp-break-cell span{display:block}.tp-grid .tp-break-cell b{writing-mode:vertical-rl;margin:auto}.tp-grid .tp-break-cell span{font-size:9px;margin-top:5px}.tp-grid .tp-slot,.tp-grid .tp-free,.tp-grid .tp-continued{height:94px;min-width:125px;padding:5px;border-right:2px solid #b4cbb8;vertical-align:middle;text-align:center}.tp-grid .tp-free{background:#fbfdfb}.tp-grid .tp-continued{background:#f6faf6;color:#7b9480;font-size:10px}.tp-lesson{--lesson-color:#347b50;background:color-mix(in srgb,var(--lesson-color) 17%,white);border:1px solid color-mix(in srgb,var(--lesson-color) 48%,white);border-left:4px solid var(--lesson-color);border-radius:9px;padding:8px 7px;min-height:74px;display:flex;flex-direction:column;justify-content:center;gap:5px;color:#234638;box-shadow:0 2px 7px rgba(35,83,51,.07)}.tp-lesson-top{display:flex;justify-content:center;align-items:center;gap:8px}.tp-lesson-top b{font-size:12px}.tp-lesson-top span{font-size:9px;background:#d5e9d9;border-radius:10px;padding:2px 5px;white-space:nowrap}.tp-lesson-class{font-size:10px;font-weight:850;color:#315f43}.tp-lesson-room{font-size:9px;color:#55705d}.tp-empty,.tp-notice{padding:18px;background:#fff;border:1px dashed #cdddcf;border-radius:12px;color:#64748b}"
+            "@media(max-width:600px){.tp-wrap{padding:12px}.tp-hero h1{font-size:22px}.tp-card{padding:11px}.tp-grid-scroll{border-radius:11px}}"
             "</style></head><body><main class='tp-wrap'><header class='tp-hero'><h1>My Timetable</h1>"
             "<p>Latest published timetable · DaviSchool</p></header>"
             + ("<div class='tp-notice'>" + escape(message) + "</div>" if message else "")
