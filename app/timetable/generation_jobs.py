@@ -168,10 +168,19 @@ def _execute_job(get_db, job):
         # it before the solver's running-run guard is evaluated.
         _reconcile_profile_runs(con, school_id, profile_id, job_id)
         _set_job(get_db, job_id, stage="checking requirements")
+        profile_row = con.execute(
+            "SELECT profile_type FROM ds_timetable_profiles WHERE id=? AND school_id=?",
+            (profile_id, school_id),
+        ).fetchone()
+        profile_type = str(profile_row["profile_type"] or "main").lower() if profile_row else "main"
+        advanced_layer_filter = "schedule_layer='instructional'" if profile_type == "main" else "schedule_layer IN ('instructional','additional_learning')"
         advanced_count = con.execute(
             """SELECT COUNT(*) FROM ds_timetable_scheduling_requirements
-               WHERE school_id=? AND profile_id=? AND is_active=1
-                 AND schedule_layer='instructional'""",
+               WHERE school_id=? AND profile_id=? AND is_active=1 AND """ + advanced_layer_filter,
+            (school_id, profile_id),
+        ).fetchone()[0]
+        legacy_count = con.execute(
+            "SELECT COUNT(*) FROM ds_timetable_class_requirements WHERE school_id=? AND profile_id=?",
             (school_id, profile_id),
         ).fetchone()[0]
         if int(advanced_count or 0):
@@ -182,12 +191,21 @@ def _execute_job(get_db, job):
             )
             created_advanced_ids = list(advanced_result.get("session_ids") or [])
 
-        _set_job(get_db, job_id, stage="generating ordinary lessons")
-        result = generate_timetable(
-            con, school_id, profile_id, email,
-            normalized_run_id=(advanced_result or {}).get("run_id"),
-            deadline=deadline,
-        )
+        if advanced_result and not int(legacy_count or 0):
+            result = {
+                "status": "completed",
+                "run_id": int(advanced_result["run_id"]),
+                "generated_lessons": 0,
+                "generated_sessions": int(advanced_result.get("generated_sessions") or 0),
+                "message": "Specialized teaching sessions generated successfully.",
+            }
+        else:
+            _set_job(get_db, job_id, stage="generating ordinary lessons")
+            result = generate_timetable(
+                con, school_id, profile_id, email,
+                normalized_run_id=(advanced_result or {}).get("run_id"),
+                deadline=deadline,
+            )
         if result.get("status") != "completed":
             _delete_sessions(con, school_id, profile_id, created_advanced_ids)
             if advanced_result and advanced_result.get("run_id"):
