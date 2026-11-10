@@ -135,7 +135,7 @@ def _clone_advanced_profile_data(cur, school_id: int, source_profile_id: int, ne
 
 
 
-def _cross_profile_conflicts(cur, school_id: int, profile) -> list[str]:
+def _cross_profile_conflicts(cur, school_id: int, profile, candidate_session_ids=None) -> list[str]:
     """Detect teacher, class and room overlaps against other active programmes.
 
     A revision is compared with other independent programmes, not with its own
@@ -170,7 +170,7 @@ def _cross_profile_conflicts(cur, school_id: int, profile) -> list[str]:
         return []
     placeholders = ",".join("?" for _ in other_ids)
 
-    def placements(profile_ids):
+    def placements(profile_ids, session_ids=None):
         found = []
         lesson_rows = cur.execute(
             """SELECT l.class_id,l.teacher_id,l.room_id,d.day_code,NULL AS session_date,
@@ -192,13 +192,21 @@ def _cross_profile_conflicts(cur, school_id: int, profile) -> list[str]:
                 "teachers": {int(row["teacher_id"])},
                 "rooms": {int(row["room_id"])} if row["room_id"] is not None else set(),
             })
+        session_id_filter = ""
+        session_id_params = ()
+        if session_ids is not None:
+            if session_ids:
+                session_id_filter = " AND s.id IN (" + ",".join("?" for _ in session_ids) + ")"
+                session_id_params = tuple(int(value) for value in session_ids)
+            else:
+                session_id_filter = " AND 1=0"
         session_rows = cur.execute(
             """SELECT s.id,s.day_id,s.session_date,s.start_time,s.end_time,s.room_id,d.day_code
                FROM ds_timetable_sessions s
                LEFT JOIN ds_timetable_days d ON d.id=s.day_id AND d.profile_id=s.profile_id
                WHERE s.school_id=? AND s.profile_id IN (""" + ",".join("?" for _ in profile_ids) + """)
-                 AND s.status='scheduled'""",
-            (school_id, *profile_ids),
+                 AND s.status='scheduled'""" + session_id_filter,
+            (school_id, *profile_ids, *session_id_params),
         ).fetchall()
         for row in session_rows:
             sid = int(row["id"])
@@ -238,7 +246,7 @@ def _cross_profile_conflicts(cur, school_id: int, profile) -> list[str]:
             })
         return found
 
-    candidate = placements([int(profile["id"])])
+    candidate = placements([int(profile["id"])], candidate_session_ids)
     existing = placements(other_ids)
     conflicts = []
     for first in candidate:
