@@ -122,7 +122,9 @@ def register_timetable_view_routes(app, get_db, get_school_obj, module_page):
             class_rows = sorted(class_rows_by_id.values(), key=lambda item: (
                 item["class_name"].casefold(), item["stream"].casefold()
             ))
-            if view_type == "teacher":
+            if view_type in ("teacher", "room"):
+                # Like the teacher sheet, room view has one row per day;
+                # each lesson card identifies its class and stream.
                 class_rows = [{"class_id": 0, "class_name": "", "stream": ""}]
             if not class_rows:
                 class_rows = [{"class_id": 0, "class_name": "—", "stream": ""}]
@@ -146,7 +148,7 @@ def register_timetable_view_routes(app, get_db, get_school_obj, module_page):
                 for position, (_, item_type, item) in enumerate(timeline)
                 if item_type == "period"
             }
-            show_class_column = view_type in ("school", "room")
+            show_class_column = view_type == "school"
             headers = ["<th class='tb-day-heading'>Day</th>"]
             if show_class_column:
                 headers.append("<th class='tb-class-heading'>Class / Stream</th>")
@@ -172,7 +174,7 @@ def register_timetable_view_routes(app, get_db, get_school_obj, module_page):
                             # Class and teacher views have one row per day:
                             # merge each break vertically across the full
                             # Monday-Friday timetable, not separately per day.
-                            if view_type in ("class", "teacher"):
+                            if view_type in ("class", "teacher", "room"):
                                 if day_index == 0 and class_index == 0:
                                     cells.append(f"<td class='tb-break-cell tb-week-break' rowspan='{len(days)}'><b>{esc(item['label'])}</b><span>{esc(item['start_time'])}–{esc(item['end_time'])}</span></td>")
                             elif class_index == 0:
@@ -184,7 +186,9 @@ def register_timetable_view_routes(app, get_db, get_school_obj, module_page):
                         if int(period["id"]) in merged_period_ids:
                             continue
                         key = (int(day["id"]), int(class_row["class_id"]), int(period["id"]))
-                        if view_type == "teacher":
+                        if view_type in ("teacher", "room"):
+                            # Teacher and room sheets share one row per day;
+                            # aggregate the selected resource's lessons across classes.
                             slot_lessons = [lesson for lesson in lessons if int(lesson["day_id"]) == int(day["id"]) and int(lesson["period_id"]) == int(period["id"])]
                             continued_lessons = [lesson for lesson in lessons if int(lesson["day_id"]) == int(day["id"]) and (int(day["id"]), int(lesson["class_id"]), int(period["id"])) in occupied and lesson in occupied[(int(day["id"]), int(lesson["class_id"]), int(period["id"]))]]
                         else:
@@ -223,7 +227,7 @@ def register_timetable_view_routes(app, get_db, get_school_obj, module_page):
                                 class_label = esc(str(lesson["class_name"]) + ((" · " + str(lesson["stream"])) if lesson["stream"] else ""))
                                 teacher_footer = (
                                     f"<div class='tb-lesson-footer'><span class='tb-meta tb-class-label'>{class_label}</span></div>"
-                                    if view_type == "teacher"
+                                    if view_type in ("teacher", "room")
                                     else f"<div class='tb-lesson-footer'><span class='tb-teacher-initials' title='{esc(lesson['teacher_name'])}'>{esc(teacher_initials)}</span></div>"
                                 )
                                 cards.append(
@@ -236,7 +240,7 @@ def register_timetable_view_routes(app, get_db, get_school_obj, module_page):
                             continued_cards = []
                             for item in continued_lessons:
                                 continued_avatar = ""
-                                if view_type != "teacher":
+                                if view_type not in ("teacher", "room"):
                                     continued_avatar = f" <b class='tb-teacher-initials'>{esc(str(item['teacher_initials'] or '').strip().upper() or '—')}</b>"
                                 continued_cards.append(
                                     f"<div class='tb-continued-item' style='--teacher-color:{str(item['teacher_color'] or '#2563EB')}' title='{esc(item['subject_name'])} · {esc(item['teacher_name'])}'>↳ {esc(str(item['subject_initial'] or '').strip().upper() or '—')} continues{continued_avatar}</div>"
