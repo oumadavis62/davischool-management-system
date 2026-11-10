@@ -120,12 +120,6 @@ class DaviSchoolTabSessionMiddleware:
       currentUrl.searchParams.set("ds_tab", id);
       window.history.replaceState(null, "", currentUrl.pathname + currentUrl.search + currentUrl.hash);
       urlTabId = id;
-    } else if (!id && /^[A-Za-z0-9_-]{16,64}$/.test(urlTabId)) {
-      // The login POST already created the session cookie using this ID.
-      // Adopt it on first authenticated load instead of generating a new ID
-      // and accidentally selecting a different, empty session cookie.
-      id = urlTabId;
-      sessionStorage.setItem(KEY, id);
     }
 
     var navigationType = "navigate";
