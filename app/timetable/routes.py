@@ -630,7 +630,7 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
               ed.addEventListener('click',e=>{{if(e.target.closest('[data-add-session]')){{list.appendChild(makeRow(1));sync();}}const rm=e.target.closest('[data-remove-session]');if(rm&&!rm.disabled){{rm.closest('.tt-session-row').remove();sync();}}}});
               ed.addEventListener('change',e=>{{if(e.target.matches('[data-session-duration],[data-session-period],[data-session-classes],[data-session-teachers]'))sync();}});
               const filter=()=>{{const c=(ed.querySelector('[data-class-filter]')?.value||'').toLowerCase(),t=(ed.querySelector('[data-teacher-filter]')?.value||'').toLowerCase();[...ed.querySelectorAll('[data-link-class] option')].forEach((o,i)=>{{if(i)o.hidden=!!(c&&!o.text.toLowerCase().includes(c));}});[...ed.querySelectorAll('[data-link-teacher] option')].forEach((o,i)=>{{if(i)o.hidden=!!(t&&!o.text.toLowerCase().includes(t));}});}};
-              ed.querySelectorAll('[data-class-filter],[data-teacher-filter]').forEach(x=>x.addEventListener('input',filter));sync();
+              ed.querySelectorAll('[data-class-filter],[data-teacher-filter]').forEach(x=>x.addEventListener('input',filter));sync();ed.closest('form')?.addEventListener('submit',()=>sync());
             }});
             const close=()=>{{modal.hidden=true;document.body.classList.remove('tt-modal-scroll-locked');}};
             root.addEventListener('click',event=>{{
