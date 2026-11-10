@@ -438,8 +438,9 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
     if len(tasks) > 20_000:
         raise TimetableSetupError("This timetable exceeds the supported 20,000 unscheduled lesson-occurrence capacity. Reduce duplicate requirements or generate the school in separate timetable profiles.")
 
-    # Every placement is regenerated; no manually selected day, period or room
-    # is locked into the solver.
+    # The solver still needs the ordered period index to expand candidate
+    # multi-period spans. No existing manual placement is fixed.
+    period_index = {int(p["id"]): i for i, p in enumerate(periods)}
     fixed = []
 
     # Ordinary weekly lessons use classroom-type rooms only. Specialist spaces
