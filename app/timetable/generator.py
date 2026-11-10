@@ -159,6 +159,7 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
         (profile_id, school_id),
     ).fetchone()
     is_main_profile = str(profile_details["profile_type"] or "main").strip().lower() == "main"
+    advanced_coverage_filter = "r.schedule_layer='instructional'" if is_main_profile else "r.schedule_layer IN ('instructional','additional_learning')"
     active_run_sql = """SELECT id FROM ds_timetable_generation_runs
            WHERE school_id=? AND profile_id=? AND status='running'"""
     active_run_params = [school_id, profile_id]
@@ -1623,7 +1624,7 @@ def generate_advanced_instructional_sessions(connection: Any, school_id: int,
                     _check_generation_deadline(deadline)
                     if _validate_constraints:
                         try:
-                            _validate_constraints(cur, school_id, profile_id, "instructional", "lesson",
+                            _validate_constraints(cur, school_id, profile_id, task["schedule_layer"], "lesson",
                                 task["subject_id"], task["classes"], task["teachers"], room_id,
                                 day_id, int(period["id"]), start, end, None)
                         except TimetableSetupError:
@@ -1803,15 +1804,14 @@ def generate_advanced_instructional_sessions(connection: Any, school_id: int,
                 generation_run_id=run_id, ignore_generated_conflicts=True,
                 ignore_generated_legacy_conflicts=True,
             ))
-        if not defer_replacement:
-            from app.timetable.publishing import _cross_profile_conflicts
-            profile_for_conflicts = cur.execute(
-                "SELECT * FROM ds_timetable_profiles WHERE id=? AND school_id=?",
-                (profile_id, school_id),
-            ).fetchone()
-            cross_conflicts = _cross_profile_conflicts(cur, school_id, profile_for_conflicts)
-            if cross_conflicts:
-                raise TimetableSetupError("Advanced generation found cross-timetable conflicts: " + " ".join(cross_conflicts[:3]))
+        from app.timetable.publishing import _cross_profile_conflicts
+        profile_for_conflicts = cur.execute(
+            "SELECT * FROM ds_timetable_profiles WHERE id=? AND school_id=?",
+            (profile_id, school_id),
+        ).fetchone()
+        cross_conflicts = _cross_profile_conflicts(cur, school_id, profile_for_conflicts)
+        if cross_conflicts:
+            raise TimetableSetupError("Advanced generation found cross-timetable conflicts: " + " ".join(cross_conflicts[:3]))
         old_rows = cur.execute(
             """SELECT id FROM ds_timetable_sessions
                WHERE school_id=? AND profile_id=? AND """ + advanced_layer_filter + """
