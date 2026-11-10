@@ -190,6 +190,13 @@ def register_timetable_publishing_routes(app, get_db, get_school_obj, module_pag
         finally:
             con.close()
 
+    # Compatibility endpoint: some wrapped timetable pages or older cached clients
+    # submit the confirmation form to the workspace URL itself. Treat that POST as
+    # the same explicit submit-for-approval action instead of returning HTTP 405.
+    @app.post("/app/timetable/publishing")
+    def timetable_publishing_submit_compat(request: Request, profile_id: int = Form(...)):
+        return timetable_submit_for_approval(request, profile_id)
+
     @app.post("/app/timetable/publishing/publish")
     def timetable_approve_and_publish(request: Request, profile_id: int = Form(...)):
         school = school_for(request)
