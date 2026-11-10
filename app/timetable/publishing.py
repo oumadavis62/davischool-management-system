@@ -143,13 +143,28 @@ def _cross_profile_conflicts(cur, school_id: int, profile) -> list[str]:
     usable while still protecting the rest of the school's timetable.
     """
     root_id = int(profile["revision_of_profile_id"] or profile["id"])
-    other_profiles = cur.execute(
-        """SELECT id,name,profile_type FROM ds_timetable_profiles
-           WHERE school_id=? AND academic_year=? AND term=?
-             AND status IN ('published','pending_approval')
-             AND COALESCE(revision_of_profile_id,id)<>?""",
-        (school_id, profile["academic_year"], profile["term"], root_id),
-    ).fetchall()
+    if profile["academic_start_date"] and profile["academic_end_date"]:
+        other_profiles = cur.execute(
+            """SELECT id,name,profile_type FROM ds_timetable_profiles
+               WHERE school_id=? AND status IN ('published','pending_approval')
+                 AND COALESCE(revision_of_profile_id,id)<>?
+                 AND (
+                   (academic_start_date IS NOT NULL AND academic_end_date IS NOT NULL
+                    AND academic_start_date<=? AND academic_end_date>=?)
+                   OR ((academic_start_date IS NULL OR academic_end_date IS NULL)
+                       AND academic_year=? AND term=?)
+                 )""",
+            (school_id, root_id, profile["academic_end_date"], profile["academic_start_date"],
+             profile["academic_year"], profile["term"]),
+        ).fetchall()
+    else:
+        other_profiles = cur.execute(
+            """SELECT id,name,profile_type FROM ds_timetable_profiles
+               WHERE school_id=? AND academic_year=? AND term=?
+                 AND status IN ('published','pending_approval')
+                 AND COALESCE(revision_of_profile_id,id)<>?""",
+            (school_id, profile["academic_year"], profile["term"], root_id),
+        ).fetchall()
     other_ids = [int(row["id"]) for row in other_profiles]
     if not other_ids:
         return []
