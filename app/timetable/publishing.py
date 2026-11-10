@@ -163,13 +163,68 @@ def validate_timetable_for_publication(connection: Any, school_id: int, profile_
         "SELECT * FROM ds_timetable_class_requirements WHERE school_id=? AND profile_id=?",
         (school_id, profile_id),
     ).fetchall()
+    advanced_requirements = cur.execute(
+        """SELECT * FROM ds_timetable_scheduling_requirements
+           WHERE school_id=? AND profile_id=? AND is_active=1
+             AND schedule_layer='instructional' ORDER BY id""",
+        (school_id, profile_id),
+    ).fetchall()
+    advanced_sessions = cur.execute(
+        """SELECT * FROM ds_timetable_sessions
+           WHERE school_id=? AND profile_id=? AND status='scheduled'
+             AND schedule_layer='instructional' ORDER BY id""",
+        (school_id, profile_id),
+    ).fetchall()
+    session_classes = {}
+    for row in cur.execute(
+        "SELECT session_id,class_id FROM ds_timetable_session_classes WHERE school_id=? AND profile_id=?",
+        (school_id, profile_id),
+    ).fetchall():
+        session_classes.setdefault(int(row["session_id"]), []).append(int(row["class_id"]))
+    session_teachers = {}
+    for row in cur.execute(
+        "SELECT session_id,teacher_id FROM ds_timetable_session_teachers WHERE school_id=? AND profile_id=?",
+        (school_id, profile_id),
+    ).fetchall():
+        session_teachers.setdefault(int(row["session_id"]), []).append(int(row["teacher_id"]))
+    advanced_coverage = set()
+    advanced_required_lessons = 0
+    advanced_required_periods = 0
+    advanced_requirement_signatures = []
+    for requirement in advanced_requirements:
+        rid = int(requirement["id"])
+        class_ids = tuple(sorted(int(row["class_id"]) for row in cur.execute(
+            "SELECT class_id FROM ds_timetable_scheduling_requirement_classes WHERE school_id=? AND profile_id=? AND requirement_id=?",
+            (school_id, profile_id, rid),
+        ).fetchall()))
+        teacher_ids = tuple(sorted(int(row["teacher_id"]) for row in cur.execute(
+            "SELECT teacher_id FROM ds_timetable_scheduling_requirement_teachers WHERE school_id=? AND profile_id=? AND requirement_id=?",
+            (school_id, profile_id, rid),
+        ).fetchall()))
+        patterns = cur.execute(
+            "SELECT duration_periods FROM ds_timetable_scheduling_patterns WHERE school_id=? AND profile_id=? AND requirement_id=? ORDER BY session_no",
+            (school_id, profile_id, rid),
+        ).fetchall()
+        if not class_ids:
+            errors.append("A combined teaching requirement has no linked classes.")
+        if not teacher_ids:
+            errors.append("A combined teaching requirement has no assigned teacher.")
+        if not patterns:
+            errors.append("A combined teaching requirement has no weekly session pattern.")
+        subject_id = int(requirement["subject_id"]) if requirement["subject_id"] is not None else None
+        if subject_id is not None:
+            for class_id in class_ids:
+                for teacher_id in teacher_ids:
+                    advanced_coverage.add((class_id, subject_id, teacher_id))
+        expected_durations = sorted(int(row["duration_periods"] or 1) for row in patterns)
+        advanced_required_lessons += len(expected_durations)
+        advanced_required_periods += sum(expected_durations)
+        advanced_requirement_signatures.append((class_ids, teacher_ids, subject_id, expected_durations,
+                                                  int(requirement["teaching_group_id"]) if requirement["teaching_group_id"] is not None else None))
     if not days:
         errors.append("Configure at least one instructional day.")
     if not any(str(p["period_type"] or "lesson") == "lesson" for p in periods):
         errors.append("Configure at least one teaching period.")
-    if not requirements:
-        errors.append("Configure weekly lesson requirements before publishing.")
-
     allocations = cur.execute(
         """SELECT DISTINCT ta.class_id,ta.subject_id,ta.teacher_id
            FROM teacher_allocations ta
@@ -184,7 +239,7 @@ def validate_timetable_for_publication(connection: Any, school_id: int, profile_
         (int(r["class_id"]),int(r["subject_id"]),int(r["teacher_id"])): r
         for r in requirements
     }
-    for key in sorted(allocation_keys - set(requirement_map)):
+    for key in sorted(allocation_keys - set(requirement_map) - advanced_coverage):
         errors.append("A current class/subject/teacher allocation is missing its weekly lesson requirement.")
         break
     for key in sorted(set(requirement_map) - allocation_keys):
@@ -267,9 +322,79 @@ def validate_timetable_for_publication(connection: Any, school_id: int, profile_
             errors.append("A scheduled lesson uses an inactive or invalid room.")
         placements.append({
             "class_id":key[0],"subject_id":key[1],"teacher_id":key[2],"room_id":room_id,
-            "day_id":day_id,"start_time":str(span[0]["start_time"]),"end_time":str(span[-1]["end_time"]),
+            "class_ids":[key[0]],"teacher_ids":[key[2]],
+            "day_id":day_id,"day_key":"day:"+str(day_id),
+            "start_time":str(span[0]["start_time"]),"end_time":str(span[-1]["end_time"]),
             "start_index":start_index,"end_index":start_index + duration - 1,
         })
+
+    period_by_start = {str(period["start_time"]): index for index, period in enumerate(periods)}
+    advanced_session_durations = []
+    for session in advanced_sessions:
+        session_id = int(session["id"])
+        class_ids = sorted(set(session_classes.get(session_id, [])))
+        teacher_ids = sorted(set(session_teachers.get(session_id, [])))
+        if not class_ids:
+            errors.append("A scheduled combined session has no linked classes.")
+        if not teacher_ids:
+            errors.append("A scheduled combined session has no assigned teacher.")
+        if session["day_id"] is not None and int(session["day_id"]) not in day_ids:
+            errors.append("A combined session is placed on a non-instructional or invalid day.")
+            continue
+        duration = max(1, int(session["duration_periods"] or 1))
+        start_index = period_index.get(int(session["period_id"])) if session["period_id"] is not None else period_by_start.get(str(session["start_time"]))
+        end_index = start_index + duration - 1 if start_index is not None else None
+        if start_index is not None and (end_index >= len(periods) or any(
+            str(periods[index]["period_type"] or "lesson") != "lesson"
+            or (index > start_index and (
+                int(periods[index]["period_no"]) != int(periods[index-1]["period_no"]) + 1
+                or str(periods[index-1]["end_time"]) != str(periods[index]["start_time"])
+            ))
+            for index in range(start_index, end_index + 1)
+        )):
+            errors.append("A combined multi-period session is not consecutive or crosses a non-teaching period.")
+        if session["day_id"] is not None and start_index is not None:
+            occupied_periods = periods[start_index:end_index + 1]
+            if any((teacher_id, int(session["day_id"]), int(period["id"])) in unavailable
+                   for teacher_id in teacher_ids for period in occupied_periods):
+                errors.append("A combined session falls inside a teacher's unavailable time.")
+        if any(
+            str(session["start_time"]) < str(br["end_time"])
+            and str(session["end_time"]) > str(br["start_time"])
+            for br in breaks
+        ):
+            errors.append("A combined session overlaps a configured break.")
+        room_id = int(session["room_id"]) if session["room_id"] is not None else None
+        if room_id is not None and room_id not in room_ids:
+            errors.append("A combined session uses an inactive or invalid room.")
+        day_id = int(session["day_id"]) if session["day_id"] is not None else None
+        day_key = ("date:"+str(session["session_date"])) if session["session_date"] else ("day:"+str(day_id))
+        placements.append({
+            "class_id":class_ids[0] if class_ids else 0,
+            "subject_id":int(session["subject_id"]) if session["subject_id"] is not None else 0,
+            "teacher_id":teacher_ids[0] if teacher_ids else 0,
+            "class_ids":class_ids,"teacher_ids":teacher_ids,
+            "room_id":room_id,"day_id":day_id,"day_key":day_key,
+            "start_time":str(session["start_time"]),"end_time":str(session["end_time"]),
+            "start_index":start_index,"end_index":end_index,
+        })
+        advanced_session_durations.append(duration)
+
+    for class_ids, teacher_ids, subject_id, expected_durations, group_id in advanced_requirement_signatures:
+        matched = []
+        for session in advanced_sessions:
+            sid = int(session["id"])
+            if group_id is not None and (session["teaching_group_id"] is None or int(session["teaching_group_id"]) != group_id):
+                continue
+            if (int(session["subject_id"]) if session["subject_id"] is not None else None) != subject_id:
+                continue
+            if tuple(sorted(set(session_classes.get(sid, [])))) != class_ids:
+                continue
+            if tuple(sorted(set(session_teachers.get(sid, [])))) != teacher_ids:
+                continue
+            matched.append(max(1, int(session["duration_periods"] or 1)))
+        if sorted(matched) != expected_durations:
+            errors.append("A combined teaching requirement is not fully scheduled according to its weekly session pattern.")
 
     for key, requirement in requirement_map.items():
         actual = lesson_counts.get(key,0)
@@ -289,27 +414,29 @@ def validate_timetable_for_publication(connection: Any, school_id: int, profile_
             errors.append("A subject exceeds its configured maximum number of lessons on a day.")
     for i, first in enumerate(placements):
         for second in placements[i+1:]:
-            if first["day_id"] != second["day_id"]:
+            if first["day_key"] != second["day_key"]:
                 continue
             if first["start_time"] >= second["end_time"] or first["end_time"] <= second["start_time"]:
                 continue
-            if first["class_id"] == second["class_id"]:
+            if set(first["class_ids"]) & set(second["class_ids"]):
                 errors.append("Two lessons overlap for the same class.")
-            if first["teacher_id"] == second["teacher_id"]:
+            if set(first["teacher_ids"]) & set(second["teacher_ids"]):
                 errors.append("A teacher is assigned to overlapping lessons.")
             if first["room_id"] is not None and second["room_id"] is not None and first["room_id"] == second["room_id"]:
                 errors.append("A room is assigned to overlapping lessons.")
-    # A teacher must have a gap between different subjects taught to the
-    # same class. Consecutive teaching across different classes is allowed,
-    # as is a continuous double/triple lesson represented by one placement.
+    # One combined placement may contain several linked classes; that is not
+    # a self-conflict. Separate placements still obey teacher spacing rules.
     for i, first in enumerate(placements):
         for second in placements[i+1:]:
-            if (
-                first["day_id"] != second["day_id"]
-                or first["teacher_id"] != second["teacher_id"]
-                or first["class_id"] != second["class_id"]
-                or first["subject_id"] == second["subject_id"]
-            ):
+            if first["day_key"] != second["day_key"]:
+                continue
+            if not (set(first["teacher_ids"]) & set(second["teacher_ids"])):
+                continue
+            if not (set(first["class_ids"]) & set(second["class_ids"])):
+                continue
+            if first["subject_id"] == second["subject_id"]:
+                continue
+            if first["end_index"] is None or second["start_index"] is None:
                 continue
             if first["end_index"] + 1 == second["start_index"] or second["end_index"] + 1 == first["start_index"]:
                 errors.append("A teacher cannot teach different subjects to the same class in consecutive periods.")
@@ -319,14 +446,14 @@ def validate_timetable_for_publication(connection: Any, school_id: int, profile_
         "errors": errors,
         # Readiness metrics use occupied periods, while the validation above
         # continues to compare lesson occurrences against weekly requirements.
-        "scheduled_lessons": len(lessons),
-        "required_lessons": sum(int(r["lessons_per_week"] or 0) for r in requirements),
-        "scheduled_periods": sum(int(lesson["duration_periods"] or 1) for lesson in lessons),
+        "scheduled_lessons": len(lessons) + len(advanced_sessions),
+        "required_lessons": sum(int(r["lessons_per_week"] or 0) for r in requirements) + advanced_required_lessons,
+        "scheduled_periods": sum(int(lesson["duration_periods"] or 1) for lesson in lessons) + sum(advanced_session_durations),
         "required_periods": sum(
             int(r["lessons_per_week"] or 0) * int(r["duration_periods"] or 1)
             for r in requirements
-        ),
-        "requirements": len(requirements),
+        ) + advanced_required_periods,
+        "requirements": len(requirements) + len(advanced_requirements),
     }
 
 
