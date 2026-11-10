@@ -90,7 +90,9 @@ def register_timetable_view_routes(app, get_db, get_school_obj, module_page):
             periods = result["periods"]
             breaks = result.get("breaks", [])
             lessons = result["lessons"]
-            lesson_count = len(lessons)
+            # Count occupied teaching periods, not lesson blocks: a double lesson
+            # contributes two scheduled periods and a triple contributes three.
+            lesson_count = sum(int(lesson.get("duration_periods") or 1) for lesson in lessons)
             period_index = {int(p["id"]): i for i, p in enumerate(periods)}
             timeline = sorted(
                 [(str(p["start_time"]), "period", p) for p in periods] +
@@ -255,7 +257,7 @@ def register_timetable_view_routes(app, get_db, get_school_obj, module_page):
         view_error_html = f"<div class='tv-alert'>{esc(view_error)}</div>" if view_error else ""
         export_query = f"profile_id={pid}&view_type={view_type}&class_id={int(class_id)}&teacher_id={int(teacher_id)}&room_id={int(room_id)}&remedial_display={remedial_display}"
         summary_html = (
-            f"<div class='tv-summary'><div><b>{esc(result['title'])}</b><br><span>{esc(selected['academic_year'])} · {esc(selected['term'])}</span></div><span>{lesson_count} scheduled lessons</span></div>"
+            f"<div class='tv-summary'><div><b>{esc(result['title'])}</b><br><span>{esc(selected['academic_year'])} · {esc(selected['term'])}</span></div><span>{lesson_count} scheduled periods</span></div>"
             if result else ""
         )
         remedial_display = "separate" if remedial_display == "separate" else "combined"
