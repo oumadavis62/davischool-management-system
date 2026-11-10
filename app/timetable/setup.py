@@ -24,7 +24,7 @@ def _profile(cursor: Any, school_id: int, profile_id: int):
     ).fetchone()
     if not row:
         raise TimetableSetupError("Select a timetable profile belonging to this school.")
-    if str(row["status"] or "draft").lower() in ("published", "archived"):
+    if str(row["status"] or "draft").lower() in ("published", "pending_approval", "archived"):
         raise TimetableSetupError("This timetable profile is locked. Create or select a draft profile.")
     return row
 
