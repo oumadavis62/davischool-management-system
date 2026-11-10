@@ -145,6 +145,9 @@ class TimetableBuilderTests(unittest.TestCase):
         move_lesson(self.db, 1, self.profile_id, lesson_id, self.day_wed, self.p1, "admin@test", None, self.p2)
         row = self.db.execute("SELECT day_id,period_id,duration_periods FROM ds_timetable_lessons WHERE id=?", (lesson_id,)).fetchone()
         self.assertEqual(tuple(row), (self.day_wed, self.p1, 2))
+        move_lesson(self.db, 1, self.profile_id, lesson_id, self.day_mon, self.p1, "admin@test", None, self.p3)
+        row = self.db.execute("SELECT day_id,period_id,duration_periods FROM ds_timetable_lessons WHERE id=?", (lesson_id,)).fetchone()
+        self.assertEqual(tuple(row), (self.day_mon, self.p1, 3))
 
     def test_manage_move_rejects_invalid_period_ranges(self):
         lesson_id = place_lesson(self.db, 1, self.profile_id, 20, 30, 10, self.day_mon, self.p1)
