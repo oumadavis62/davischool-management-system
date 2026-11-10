@@ -44,6 +44,15 @@ class TimetableViewTests(unittest.TestCase):
         self.room_id = self.db.execute("SELECT id FROM ds_timetable_rooms WHERE room_code='R1'").fetchone()[0]
         place_lesson(self.db, 1, self.profile_id, 20, 30, 10, self.day_id, self.p1, self.room_id)
         place_lesson(self.db, 1, self.profile_id, 21, 31, 11, self.day_id, self.p2, self.room_id)
+        save_room(self.db, 1, "R2", "Classroom 2", "classroom", 35)
+        self.room2_id = self.db.execute(
+            "SELECT id FROM ds_timetable_rooms WHERE room_code='R2'"
+        ).fetchone()[0]
+        self.db.execute(
+            "UPDATE ds_timetable_lessons SET room_id=? WHERE class_id=21",
+            (self.room2_id,),
+        )
+        self.db.commit()
 
     def tearDown(self):
         self.db.close()
@@ -75,8 +84,15 @@ class TimetableViewTests(unittest.TestCase):
 
     def test_room_view_filters_room(self):
         result = get_timetable_view(self.db, 1, self.profile_id, "room", self.room_id)
-        self.assertEqual(len(result["lessons"]), 2)
+        self.assertEqual(len(result["lessons"]), 1)
+        self.assertEqual(result["lessons"][0]["class_id"], 20)
         self.assertIn("Classroom 1", result["title"])
+
+    def test_second_room_view_excludes_lessons_in_other_rooms(self):
+        result = get_timetable_view(self.db, 1, self.profile_id, "room", self.room2_id)
+        self.assertEqual(len(result["lessons"]), 1)
+        self.assertEqual(result["lessons"][0]["class_id"], 21)
+        self.assertIn("Classroom 2", result["title"])
 
 
     def test_weekend_sessions_are_grouped_by_configured_rotation_on_one_view_sheet(self):
