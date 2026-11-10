@@ -223,7 +223,7 @@ def register_timetable_view_routes(app, get_db, get_school_obj, module_page):
                                     name_parts = [part for part in str(lesson["teacher_name"] or "").split() if part]
                                     teacher_initials = "".join(part[0] for part in (name_parts[:1] + (name_parts[-1:] if len(name_parts) > 1 else []))).upper()[:4] or "—"
                                 subject_initial = str(lesson["subject_initial"] or "").strip().upper() or "—"
-                                room_html = f"<div class='tb-meta tb-room-label'>⌂ {esc(lesson['room_name'] or 'Room not assigned')}</div>"
+                                room_html = "" if view_type == "room" else f"<div class='tb-meta tb-room-label'>⌂ {esc(lesson['room_name'] or 'Room not assigned')}</div>"
                                 class_label = esc(str(lesson["class_name"]) + ((" · " + str(lesson["stream"])) if lesson["stream"] else ""))
                                 teacher_footer = (
                                     f"<div class='tb-lesson-footer'><span class='tb-meta tb-class-label'>{class_label}</span></div>"
