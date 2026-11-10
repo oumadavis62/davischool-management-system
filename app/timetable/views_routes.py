@@ -156,7 +156,7 @@ def register_timetable_view_routes(app, get_db, get_school_obj, module_page):
                 headers.append("<th class='tb-class-heading'>Class / Stream</th>")
             for _, item_type, item in timeline:
                 if item_type == "break":
-                    headers.append(f"<th class='tb-break-heading'><b>{esc(item['label'])}</b><span>{esc(item['start_time'])}–{esc(item['end_time'])}</span></th>")
+                    headers.append(f"<th class='tb-break-heading' aria-label='{esc(item['label'])}'>{esc(item['start_time'])}–{esc(item['end_time'])}</th>")
                 else:
                     headers.append(f"<th class='tb-period-heading'><b>{esc(item['label'])}</b><span>{esc(item['start_time'])}–{esc(item['end_time'])}</span></th>")
             rows = []
@@ -176,13 +176,11 @@ def register_timetable_view_routes(app, get_db, get_school_obj, module_page):
                             # Class and teacher views have one row per day:
                             # merge each break vertically across the full
                             # Monday-Friday timetable, not separately per day.
-                            if view_type in ("class", "teacher", "room"):
-                                if day_index == 0 and class_index == 0:
-                                    cells.append(f"<td class='tb-break-cell tb-week-break' rowspan='{len(days)}'><b>{esc(item['label'])}</b><span>{esc(item['start_time'])}–{esc(item['end_time'])}</span></td>")
-                            elif class_index == 0:
-                                # School and room views merge across class rows
-                                # within each individual day.
-                                cells.append(f"<td class='tb-break-cell' rowspan='{len(day_class_rows)}'><b>{esc(item['label'])}</b><span>{esc(item['start_time'])}–{esc(item['end_time'])}</span></td>")
+                            if day_index == 0 and class_index == 0:
+                                # One break-name cell spans every displayed weekday
+                                # row (and every class row in the whole-school view).
+                                break_rowspan = len(days) * (len(class_rows) if view_type == "school" else 1)
+                                cells.append(f"<td class='tb-break-cell tb-week-break' rowspan='{break_rowspan}'><b>{esc(item['label'])}</b></td>")
                             continue
                         period = item
                         if int(period["id"]) in merged_period_ids:
@@ -253,7 +251,9 @@ def register_timetable_view_routes(app, get_db, get_school_obj, module_page):
                             cells.append("<td class='tb-cell tb-free'></td>")
                     row_class = " class='tb-day-end'" if class_index == len(day_class_rows) - 1 else ""
                     rows.append(f"<tr{row_class}>{''.join(cells)}</tr>")
-            grid = "<div class='tb-grid-scroll'><table class='tb-grid'><thead><tr>" + "".join(headers) + "</tr></thead><tbody>" + "".join(rows) + "</tbody></table></div>"
+            compact_view = str(selected['profile_type'] or 'main').strip().lower() != 'main'
+            grid_class = 'tb-grid tb-grid-compact' if compact_view else 'tb-grid'
+            grid = "<div class='tb-grid-scroll'><table class='" + grid_class + "'><thead><tr>" + "".join(headers) + "</tr></thead><tbody>" + "".join(rows) + "</tbody></table></div>"
         view_error_html = f"<div class='tv-alert'>{esc(view_error)}</div>" if view_error else ""
         export_query = f"profile_id={pid}&view_type={view_type}&class_id={int(class_id)}&teacher_id={int(teacher_id)}&room_id={int(room_id)}&remedial_display={remedial_display}"
         summary_html = (
@@ -338,6 +338,20 @@ def register_timetable_view_routes(app, get_db, get_school_obj, module_page):
         .tv-wrap .tv-btn.secondary{{background:#edf6ee;color:#2a6a43;border:1px solid #cfe2d2}}
         @media(max-width:600px){{.tv-wrap{{padding:10px;border-radius:16px}}.tv-wrap .tv-grid-scroll{{border-radius:11px}}}}
         @media print{{.tv-wrap{{padding:0;max-width:none;background:#fff}}.tv-wrap .tv-grid-scroll{{overflow:visible;border:1px solid #999}}.tv-wrap .tb-grid{{min-width:0}}.tv-wrap .tb-grid thead th{{position:static;background:#347b50!important;color:#fff!important}}.tv-wrap .tb-grid .tb-cell{{min-width:0}}}}
+        /* Match the teacher portal's non-main programme density; main stays unchanged. */
+        .tv-wrap .tb-grid-compact{min-width:500px;table-layout:fixed}
+        .tv-wrap .tb-grid-compact thead th.tb-period-heading{width:41px;min-width:41px;max-width:41px;padding:5px 2px;font-size:9px;overflow-wrap:anywhere}
+        .tv-wrap .tb-grid-compact tbody td.tb-cell{width:41px;min-width:41px;max-width:41px;padding:2px;overflow:hidden}
+        .tv-wrap .tb-grid-compact .tb-lesson{padding:3px 2px;min-height:48px;gap:1px;border-left-width:2px;border-radius:5px}
+        .tv-wrap .tb-grid-compact .tb-subject-initials{font-size:9px;letter-spacing:0}
+        .tv-wrap .tb-grid-compact .tb-lesson-top{font-size:8px;gap:1px}
+        .tv-wrap .tb-grid-compact .tb-lesson-top span{top:2px;right:2px;font-size:7px;padding:1px 3px}
+        .tv-wrap .tb-grid-compact .tb-meta{font-size:7px;line-height:1.05}
+        .tv-wrap .tb-grid-compact .tb-teacher-initials{min-width:15px;height:13px;padding:0 2px;font-size:7px}
+        .tv-wrap .tb-grid-compact .tb-continued-item{padding:2px;font-size:7px;line-height:1.1}
+        .tv-wrap .tb-grid-compact .tb-break-heading,.tv-wrap .tb-grid-compact .tb-break-cell{width:115px;min-width:115px;max-width:115px}
+        .tv-wrap .tb-grid .tb-break-cell b{writing-mode:vertical-rl;text-orientation:mixed;display:inline-block;vertical-align:middle;line-height:1.1}
+        .tv-wrap .tb-grid .tb-week-break{vertical-align:middle!important}
         </style>
         <div class='tv-wrap'><div class='tv-hero'><div><span class='tv-kicker'>DAVISCHOOL · TIMETABLE VIEWS</span><h2>Timetable Views</h2><p>Inspect the published or draft timetable by school, class, teacher or room.</p></div></div>{notice}
         <div class='tv-actions tv-view-actions'><button type='button' class='tv-btn' onclick="document.getElementById('tv-filter-dialog').showModal()">Choose timetable view</button><button type='button' class='tv-btn secondary' onclick="document.getElementById('tv-export-dialog').showModal()">Export / print</button></div>
