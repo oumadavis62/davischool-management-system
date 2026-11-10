@@ -248,15 +248,22 @@ class TimetableGeneratorTests(unittest.TestCase):
                 (self.profile_id,),
             ).fetchone()[0], 0)
 
-    def test_generator_rejects_fixed_lessons_above_class_weekly_ceiling(self):
+    def test_manual_placements_are_regenerated_under_weekly_ceiling(self):
         monday = self.db.execute("SELECT id FROM ds_timetable_days WHERE day_code='MON'").fetchone()[0]
         tuesday = self.db.execute("SELECT id FROM ds_timetable_days WHERE day_code='TUE'").fetchone()[0]
         first_period = self.db.execute("SELECT id FROM ds_timetable_periods WHERE period_no=1").fetchone()[0]
         place_lesson(self.db, 1, self.profile_id, 20, 30, 10, monday, first_period)
         place_lesson(self.db, 1, self.profile_id, 20, 30, 10, tuesday, first_period)
-        save_class_limits(self.db, 1, self.profile_id, 20, 1, None)
-        with self.assertRaisesRegex(TimetableSetupError, "weekly lesson ceiling"):
-            generate_timetable(self.db, 1, self.profile_id, "admin@test")
+        save_class_limits(self.db, 1, self.profile_id, 20, 2, None)
+        result = generate_timetable(self.db, 1, self.profile_id, "admin@test")
+        self.assertEqual(result["status"], "completed")
+        self.assertEqual(result["generated_lessons"], 2)
+        self.assertEqual(result["manual_lessons_replaced"], 2)
+        self.assertEqual(
+            self.db.execute(
+                "SELECT COUNT(*) FROM ds_timetable_lessons WHERE school_id=1 AND profile_id=? AND generation_run_id IS NULL",
+                (self.profile_id,),
+            ).fetchone()[0], 0)
 
     def test_generator_counts_double_periods_toward_daily_class_ceiling(self):
         save_class_requirement(self.db, 1, self.profile_id, 20, 30, 10, 1, 2, None, True)
@@ -269,7 +276,7 @@ class TimetableGeneratorTests(unittest.TestCase):
                 (self.profile_id,),
             ).fetchone()[0], 0)
 
-    def test_manual_placement_consumes_matching_session_from_configured_pattern(self):
+    def test_manual_placement_is_replaced_and_pattern_is_fully_regenerated(self):
         from app.timetable.advanced_setup import save_requirement_session_pattern
 
         save_period(self.db, 1, self.profile_id, 3, "Period 3", "09:20", "10:00")
@@ -283,13 +290,16 @@ class TimetableGeneratorTests(unittest.TestCase):
             self.db, 1, self.profile_id, requirement_id,
             [{"duration_periods": 2}, {"duration_periods": 1}],
         )
-        monday = self.db.execute(
-            "SELECT id FROM ds_timetable_days WHERE day_code='MON'"
+        tuesday = self.db.execute(
+            "SELECT id FROM ds_timetable_days WHERE day_code='TUE'"
         ).fetchone()["id"]
-        first_period = self.db.execute(
-            "SELECT id FROM ds_timetable_periods WHERE period_no=1"
+        last_period = self.db.execute(
+            "SELECT id FROM ds_timetable_periods WHERE period_no=2"
         ).fetchone()["id"]
-        place_lesson(self.db, 1, self.profile_id, 20, 30, 10, monday, first_period)
+        place_lesson(self.db, 1, self.profile_id, 20, 30, 10, tuesday, last_period)
+        old_manual_id = self.db.execute(
+            "SELECT id FROM ds_timetable_lessons WHERE generation_run_id IS NULL"
+        ).fetchone()["id"]
         self.db.execute(
             """UPDATE ds_timetable_lessons SET duration_periods=2
                WHERE school_id=1 AND profile_id=? AND class_id=20 AND subject_id=30
@@ -300,17 +310,22 @@ class TimetableGeneratorTests(unittest.TestCase):
 
         result = generate_timetable(self.db, 1, self.profile_id, "admin@test")
         self.assertEqual(result["status"], "completed")
-        self.assertEqual(result["manual_lessons_kept"], 1)
-        self.assertEqual(result["generated_lessons"], 1)
+        self.assertEqual(result["manual_lessons_kept"], 0)
+        self.assertEqual(result["manual_lessons_replaced"], 1)
+        self.assertEqual(result["generated_lessons"], 2)
         rows = self.db.execute(
             """SELECT duration_periods,generation_run_id FROM ds_timetable_lessons
                WHERE school_id=1 AND profile_id=? AND class_id=20 AND subject_id=30
                ORDER BY generation_run_id IS NOT NULL""",
             (self.profile_id,),
         ).fetchall()
-        self.assertEqual([int(row["duration_periods"]) for row in rows], [2, 1])
+        self.assertEqual(sorted(int(row["duration_periods"]) for row in rows), [1, 2])
+        self.assertTrue(all(row["generation_run_id"] is not None for row in rows))
+        self.assertIsNotNone(self.db.execute(
+            "SELECT generation_run_id FROM ds_timetable_lessons WHERE id=?", (old_manual_id,)
+        ).fetchone()["generation_run_id"])
 
-    def test_manual_lessons_are_preserved_and_generator_fills_remainder(self):
+    def test_manual_lessons_are_replaced_and_all_requirements_regenerated(self):
         day_id = self.db.execute(
             "SELECT id FROM ds_timetable_days WHERE day_code='MON'"
         ).fetchone()[0]
@@ -318,17 +333,65 @@ class TimetableGeneratorTests(unittest.TestCase):
             "SELECT id FROM ds_timetable_periods WHERE period_no=1"
         ).fetchone()[0]
         place_lesson(self.db, 1, self.profile_id, 20, 30, 10, day_id, period_id)
+        old_manual_id = self.db.execute(
+            "SELECT id FROM ds_timetable_lessons WHERE generation_run_id IS NULL"
+        ).fetchone()[0]
         result = generate_timetable(self.db, 1, self.profile_id, "admin@test")
         self.assertEqual(result["status"], "completed")
-        self.assertEqual(result["manual_lessons_kept"], 1)
-        self.assertEqual(result["generated_lessons"], 1)
+        self.assertEqual(result["manual_lessons_kept"], 0)
+        self.assertEqual(result["manual_lessons_replaced"], 1)
+        self.assertEqual(result["generated_lessons"], 2)
         counts = self.db.execute(
             """SELECT SUM(CASE WHEN generation_run_id IS NULL THEN 1 ELSE 0 END),
                       SUM(CASE WHEN generation_run_id IS NOT NULL THEN 1 ELSE 0 END)
                FROM ds_timetable_lessons WHERE school_id=1 AND profile_id=?""",
             (self.profile_id,),
         ).fetchone()
-        self.assertEqual(tuple(counts), (1, 1))
+        self.assertEqual(tuple(counts), (0, 2))
+        self.assertIsNotNone(self.db.execute(
+            "SELECT generation_run_id FROM ds_timetable_lessons WHERE id=?", (old_manual_id,)
+        ).fetchone()["generation_run_id"])
+
+    def test_failed_generation_keeps_manual_draft_when_replacement_cannot_complete(self):
+        day_id = self.db.execute(
+            "SELECT id FROM ds_timetable_days WHERE day_code='MON'"
+        ).fetchone()[0]
+        period_id = self.db.execute(
+            "SELECT id FROM ds_timetable_periods WHERE period_no=1"
+        ).fetchone()[0]
+        self.db.execute(
+            """INSERT INTO ds_timetable_lessons
+               (school_id,profile_id,class_id,subject_id,teacher_id,day_id,period_id,
+                duration_periods,generation_run_id,status,created_by,created_at,updated_at)
+               VALUES(1,?,?,?,?,?,?,1,NULL,'scheduled','admin@test','2026-01-01','2026-01-01')""",
+            (self.profile_id,20,30,10,day_id,period_id),
+        )
+        self.db.commit()
+        manual_id = self.db.execute(
+            "SELECT id FROM ds_timetable_lessons WHERE generation_run_id IS NULL"
+        ).fetchone()[0]
+        for day in self.db.execute(
+            "SELECT id FROM ds_timetable_days WHERE school_id=1 AND profile_id=?",
+            (self.profile_id,),
+        ).fetchall():
+            for period in self.db.execute(
+                "SELECT id FROM ds_timetable_periods WHERE school_id=1 AND profile_id=?",
+                (self.profile_id,),
+            ).fetchall():
+                self.db.execute(
+                    """INSERT INTO ds_timetable_teacher_availability
+                       (school_id,profile_id,teacher_id,day_id,period_id,availability,reason)
+                       VALUES(1,?,?,?,?, 'unavailable','Unavailable for test')""",
+                    (self.profile_id,10,day["id"],period["id"]),
+                )
+        self.db.commit()
+
+        result = generate_timetable(self.db, 1, self.profile_id, "admin@test")
+        self.assertEqual(result["status"], "failed")
+        self.assertIsNotNone(self.db.execute(
+            "SELECT id FROM ds_timetable_lessons WHERE id=? AND generation_run_id IS NULL",
+            (manual_id,),
+        ).fetchone())
 
     def test_failed_generation_keeps_previous_automatic_schedule(self):
         first = generate_timetable(self.db, 1, self.profile_id, "admin@test")
@@ -458,7 +521,7 @@ class TimetableSchoolSnapshotIntegrationTests(unittest.TestCase):
     def tearDown(self):
         self.db.close()
 
-    def test_real_school_snapshot_generates_all_145_sessions(self):
+    def test_real_school_snapshot_regenerates_all_weekly_sessions(self):
         from app.timetable.advanced_setup import save_requirement_session_pattern
 
         class_map = {1: 101, 2: 102, 5: 105, 6: 106}
@@ -584,14 +647,14 @@ class TimetableSchoolSnapshotIntegrationTests(unittest.TestCase):
 
         result = generate_timetable(self.db, 1, self.profile_id, "snapshot-test")
         self.assertEqual(result["status"], "completed", result.get("message"))
-        self.assertEqual(result["generated_lessons"], 145)
+        self.assertEqual(result["generated_lessons"], 149)
         generated = self.db.execute(
             """SELECT class_id,subject_id,teacher_id,day_id,period_id,duration_periods
                FROM ds_timetable_lessons WHERE profile_id=? AND generation_run_id=?""",
             (self.profile_id, result["run_id"]),
         ).fetchall()
-        self.assertEqual(len(generated), 145)
-        self.assertEqual(sum(int(row["duration_periods"]) for row in generated), 148)
+        self.assertEqual(len(generated), 149)
+        self.assertEqual(sum(int(row["duration_periods"]) for row in generated), 152)
         # Every school-wide double/triple reserves its occupied periods,
         # even when the lessons belong to different classes.
         extended_slots = set()
@@ -612,5 +675,5 @@ class TimetableSchoolSnapshotIntegrationTests(unittest.TestCase):
                 "SELECT COUNT(*) total FROM ds_timetable_lessons WHERE profile_id=? AND generation_run_id IS NULL AND status='scheduled'",
                 (self.profile_id,),
             ).fetchone()["total"],
-            4,
+            0,
         )

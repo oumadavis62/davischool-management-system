@@ -297,23 +297,22 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
         (int(a["teacher_id"]), int(a["day_id"]), int(a["period_id"]))
         for a in preferred_rows
     }
-    manual = cur.execute(
+    manual_to_replace = cur.execute(
         """SELECT * FROM ds_timetable_lessons
            WHERE school_id=? AND profile_id=? AND generation_run_id IS NULL AND status='scheduled'""",
         (school_id, profile_id),
     ).fetchall()
+    # Manual Builder entries are editable draft placements, not fixed solver
+    # anchors. Regeneration schedules every weekly requirement afresh and
+    # replaces these rows only after a complete solution has been found.
+    manual = []
+    manual_counts = {}
+    manual_durations = {}
     previous_generated = cur.execute(
         """SELECT * FROM ds_timetable_lessons
            WHERE school_id=? AND profile_id=? AND generation_run_id IS NOT NULL AND status='scheduled'""",
         (school_id, profile_id),
     ).fetchall()
-
-    manual_counts = {}
-    manual_durations = {}
-    for lesson in manual:
-        key = (int(lesson["class_id"]), int(lesson["subject_id"]), int(lesson["teacher_id"]))
-        manual_counts[key] = manual_counts.get(key, 0) + 1
-        manual_durations.setdefault(key, []).append(int(lesson["duration_periods"] or 1))
 
     class_limits = {
         int(row["class_id"]): row for row in cur.execute(
@@ -439,50 +438,10 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
     if len(tasks) > 20_000:
         raise TimetableSetupError("This timetable exceeds the supported 20,000 unscheduled lesson-occurrence capacity. Reduce duplicate requirements or generate the school in separate timetable profiles.")
 
-    # Existing manual lessons are fixed anchors. A previous automatic version
-    # is excluded from the search and is replaced only after a complete solution.
-    period_index = {int(p["id"]): i for i,p in enumerate(periods)}
+    # The solver still needs the ordered period index to expand candidate
+    # multi-period spans. No existing manual placement is fixed.
+    period_index = {int(p["id"]): i for i, p in enumerate(periods)}
     fixed = []
-    for lesson in manual:
-        start_index = period_index.get(int(lesson["period_id"]))
-        if start_index is None:
-            raise TimetableSetupError("A manually scheduled lesson references a missing period. Review the draft before generating.")
-        span = _period_span(periods, start_index, int(lesson["duration_periods"] or 1))
-        if not span:
-            raise TimetableSetupError("A manually scheduled multi-period lesson is no longer consecutive. Correct it before generating.")
-        fixed.append({
-            "class_id": int(lesson["class_id"]),
-            "subject_id": int(lesson["subject_id"]),
-            "teacher_id": int(lesson["teacher_id"]),
-            "room_id": int(lesson["room_id"]) if lesson["room_id"] is not None else None,
-            "day_id": int(lesson["day_id"]),
-            "period_id": int(lesson["period_id"]),
-            "duration": len(span),
-            "start_time": span[0]["start_time"],
-            "end_time": span[-1]["end_time"],
-            "period_no": int(span[0]["period_no"]),
-            "period_end_no": int(span[-1]["period_no"]),
-            "fixed": True,
-        })
-    for class_id, limit in class_limits.items():
-        class_fixed = [item for item in fixed if int(item["class_id"]) == int(class_id)]
-        if limit["max_lessons_per_week"] is not None and len(class_fixed) > int(limit["max_lessons_per_week"]):
-            raise TimetableSetupError("Existing manually scheduled lessons exceed the class weekly lesson ceiling. Reduce the fixed lessons or revise the class limit.")
-        if limit["max_periods_per_day"] is not None:
-            for day in days:
-                daily_periods = sum(item["duration"] for item in class_fixed if int(item["day_id"]) == int(day["id"]))
-                if daily_periods > int(limit["max_periods_per_day"]):
-                    raise TimetableSetupError("Existing manually scheduled lessons exceed the class daily period ceiling. Adjust the timetable or revise the class limit.")
-
-    for i, first in enumerate(fixed):
-        for second in fixed[i + 1:]:
-            if int(first["day_id"]) != int(second["day_id"]):
-                continue
-            if _overlap(first["start_time"], first["end_time"], second["start_time"], second["end_time"]):
-                if int(first["class_id"]) == int(second["class_id"]) or int(first["teacher_id"]) == int(second["teacher_id"]) or (
-                    first["room_id"] is not None and second["room_id"] is not None and int(first["room_id"]) == int(second["room_id"])
-                ):
-                    raise TimetableSetupError("The manually placed lessons already contain a class, teacher or room clash. Resolve it before automatic generation.")
 
     # Ordinary weekly lessons use classroom-type rooms only. Specialist spaces
     # (labs, libraries, halls, workshops) are not generic classrooms and must not
@@ -591,7 +550,8 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
                 "status": "failed",
                 "message": message,
                 "required_lessons": total_required,
-                "manual_lessons_kept": len(manual),
+                "manual_lessons_kept": len(manual_to_replace),
+                "manual_lessons_replaced": 0,
                 "unscheduled_lessons": len(tasks),
                 "search_nodes": 0,
                 "search_limit": int(node_limit),
@@ -612,7 +572,7 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
                 "reason": message,
                 "candidate_filter_rejections": filter_reasons,
                 "affected_lesson": {"class_id": int(task["class_id"]), "subject_id": int(task["subject_id"]), "teacher_id": int(task["teacher_id"])},
-                "manual_lesson_ids": [int(l["id"]) for l in manual],
+                "manual_lesson_ids": [int(l["id"]) for l in manual_to_replace],
                 "previous_generated_ids": [int(l["id"]) for l in previous_generated],
             }
             cur.execute(
@@ -1170,7 +1130,7 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
         "days": [{"id": int(d["id"]), "code": d["day_code"]} for d in days],
         "periods": [{"id": int(p["id"]), "number": int(p["period_no"]), "start": p["start_time"], "end": p["end_time"]} for p in periods],
         "requirements": [{"class_id": int(r["class_id"]), "subject_id": int(r["subject_id"]), "teacher_id": int(r["teacher_id"]), "weekly": int(r["lessons_per_week"]), "duration": int(r["duration_periods"] or 1)} for r in requirements],
-        "manual_lesson_ids": [int(l["id"]) for l in manual],
+        "manual_lesson_ids": [int(l["id"]) for l in manual_to_replace],
         "previous_generated_ids": [int(l["id"]) for l in previous_generated],
     }
     now = _now()
@@ -1273,7 +1233,7 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
             "candidate_slot_count_max": max((x["candidate_slots_before_conflicts"] for x in requirement_diagnostics), default=0),
             "diagnostic_note": "Rejection totals count repeated solver checks, not unique timetable cells. Counts are aggregated across occurrences sharing the same class/subject/teacher requirement. A timeout identifies the search limit reached, not proof that the timetable is mathematically impossible.",
             "required_lessons": total_required,
-            "manual_lessons_kept": len(manual),
+            "manual_lessons_kept": len(manual_to_replace),
             "unscheduled_lessons": len(tasks),
             "search_nodes": int(strict_nodes + fallback_nodes),
             "optimisation_nodes": int(optimisation_nodes),
@@ -1297,8 +1257,16 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
         return {"run_id": run_id, **summary}
 
     generated = [p for p in placements if not p.get("fixed")]
-    # Preserve the previous automatic timetable if the new run failed. Only
-    # after a complete solution exists do we replace its generated lessons.
+    # Keep the last complete timetable intact on every failure path. Once a
+    # full replacement solution exists, archive and replace both prior
+    # generated rows and manually placed draft rows.
+    for old in manual_to_replace:
+        cur.execute(
+            """INSERT INTO ds_timetable_change_log
+               (school_id,profile_id,lesson_id,action,before_json,after_json,changed_by,changed_at)
+               VALUES(?,?,?,?,?,?,?,?)""",
+            (school_id, profile_id, int(old["id"]), "AUTO_REGENERATE_MANUAL_DELETE", json.dumps(dict(old), default=str, sort_keys=True), None, created_by, _now()),
+        )
     for old in previous_generated:
         cur.execute(
             """INSERT INTO ds_timetable_change_log
@@ -1309,6 +1277,11 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
     cur.execute(
         """DELETE FROM ds_timetable_lessons
            WHERE school_id=? AND profile_id=? AND generation_run_id IS NOT NULL""",
+        (school_id, profile_id),
+    )
+    cur.execute(
+        """DELETE FROM ds_timetable_lessons
+           WHERE school_id=? AND profile_id=? AND generation_run_id IS NULL AND status='scheduled'""",
         (school_id, profile_id),
     )
     for placement in generated:
@@ -1349,11 +1322,12 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
     quality_score = max(0, 100 - search_penalty - balance_penalty)
     summary = {
         "status": "completed",
-        "message": "Automatic timetable generated successfully. Existing manual lessons were preserved.",
+        "message": "The timetable was fully regenerated. Previous manual and automatic placements were replaced.",
         "required_lessons": total_required,
-        "manual_lessons_kept": len(manual),
+        "manual_lessons_kept": 0,
+        "manual_lessons_replaced": len(manual_to_replace),
         "generated_lessons": len(generated),
-        "total_scheduled_lessons": len(manual) + len(generated),
+        "total_scheduled_lessons": len(generated),
         "search_nodes": nodes,
         "quality_score": quality_score,
     }
