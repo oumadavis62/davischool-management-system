@@ -575,40 +575,66 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
           </script>
         </section>
         """
-        requirement_allocation_options = "".join(
-            f"<option value='{int(a['class_id'])}|{int(a['subject_id'])}|{int(a['teacher_id'])}'>{esc(a['class_name'])} {esc(a['stream'] or '')} · {esc(a['subject_name'])} · {esc(a['teacher_name'])}</option>"
-            for a in allocations
-        )
+        requirement_by_allocation = {
+            (int(req["class_id"]), int(req["subject_id"]), int(req["teacher_id"])): req
+            for req in requirements
+        }
+        requirement_allocation_option_rows = []
+        for allocation_row in allocations:
+            allocation_key = (int(allocation_row["class_id"]), int(allocation_row["subject_id"]), int(allocation_row["teacher_id"]))
+            existing_requirement = requirement_by_allocation.get(allocation_key)
+            if existing_requirement:
+                existing_id = int(existing_requirement["id"])
+                existing_pattern = requirement_pattern_values.get(existing_id, "")
+                if not existing_pattern:
+                    existing_pattern = ",".join(["1"] * max(1, int(existing_requirement["lessons_per_week"] or 1)))
+                existing_links = requirement_links_values.get(existing_id, "[]")
+                existing_target = int(existing_requirement["lessons_per_week"] or 1)
+                existing_max_day = existing_requirement["max_lessons_per_day"] or ""
+            else:
+                existing_pattern, existing_links, existing_target, existing_max_day = "1", "[]", 5, ""
+            requirement_allocation_option_rows.append(
+                f"<option value='{allocation_key[0]}|{allocation_key[1]}|{allocation_key[2]}' "
+                f"data-weekly-target='{existing_target}' data-max-day='{esc(existing_max_day)}' "
+                f"data-pattern='{esc(existing_pattern)}' data-links='{esc(existing_links)}'>"
+                f"{esc(allocation_row['class_name'])} {esc(allocation_row['stream'] or '')} · "
+                f"{esc(allocation_row['subject_name'])} · {esc(allocation_row['teacher_name'])}</option>"
+            )
+        requirement_allocation_options = "".join(requirement_allocation_option_rows)
         bulk_requirement_form = f"""
           <div class='tt-req-add-modal' id='tt-req-add-modal' role='dialog' aria-modal='true' aria-labelledby='tt-req-add-title' hidden>
             <div class='tt-req-add-dialog'>
               <div class='tt-req-add-head'>
-                <div><span class='tt-kicker'>WEEKLY LESSON LOAD</span><h3 id='tt-req-add-title'>Add subject requirement</h3><p>Configure the same weekly lesson settings available under Manage.</p></div>
+                <div><span class='tt-kicker'>WEEKLY LESSON LOAD</span><h3 id='tt-req-add-title'>Set subject requirement</h3><p>Build the complete weekly mix of single, double and triple lessons for one allocated subject.</p></div>
                 <button type='button' class='tt-req-add-close' data-req-add-close aria-label='Close'>&times;</button>
               </div>
               <form method='post' data-native-post='true' action='/app/timetable/setup/requirement' class='tt-form compact tt-req-add-form'>
                 {hidden}
-                <label class='wide'>Class · Subject · Teacher
+                <label class='wide'>Class · Subject · Lead teacher
                   <select name='allocation' required>
                     <option value=''>Select an allocated subject</option>{requirement_allocation_options}
                   </select>
                 </label>
                 <label>Weekly period target<input type='number' min='1' max='30' name='lessons_per_week' value='5' required></label>
-                
-                <label>Max / day<input type='number' min='1' max='10' name='max_lessons_per_day' placeholder='No limit'></label>
-                
+                <label>Maximum lessons per day<input type='number' min='1' max='10' name='max_lessons_per_day' placeholder='No daily limit'></label>
                 <div class='wide tt-session-editor' data-session-editor>
- <div class='tt-session-editor-head'><b>Weekly session planner</b><span>Each save adds these sessions to the existing weekly plan</span></div><div class='tt-session-balance' data-session-balance>New sessions: 0 periods · Set the weekly target above</div>
- <div class='tt-session-linking'>
-  <label>Link another class<select data-link-class><option value=''>Choose class to link</option>{class_group_options}</select></label>
-  <label>Add co-teacher<select data-link-teacher><option value=''>Choose additional teacher</option>{teacher_group_options}</select></label>
- </div>
- <div class='tt-session-list' data-session-list><div class='tt-session-row'><span class='tt-session-number'>1</span><label>Lesson type<select data-session-duration><option value='1'>Single · 1 period</option><option value='2'>Double · 2 periods</option><option value='3'>Triple · 3 periods</option><option value='4'>Quadruple · 4 periods</option></select></label><label>Start period<select data-session-period><option value=''>Auto</option>{period_start_options}</select></label><label>Share class<select multiple data-session-classes>{class_group_options}</select></label><label>Co-teacher<select multiple data-session-teachers>{teacher_group_options}</select></label><small data-session-span>Auto placement</small><button type='button' data-remove-session disabled>Remove</button></div></div>
- <button type='button' class='tt-btn secondary' data-add-session>＋ Add another session</button>
- <input type='hidden' name='weekly_pattern' data-weekly-pattern ><input type='hidden' name='weekly_links' value='[]'><input type='hidden' name='pattern_mode' value='append'>
- <small>Choose single or double separately for each occurrence. Class and co-teacher choices are session planning controls.</small>
- </div>
-                <div class='tt-req-add-footer'><button type='button' class='tt-btn secondary' data-req-add-close>Cancel</button><button class='tt-btn' type='submit'>Save requirement</button></div>
+                  <div class='tt-session-editor-head'><div><b>Session-by-session plan</b><span>One row represents one occurrence in the week</span></div><span class='tt-session-step'>1 · Set durations</span></div>
+                  <div class='tt-session-balance' data-session-balance>1 of 5 periods assigned · 4 remaining</div>
+                  <div class='tt-session-list' data-session-list>
+                    <div class='tt-session-row'>
+                      <div class='tt-session-row-main'><span class='tt-session-number'>1</span>
+                        <label>Lesson duration<select data-session-duration><option value='1'>Single · 1 period</option><option value='2'>Double · 2 periods</option><option value='3'>Triple · 3 periods</option><option value='4'>Quadruple · 4 periods</option></select></label>
+                        <label>Preferred start<select data-session-period><option value=''>Automatic</option>{period_start_options}</select></label>
+                        <small data-session-span>Automatic placement</small><button type='button' data-remove-session disabled>Remove</button>
+                      </div>
+                      <div class='tt-session-row-sharing'><label>Link another class (optional)<select multiple data-session-classes>{class_group_options}</select></label><label>Add co-teacher (optional)<select multiple data-session-teachers>{teacher_group_options}</select></label></div>
+                    </div>
+                  </div>
+                  <button type='button' class='tt-btn secondary' data-add-session>＋ Add another occurrence</button>
+                  <input type='hidden' name='weekly_pattern' data-weekly-pattern><input type='hidden' name='weekly_links' value='[]'><input type='hidden' name='pattern_mode' value='replace'>
+                  <p class='tt-session-instructions'>Example for 5 periods: add 3 occurrences, set the first two to Double and leave the third as Single. The total becomes 5/5. Add all occurrences here, then press Save weekly plan once. To continue an incomplete plan later, reopen this subject; its saved rows will be loaded so you can add the remaining sessions without losing the earlier ones.</p>
+                </div>
+                <div class='tt-req-add-footer'><button type='button' class='tt-btn secondary' data-req-add-close>Cancel</button><button class='tt-btn' type='submit'>Save weekly plan</button></div>
               </form>
             </div>
           </div>
@@ -624,10 +650,9 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
             root.querySelectorAll('[data-session-editor]').forEach(ed=>{{
               const list=ed.querySelector('[data-session-list]'), hidden=ed.querySelector('[data-weekly-pattern]');
               const periodOptions="<option value=''>Auto</option>{period_start_options}";
-              const makeRow=(duration,periodNo,classes=[],teachers=[])=>{{const row=document.createElement('div');row.className='tt-session-row';row.innerHTML="<span class='tt-session-number'></span><label>Lesson type<select data-session-duration><option value='1'>Single · 1 period</option><option value='2'>Double · 2 periods</option><option value='3'>Triple · 3 periods</option><option value='4'>Quadruple · 4 periods</option></select></label><label>Start period<select data-session-period>"+periodOptions+"</select></label><label>Share class<select multiple data-session-classes>{class_group_options}</select></label><label>Co-teacher<select multiple data-session-teachers>{teacher_group_options}</select></label><small data-session-span>Auto placement</small><button type='button' data-remove-session>Remove</button>";row.querySelector('[data-session-duration]').value=duration;row.querySelector('[data-session-period]').value=periodNo||'';classes.forEach(v=>{{const o=row.querySelector('[data-session-classes] option[value=\"'+v+'\"]');if(o)o.selected=true;}});teachers.forEach(v=>{{const o=row.querySelector('[data-session-teachers] option[value=\"'+v+'\"]');if(o)o.selected=true;}});return row;}};
-              const sync=()=>{{const vals=[...list.querySelectorAll('.tt-session-row')].map(row=>{{const duration=row.querySelector('[data-session-duration]').value,period=row.querySelector('[data-session-period]').value,span=row.querySelector('[data-session-span]');span.textContent=period?'Starts P'+period+' · occupies P'+period+(Number(duration)>1?'–P'+(Number(period)+Number(duration)-1):''):'Auto placement'+(Number(duration)>1?' · '+duration+' consecutive periods':'');return {{pattern:duration+(period?'@'+period:''),classes:[...row.querySelectorAll('[data-session-classes] option:checked')].map(o=>o.value),teachers:[...row.querySelectorAll('[data-session-teachers] option:checked')].map(o=>o.value)}};}});hidden.value=vals.map(v=>v.pattern).join(',');const linkField=ed.querySelector('[name=weekly_links]');if(linkField)linkField.value=JSON.stringify(vals.map(v=>({{classes:v.classes,teachers:v.teachers}})));[...list.children].forEach((x,i)=>x.querySelector('.tt-session-number').textContent=String(i+1));list.querySelectorAll('[data-remove-session]').forEach(x=>x.disabled=list.children.length===1);const total=vals.reduce((n,v)=>n+Number(v.pattern.split('@')[0]||0),0),target=Number(ed.closest('form')?.querySelector('[name=lessons_per_week]')?.value||0);const balance=ed.querySelector('[data-session-balance]');if(balance)balance.textContent='This save adds '+total+' period(s) · Weekly target '+target+' · '+(total<=target?'Within target':'Exceeds target');}};
-              const linkField=ed.querySelector('[name=weekly_links]');let savedLinks=[];try{{savedLinks=JSON.parse(linkField?.value||'[]');}}catch(e){{savedLinks=[];}}const initial=(hidden.value||'').split(',').map((x,i)=>{{const bits=x.trim().split('@'),links=savedLinks[i]||{{}};return {{duration:parseInt(bits[0],10),period:bits[1]||'',classes:links.classes||[],teachers:links.teachers||[]}};}}).filter(x=>x.duration>=1&&x.duration<=4);
-              if(initial.length){{list.innerHTML='';initial.forEach(v=>list.appendChild(makeRow(v.duration,v.period,v.classes,v.teachers)));}}
+              const makeRow=(duration,periodNo,classes=[],teachers=[])=>{{const row=document.createElement('div');row.className='tt-session-row';row.innerHTML="<div class='tt-session-row-main'><span class='tt-session-number'></span><label>Lesson duration<select data-session-duration><option value='1'>Single · 1 period</option><option value='2'>Double · 2 periods</option><option value='3'>Triple · 3 periods</option><option value='4'>Quadruple · 4 periods</option></select></label><label>Preferred start<select data-session-period>"+periodOptions+"</select></label><small data-session-span>Automatic placement</small><button type='button' data-remove-session>Remove</button></div><div class='tt-session-row-sharing'><label>Link another class (optional)<select multiple data-session-classes>{class_group_options}</select></label><label>Add co-teacher (optional)<select multiple data-session-teachers>{teacher_group_options}</select></label></div>";row.querySelector('[data-session-duration]').value=duration;row.querySelector('[data-session-period]').value=periodNo||'';classes.forEach(v=>{{const o=[...row.querySelectorAll('[data-session-classes] option')].find(x=>x.value===String(v));if(o)o.selected=true;}});teacherconst sync=()=>{{const vals=[...list.querySelectorAll('.tt-session-row')].map(row=>{{const duration=row.querySelector('[data-session-duration]')?.value||'1',period=row.querySelector('[data-session-period]')?.value||'',span=row.querySelector('[data-session-span]');if(span)span.textContent=period?'Starts P'+period+' · occupies P'+period+(Number(duration)>1?'–P'+(Number(period)+Number(duration)-1):''):'Automatic placement'+(Number(duration)>1?' · '+duration+' consecutive periods':'');return {{pattern:duration+(period?'@'+period:''),classes:[...row.querySelectorAll('[data-session-classes] option:checked')].map(o=>o.value),teachers:[...row.querySelectorAll('[data-session-teachers] option:checked')].map(o=>o.value)}};}});hidden.value=vals.map(v=>v.pattern).join(',');const linkField=ed.querySelector('[name=weekly_links]');if(linkField)linkField.value=JSON.stringify(vals.map(v=>({{classes:v.classes,teachers:v.teachers}})));[...list.children].forEach((x,i)=>{{const number=x.querySelector('.tt-session-number');if(number)number.textContent=String(i+1);}});list.querySelectorAll('[data-remove-session]').forEach(x=>x.disabled=list.children.length===1);const total=vals.reduce((n,v)=>n+Number(v.pattern.split('@')[0]||0),0),target=Number(ed.closest('form')?.querySelector('[name=lessons_per_week]')?.value||0),remaining=target-total,balance=ed.querySelector('[data-session-balance]');if(balance)balance.textContent=total+' of '+target+' periods assigned · '+(remaining>0?remaining+' remaining':remaining<0?Math.abs(remaining)+' over target':'Weekly target reached')+' · '+vals.length+' occurrence(s)';}};
+              const linkField=ed.querySelector('[name=weekly_links]');const parsePattern=(pattern,linksJson)=>{{let links=[];try{{links=JSON.parse(linksJson||'[]');}}catch(e){{links=[];}}return (pattern||'').split(',').map((x,i)=>{{const bits=x.trim().split('@'),item=links[i]||{{}};return {{duration:parseInt(bits[0],10),period:bits[1]||'',classes:item.classes||[],teachers:item.teachers||[]}};}}).filter(x=>x.duration>=1&&x.duration<=4);}};const initial=parsePattern(hidden.value,linkField?.value);if(initial.length){{list.innerHTML='';initial.forEach(v=>list.appendChild(makeRow(v.duration,v.period,v.classes,v.teachers)));}}
+              const addForm=ed.closest('.tt-req-add-form');if(addForm){{const allocationSelect=addForm.querySelector('[name=allocation]'),targetInput=addForm.querySelector('[name=lessons_per_week]'),maxDayInput=addForm.querySelector('[name=max_lessons_per_day]');const loadAllocation=()=>{{const option=allocationSelect?.selectedOptions?.[0];if(!option||!option.value)return;targetInput.value=option.dataset.weeklyTarget||'5';maxDayInput.value=option.dataset.maxDay||'';const rows=parsePattern(option.dataset.pattern||'1',option.dataset.links||'[]');list.innerHTML='';(rows.length?rows:[{{duration:1,period:'',classes:[],teachers:[]}}]).forEach(v=>list.appendChild(makeRow(v.duration,v.period,v.classes,v.teachers)));sync();}};allocationSelect?.addEventListener('change',loadAllocation);targetInput?.addEventListener('input',sync);maxDayInput?.addEventListener('input',sync);}}
               ed.querySelectorAll('[data-add-session]').forEach(button=>button.addEventListener('click',e=>{{e.preventDefault();list.appendChild(makeRow(1));sync();}}));ed.addEventListener('click',e=>{{const rm=e.target.closest('[data-remove-session]');if(rm&&!rm.disabled&&ed.contains(rm)){{e.preventDefault();rm.closest('.tt-session-row').remove();sync();}}}});
               ed.addEventListener('change',e=>{{if(e.target.matches('[data-session-duration],[data-session-period],[data-session-classes],[data-session-teachers]'))sync();}});
               const filter=()=>{{const c=(ed.querySelector('[data-class-filter]')?.value||'').toLowerCase(),t=(ed.querySelector('[data-teacher-filter]')?.value||'').toLowerCase();[...ed.querySelectorAll('[data-link-class] option')].forEach((o,i)=>{{if(i)o.hidden=!!(c&&!o.text.toLowerCase().includes(c));}});[...ed.querySelectorAll('[data-link-teacher] option')].forEach((o,i)=>{{if(i)o.hidden=!!(t&&!o.text.toLowerCase().includes(t));}});}};
@@ -771,12 +796,18 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
         .tt-session-filters,.tt-session-linking{{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin:9px 0}}
         .tt-session-editor label{{display:grid;gap:5px;font-size:10px;font-weight:800;color:#496451}}
         .tt-session-editor input,.tt-session-editor select{{width:100%;min-width:0;padding:9px;border:1px solid #d5e4d7;border-radius:9px;background:white;color:#234638}}
-        .tt-session-list{{display:grid;gap:7px;margin:10px 0}}.tt-session-balance{{padding:9px 11px;border-radius:9px;background:#eaf5ec;color:#286541;font-size:11px;font-weight:800}}
-        .tt-session-row{{display:flex;align-items:end;gap:10px;padding:9px;background:white;border:1px solid #e1ebe2;border-radius:10px}}
-        .tt-session-number{{width:25px;height:25px;display:grid;place-items:center;border-radius:8px;background:#e8f3e9;color:#2b6943;font-size:11px;font-weight:900;flex:none}}
-        .tt-session-row label{{flex:1}}
-        .tt-session-row button{{border:1px solid #ead6d4;border-radius:8px;padding:8px 10px;background:#fff5f4;color:#9d4842;font-weight:800}}
+        .tt-session-list{{display:grid;gap:9px;margin:12px 0}}.tt-session-balance{{padding:11px 13px;border:1px solid #cfe3d2;border-radius:10px;background:#eaf5ec;color:#286541;font-size:12px;font-weight:850}}
+        .tt-session-row{{display:grid;gap:9px;padding:11px;background:#fff;border:1px solid #dce9de;border-radius:11px}}
+        .tt-session-row-main{{display:grid;grid-template-columns:30px minmax(0,1fr) minmax(0,1fr) minmax(125px,1fr) auto;align-items:end;gap:9px}}
+        .tt-session-row-sharing{{display:grid;grid-template-columns:1fr 1fr;gap:9px;padding-top:8px;border-top:1px dashed #e1ebe2}}
+        .tt-session-number{{width:27px;height:27px;display:grid;place-items:center;border-radius:8px;background:#e8f3e9;color:#2b6943;font-size:11px;font-weight:900;flex:none}}
+        .tt-session-row-main label,.tt-session-row-sharing label{{min-width:0}}
+        .tt-session-row-main small{{font-size:10px;color:#64806b;line-height:1.4;padding:8px 0}}
+        .tt-session-row button{{border:1px solid #ead6d4;border-radius:8px;padding:9px 10px;background:#fff5f4;color:#9d4842;font-size:11px;font-weight:800;white-space:nowrap}}
         .tt-session-row button:disabled{{opacity:.45}}
+        .tt-session-instructions{{margin:8px 0 0;padding:10px 12px;border-left:3px solid #78a984;border-radius:7px;background:#f1f7f1;color:#58705e;font-size:10px;line-height:1.55}}
+        .tt-session-step{{padding:5px 8px;border-radius:7px;background:#e8f3e9;color:#376a48;font-size:10px;font-weight:800}}
+        @media(max-width:640px){{.tt-session-row-main{{grid-template-columns:28px 1fr 1fr}}.tt-session-row-main small{{grid-column:2/-1}}.tt-session-row-main button{{grid-column:3}}.tt-session-row-sharing{{grid-template-columns:1fr}}}
         @media(max-width:600px){{.tt-req-overview{{grid-template-columns:repeat(2,minmax(0,1fr));padding:12px}}.tt-req-page-head,.tt-req-workspace{{padding:15px}}.tt-session-filters,.tt-session-linking{{grid-template-columns:1fr}}.tt-req-pagination .tt-btn{{padding:9px}}}}
 
         .tt-wrap *{{box-sizing:border-box}}
