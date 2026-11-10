@@ -614,6 +614,7 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
           </div>
           <script>
           (function(){{
+            const init=()=>{{
             const root=document.querySelector('.tt-requirements-section');
             if(!root||root.dataset.reqAddReady)return;
             root.dataset.reqAddReady='1';
@@ -644,6 +645,8 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
               if(event.target.closest('[data-req-add-close]')||event.target===modal)close();
             }});
             root.addEventListener('keydown',event=>{{if(event.key==='Escape'){{const active=root.querySelector('.tt-req-manage-modal.is-open');if(active){{active.classList.remove('is-open');if(!root.querySelector('.tt-modal.is-open'))document.body.classList.remove('tt-modal-scroll-locked');}}else if(!modal.hidden)close();}}}});
+            }};
+            if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init,{{once:true}});else init();
           }})();
           </script>
         """
