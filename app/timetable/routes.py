@@ -91,7 +91,7 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
             profile_control = f"<form class='tt-home-profile' method='get' action='/app/timetable'><label for='tt-home-profile'>Working timetable</label><select id='tt-home-profile' name='profile_id' onchange='this.form.submit()'>{profile_options}</select></form>"
             status = esc(selected["status"]).upper()
             profile_name = esc(selected["name"])
-            profile_meta = f"{esc(selected['academic_year'])} · {esc(selected['term'])}"
+            profile_meta = f"{esc(selected['academic_year'])} · {esc(selected['term'])} · {esc(str(selected['profile_type'] or 'main').replace('_',' ').title())}"
             progress_items = [
                 ("School days", stats["days"], "Define the instructional week", "/app/timetable/setup"),
                 ("Lesson periods", stats["periods"], "Set lesson times and durations", "/app/timetable/setup"),
@@ -134,6 +134,15 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
                 <p>Start by choosing the academic year and term. Then configure school days, lesson periods, rooms and teaching requirements before building your timetable.</p>
                 <a class='tt-home-primary' href='/app/timetable/setup'>Create timetable profile <span>→</span></a>
               </section>"""
+        profile_catalog_html = (
+            "<section class='tt-home-catalog'><div><span class='tt-home-eyebrow'>ALL TIMETABLE PROGRAMMES</span><h3>Independent timetables</h3><p>Each programme has its own configuration, publishing status and revision history.</p></div><div class='tt-home-catalog-list'>"
+            + "".join(
+                "<a href='/app/timetable?profile_id=" + str(int(p["id"])) + "'><span><b>" + esc(p["name"]) + "</b><small>"
+                + esc(p["academic_year"]) + " · " + esc(p["term"]) + " · " + esc(str(p["profile_type"] or "main").replace("_", " ").title())
+                + "</small></span><em>" + esc(str(p["status"]).replace("_", " ").title()) + "</em></a>"
+                for p in profiles
+            ) + "</div></section>"
+        ) if profiles else ""
         body = f"""
         <style>
           .tt-home{{color:#173b31;max-width:1500px;margin:0 auto;padding:8px 0 34px}}
@@ -152,6 +161,7 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
           .tt-home-columns{{display:grid;grid-template-columns:minmax(0,1.08fr) minmax(0,.92fr);gap:20px;align-items:stretch}}.tt-home-panel{{padding:25px;min-width:0;border:1px solid #e4eaf0;border-radius:20px;box-shadow:0 8px 24px rgba(35,57,78,.045)}}.tt-home-panel:first-child{{background:#fff}}.tt-home-panel:last-child{{background:#f7f9fc;border-color:#e2e9f1}}.tt-home-panel-head{{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:18px}}.tt-home-panel h3{{font-size:19px;line-height:1.25;margin:6px 0 0;color:#20384f;letter-spacing:-.25px}}.tt-home-panel-head>a{{font-size:11px;color:#397895;text-decoration:none;font-weight:800;white-space:nowrap;padding:8px 11px;border:1px solid #dce8f0;border-radius:9px;background:#fff}}.tt-home-panel-head>a:hover{{background:#edf5f9;border-color:#c7dce8}}
           .tt-home-progress{{display:flex;align-items:center;gap:13px;padding:14px 13px;margin-top:9px;border:1px solid #e9eef3;border-radius:13px;background:#fbfcfd;text-decoration:none!important;color:inherit!important;transition:transform .16s,border-color .16s,background .16s,box-shadow .16s}}.tt-home-progress:hover{{transform:translateX(2px);border-color:#cbdde9;background:#f5f9fc;box-shadow:0 4px 12px rgba(42,78,103,.045)}}.tt-home-progress-icon{{width:36px;height:36px;border-radius:12px;background:#eaf2f8;color:#3d7895;display:grid;place-items:center;font-size:10px;font-weight:850;flex:none}}.tt-home-progress span:nth-child(2){{display:flex;flex-direction:column;gap:4px;min-width:0}}.tt-home-progress b{{font-size:12px;color:#29435a}}.tt-home-progress small{{font-size:10px;color:#8291a0;line-height:1.35}}.tt-home-progress strong{{margin-left:auto;min-width:34px;height:30px;padding:0 8px;border-radius:9px;background:#edf3f8;display:grid;place-items:center;font-size:14px;color:#3b718d}}
           .tt-home-actions{{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));align-content:start;gap:11px}}.tt-home-actions>.tt-home-eyebrow,.tt-home-actions>h3{{grid-column:1/-1}}.tt-home-actions h3{{margin-bottom:5px}}.tt-home-action{{position:relative;display:flex;align-items:flex-start;gap:12px;min-height:112px;padding:16px 14px;border:1px solid #e3eaf1;border-radius:15px;margin:0;background:#fff;text-decoration:none!important;color:#29435a!important;transition:transform .17s,border-color .17s,box-shadow .17s}}.tt-home-action:hover{{transform:translateY(-3px);border-color:#bfd4e2;box-shadow:0 9px 20px rgba(40,75,99,.08)}}.tt-home-action-primary{{grid-column:1/-1;min-height:88px;align-items:center;background:#eef5fa;border-color:#d8e6ef}}.tt-home-action-icon{{width:40px;height:40px;border-radius:13px;background:#e8f0f6;color:#3b7895;display:grid;place-items:center;font-size:20px;flex:none}}.tt-home-action-primary .tt-home-action-icon{{background:#dcebf4;color:#326f8d}}.tt-home-action>span:nth-child(2){{display:flex;flex-direction:column;gap:6px;min-width:0;padding-top:2px}}.tt-home-action b{{font-size:12px;line-height:1.35;color:#29445b}}.tt-home-action small{{font-size:10px;line-height:1.45;color:#8291a0}}.tt-home-action em{{position:absolute;right:13px;bottom:10px;font-style:normal;color:#5b8ca5;font-size:17px}}
+          .tt-home-catalog{{margin-top:18px;padding:20px 22px;background:#fff;border:1px solid #e3ece6;border-radius:18px;box-shadow:0 5px 18px rgba(24,67,47,.045)}}.tt-home-catalog h3{{margin:5px 0;color:#204b34;font-size:17px}}.tt-home-catalog p{{margin:0;color:#718379;font-size:11px}}.tt-home-catalog-list{{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px;margin-top:14px}}.tt-home-catalog-list a{{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:12px;border:1px solid #e5eee6;border-radius:11px;color:#234638;text-decoration:none;background:#fbfdfb}}.tt-home-catalog-list a:hover{{background:#f0f7f1;border-color:#cbded0}}.tt-home-catalog-list b,.tt-home-catalog-list small{{display:block}}.tt-home-catalog-list b{{font-size:12px}}.tt-home-catalog-list small{{font-size:10px;color:#75877a;margin-top:4px}}.tt-home-catalog-list em{{font-size:9px;font-style:normal;font-weight:800;text-transform:uppercase;background:#eaf5ec;color:#17633b;padding:5px 8px;border-radius:15px;white-space:nowrap}}@media(max-width:600px){{.tt-home-catalog-list{{grid-template-columns:1fr}}}}
           .tt-home-empty{{text-align:center;padding:54px 25px;margin-top:18px}}.tt-home-empty-icon{{width:66px;height:66px;border-radius:20px;background:#eaf4ed;color:#24704b;display:grid;place-items:center;margin:0 auto 18px;font-size:30px}}.tt-home-empty h2{{font-size:24px;color:#1b4935;margin:8px 0}}.tt-home-empty p{{max-width:600px;margin:0 auto 22px;color:#718379;font-size:13px;line-height:1.7}}.tt-home-primary{{display:inline-flex;gap:12px;align-items:center;background:#176344;color:white!important;text-decoration:none!important;padding:12px 18px;border-radius:10px;font-weight:750;font-size:12px}}
           @media(max-width:800px){{.tt-home-hero{{padding:25px 22px}}.tt-home-hero-mark{{width:68px;height:68px;font-size:30px;border-radius:19px}}.tt-home-columns{{grid-template-columns:1fr}}.tt-home-metrics{{grid-template-columns:repeat(2,minmax(0,1fr))}}.tt-home-panel{{padding:22px 20px}}}}
           @media(max-width:480px){{.tt-home-hero-mark{{display:none}}.tt-home-profile{{align-items:stretch;flex-direction:column;gap:7px}}.tt-home-profile select{{width:100%;min-width:0}}.tt-home-profile-card,.tt-home-panel{{padding:18px 16px}}.tt-home-profile-top{{align-items:flex-start;flex-direction:column}}.tt-home-metrics div{{padding:11px}}.tt-home-metrics span{{font-size:10px}}.tt-home-empty{{padding:38px 18px}}.tt-home-panel-head{{align-items:flex-start;flex-direction:column;gap:9px}}.tt-home-progress{{padding:12px 10px}}.tt-home-action{{min-height:96px;padding:13px 11px}}.tt-home-actions{{grid-template-columns:1fr}}.tt-home-actions>.tt-home-eyebrow,.tt-home-actions>h3,.tt-home-action-primary{{grid-column:1}}}}
@@ -160,6 +170,7 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
           <section class='tt-home-hero'><div class='tt-home-hero-copy'><span class='tt-home-eyebrow'>DAVISCHOOL · ACADEMIC OPERATIONS</span><h1>Smart Timetable</h1><p>Plan, organise and publish a balanced school timetable. Manage teaching requirements, build schedules and keep every class and teacher in sync.</p></div><div class='tt-home-hero-mark'>▦</div></section>
           {profile_control}
           {profile_panel}
+          {profile_catalog_html}
         </main>"""
         return module_page(request, "Smart Timetable", "timetable", body)
 
@@ -1732,7 +1743,7 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
             standard_days = (("SAT","Saturday"),("SUN","Sunday")) if profile_type == "weekend" else (("MON","Monday"),("TUE","Tuesday"),("WED","Wednesday"),("THU","Thursday"),("FRI","Friday"))
             for order, (code, name) in enumerate(standard_days, 1):
                 save_day(con, int(school["id"]), profile_id, code, name, order, True)
-            return redirect_setup(profile_id, "Standard Monday–Friday school week saved.")
+            return redirect_setup(profile_id, "Standard " + ("Saturday–Sunday weekend" if profile_type == "weekend" else "Monday–Friday") + " timetable days saved.")
         except TimetableSetupError as exc:
             return redirect_setup(profile_id, str(exc), True)
         finally: con.close()
