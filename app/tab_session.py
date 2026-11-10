@@ -3,6 +3,7 @@ from __future__ import annotations
 import base64
 import json
 import re
+import secrets
 from itsdangerous import BadSignature, TimestampSigner
 from urllib.parse import parse_qs, urlencode, urlsplit, urlunsplit
 
@@ -111,7 +112,9 @@ class DaviSchoolTabSessionMiddleware:
     var urlTabId = currentUrl.searchParams.get("ds_tab") || "";
     var forceNewTab = currentUrl.searchParams.get("ds_tab_new") === "1";
     if (forceNewTab) {
-      id = newTabId();
+      // The server has already selected this fresh ID for the new tab and
+      // uses it to choose the matching cookie. Adopt that exact ID.
+      id = /^[A-Za-z0-9_-]{16,64}$/.test(urlTabId) ? urlTabId : newTabId();
       sessionStorage.setItem(KEY, id);
       currentUrl.searchParams.delete("ds_tab_new");
       currentUrl.searchParams.set("ds_tab", id);
@@ -379,6 +382,18 @@ class DaviSchoolTabSessionMiddleware:
         # replaying the exact ASGI body messages so FastAPI can parse the form
         # normally afterward.
         tab_id = self._tab_id(scope)
+        initial_query = parse_qs(
+            scope.get("query_string", b"").decode("utf-8", "ignore"),
+            keep_blank_values=True,
+        )
+        force_new_tab = initial_query.get("ds_tab_new", [""])[0] == "1"
+        if force_new_tab:
+            # A target=_blank tab can inherit a copy of its opener's
+            # sessionStorage. Give it a distinct cookie namespace before
+            # any route reads the session, and carry the marker through login.
+            tab_id = secrets.token_urlsafe(24)
+            initial_query[_TAB_PARAM] = [tab_id]
+            scope["query_string"] = urlencode(initial_query, doseq=True).encode("utf-8")
         replay_messages = []
         captured_form_body = b""
         query_has_tab = bool(
@@ -720,7 +735,13 @@ class DaviSchoolTabSessionMiddleware:
                     headers.append("set-cookie", deletion)
                 location = headers.get("location")
                 if tab_id and location:
-                    headers["location"] = self._with_tab(location, tab_id)
+                    location = self._with_tab(location, tab_id)
+                    if force_new_tab:
+                        parts = urlsplit(location)
+                        params = parse_qs(parts.query, keep_blank_values=True)
+                        params["ds_tab_new"] = ["1"]
+                        location = urlunsplit(("", "", parts.path, urlencode(params, doseq=True), parts.fragment))
+                    headers["location"] = location
                 if html_response["value"]:
                     try:
                         del headers["content-length"]
