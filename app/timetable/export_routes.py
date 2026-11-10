@@ -111,7 +111,9 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                     if class_row is None:
                         class_label = "—"
                     else:
-                        class_label = str(class_row.get("class_name") or class_row.get("name") or "") + (" " + str(class_row.get("stream") or "") if class_row.get("stream") else "")
+                        class_name = field_value(class_row, "class_name", field_value(class_row, "name", ""))
+                        stream_name = field_value(class_row, "stream", "")
+                        class_label = str(class_name or "") + (" " + str(stream_name) if stream_name else "")
                     cells.append("<th>" + escape(class_label) + "</th>")
                 for _, kind, item in timeline:
                     if kind == "break":
