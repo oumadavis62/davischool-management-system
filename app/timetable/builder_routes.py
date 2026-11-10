@@ -82,7 +82,7 @@ def register_timetable_builder_routes(app, get_db, get_school_obj, module_page):
             elif value("lesson_id") and value("day_id") and value("period_id"):
                 move_lesson(con, school_id, profile_id, integer("lesson_id"),
                     integer("day_id"), integer("period_id"), request.session.get("email", ""),
-                    integer("room_id") or None)
+                    integer("room_id") or None, integer("end_period_id") or None)
                 message = "Lesson moved successfully."
             elif value("lesson_id"):
                 delete_lesson(con, school_id, profile_id, integer("lesson_id"),
@@ -1017,16 +1017,37 @@ def register_timetable_builder_routes(app, get_db, get_school_obj, module_page):
         finally: con.close()
 
     @app.post("/app/timetable/builder/move")
-    def timetable_builder_move(request: Request, profile_id: int = Form(...), lesson_id: int = Form(...), day_id: int = Form(...), period_id: int = Form(...), room_id: str = Form(""), end_period_id: int = Form(0)):
+    async def timetable_builder_move(request: Request):
         school = school_for(request)
         if not school: return RedirectResponse("/", 303)
+        form = await request.form()
+        def posted_int(name, required=True):
+            raw = str(form.get(name, "") or "").strip()
+            if not raw and not required:
+                return None
+            try:
+                return int(raw)
+            except (TypeError, ValueError):
+                raise TimetableSetupError("Choose valid day, starting period and ending period values.")
+        profile_id = posted_int("profile_id")
+        lesson_id = posted_int("lesson_id")
+        day_id = posted_int("day_id")
+        period_id = posted_int("period_id")
+        room_raw = str(form.get("room_id", "") or "").strip()
+        end_period_id = posted_int("end_period_id", required=False)
         con = get_db()
         try:
-            move_lesson(con, int(school["id"]), profile_id, lesson_id, day_id, period_id, request.session.get("email", ""), int(room_id) if room_id.strip() else None, end_period_id or None)
+            move_lesson(
+                con, int(school["id"]), profile_id, lesson_id, day_id, period_id,
+                request.session.get("email", ""),
+                int(room_raw) if room_raw else None, end_period_id,
+            )
             return redirect_builder(profile_id, "Lesson moved successfully.")
         except (TimetableSetupError, ValueError) as exc:
+            con.rollback()
             return redirect_builder(profile_id, str(exc), True)
-        finally: con.close()
+        finally:
+            con.close()
 
 
     @app.post("/app/timetable/builder/swap")
