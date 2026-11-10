@@ -346,6 +346,7 @@ def register_timetable_portal_routes(app, get_db):
                 "<main class='tp-wrap'>", "<div class='tp-wrap'>", 1
             )
             timetable_content = timetable_content.replace("</main>", "</div>", 1)
+            timetable_content += "<script>window.setTimeout(function(){window.location.reload()},60000);</script>"
             return _school_page(request, "My Timetable", style_block + timetable_content)
 
         # Parent and student timetable views retain their existing standalone
