@@ -57,12 +57,20 @@ def create_profile(connection: Any, school_id: int, name: str, academic_year: st
         if end_date <= start_date:
             raise TimetableSetupError("Academic end date must be after the start date.")
     cur = connection.cursor()
-    exists = cur.execute(
-        "SELECT id FROM ds_timetable_profiles WHERE school_id=? AND academic_year=? AND term=? AND profile_type=? AND status<>'archived'",
-        (school_id, academic_year, term, profile_type),
-    ).fetchone()
-    if exists:
-        raise TimetableSetupError("A " + profile_type + " timetable already exists for this academic year and term. Create a revision from its published profile instead.")
+    if profile_type == "main":
+        exists = cur.execute(
+            "SELECT id FROM ds_timetable_profiles WHERE school_id=? AND academic_year=? AND term=? AND profile_type='main' AND status<>'archived'",
+            (school_id, academic_year, term),
+        ).fetchone()
+        if exists:
+            raise TimetableSetupError("A main school timetable already exists for this academic year and term. Create a revision from its published profile instead.")
+    else:
+        exists = cur.execute(
+            "SELECT id FROM ds_timetable_profiles WHERE school_id=? AND academic_year=? AND term=? AND profile_type=? AND name=? AND status<>'archived'",
+            (school_id, academic_year, term, profile_type, name),
+        ).fetchone()
+        if exists:
+            raise TimetableSetupError("A timetable with this name and programme type already exists for this academic year and term.")
     now = _now()
     cur.execute(
         """INSERT INTO ds_timetable_profiles
