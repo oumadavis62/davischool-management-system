@@ -323,7 +323,7 @@ def register_timetable_view_routes(app, get_db, get_school_obj, module_page):
         .tv-wrap .tb-grid .tb-lesson{{--teacher-color:#2563EB;position:relative;box-sizing:border-box;background:color-mix(in srgb,var(--teacher-color) 17%,white);border:1px solid color-mix(in srgb,var(--teacher-color) 48%,white);border-left:4px solid var(--teacher-color);border-radius:8px;padding:5px 7px;min-height:66px;color:#234638;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;text-align:center;gap:2px;box-shadow:0 2px 7px rgba(35,83,51,.07)}}
         .tv-wrap .tb-grid .tb-lesson-top{{position:static;display:flex;justify-content:center;align-items:center;gap:9px;font-size:10px;width:100%}}
         .tv-wrap .tb-grid .tb-lesson-top span{{position:absolute;top:4px;right:5px;font-size:9px;background:#d5e9d9;border-radius:10px;padding:2px 5px}}
-        .tv-wrap .tb-grid .tb-subject-initials{{font-size:12px;letter-spacing:.5px;font-weight:900}}
+        .tv-wrap .tb-grid .tb-subject-initials{{font-size:12px;letter-spacing:.5px;font-weight:950}}
         .tv-wrap .tb-grid .tb-meta{{font-size:8px;color:#55705d;margin-top:2px}}
         .tv-wrap .tb-grid .tb-room-label{{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}}
         .tv-wrap .tb-grid .tb-class-label{{font-size:9px;font-weight:850;color:#315f43;line-height:1.15;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}}
