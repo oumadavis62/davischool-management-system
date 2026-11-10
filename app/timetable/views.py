@@ -7,7 +7,7 @@ from app.timetable.setup import TimetableSetupError
 
 
 def get_timetable_view(connection: Any, school_id: int, profile_id: int, view_type: str = "school", target_id: int = 0) -> dict:
-    if view_type not in ("school", "class", "teacher", "room"):
+    if view_type not in ("school", "class", "student", "teacher", "room"):
         raise TimetableSetupError("Choose a valid timetable view.")
     cur = connection.cursor()
     profile = cur.execute(
@@ -52,6 +52,18 @@ def get_timetable_view(connection: Any, school_id: int, profile_id: int, view_ty
         where = " AND l.class_id=?"
         params.append(target_id)
         title = str(target["name"]) + ((" " + str(target["stream"])) if target["stream"] else "") + " timetable"
+    elif view_type == "student":
+        target = cur.execute(
+            """SELECT s.id,s.name,s.class_id,c.name class_name,c.stream
+               FROM students s LEFT JOIN classes c ON c.id=s.class_id AND c.school_id=s.school_id
+               WHERE s.id=? AND s.school_id=?""",
+            (target_id, school_id),
+        ).fetchone()
+        if not target or not target["class_id"]:
+            raise TimetableSetupError("Select a learner linked to a class in this school.")
+        where = " AND l.class_id=?"
+        params.append(int(target["class_id"]))
+        title = str(target["name"]) + " — learner timetable"
     elif view_type == "teacher":
         target = cur.execute(
             "SELECT id,name FROM teachers WHERE id=? AND school_id=?",
@@ -139,6 +151,18 @@ def _load_advanced_sessions(cur, school_id: int, profile_id: int, view_type: str
     if view_type == "class":
         conditions.append("EXISTS(SELECT 1 FROM ds_timetable_session_classes sc WHERE sc.session_id=s.id AND sc.school_id=s.school_id AND sc.class_id=?)")
         params.append(target_id)
+    elif view_type == "student":
+        student = cur.execute(
+            "SELECT class_id FROM students WHERE id=? AND school_id=?",
+            (target_id, school_id),
+        ).fetchone()
+        class_id = int(student["class_id"]) if student and student["class_id"] else 0
+        if class_id:
+            conditions.append("(EXISTS(SELECT 1 FROM ds_timetable_session_classes sc WHERE sc.session_id=s.id AND sc.school_id=s.school_id AND sc.class_id=?) OR EXISTS(SELECT 1 FROM ds_timetable_session_learners sl WHERE sl.session_id=s.id AND sl.school_id=s.school_id AND sl.student_id=?))")
+            params.extend((class_id, target_id))
+        else:
+            conditions.append("EXISTS(SELECT 1 FROM ds_timetable_session_learners sl WHERE sl.session_id=s.id AND sl.school_id=s.school_id AND sl.student_id=?)")
+            params.append(target_id)
     elif view_type == "teacher":
         conditions.append("EXISTS(SELECT 1 FROM ds_timetable_session_teachers st WHERE st.session_id=s.id AND st.school_id=s.school_id AND st.teacher_id=?)")
         params.append(target_id)
