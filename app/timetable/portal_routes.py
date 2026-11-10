@@ -312,23 +312,23 @@ def register_timetable_portal_routes(app, get_db):
                 }
                 filter_html = (
                     "<form class='tp-filters' method='get' action='/app/timetable/my'>"
-                    "<label>Academic Year<select name='academic_year' onchange='this.form.submit()'>"
+                    "<label>Academic Year<select name='academic_year'>"
                     + filter_options(years, selected_year)
                     + "</select></label>"
-                    "<label>Term<select name='term' onchange='this.form.submit()'>"
+                    "<label>Term<select name='term'>"
                     + filter_options(terms, selected_term)
                     + "</select></label>"
-                    "<label>Timetable Type<select name='profile_type' onchange='this.form.submit()'>"
+                    "<label>Timetable Type<select name='profile_type'>"
                     + filter_options(profile_types, selected_type, type_label)
                     + "</select></label>"
-                    "<label>Published Timetable<select name='profile_id' onchange='this.form.submit()'>"
+                    "<label>Published Timetable<select name='profile_id'>"
                     + "".join(
                         "<option value='" + escape(pid, quote=True) + "'"
                         + (" selected" if pid == selected_profile else "") + ">"
                         + escape(label) + "</option>"
                         for pid, label in profile_labels.items()
                     )
-                    + "</select></label></form>"
+                    + "</select></label><button class='tp-filter-apply' type='submit'>Apply Filters</button></form>"
                 )
 
             sections = []
@@ -382,7 +382,7 @@ def register_timetable_portal_routes(app, get_db):
             "body{margin:0;background:#f1f7f1;color:#173d2b;font:14px Arial,sans-serif}"
             ".tp-wrap{max-width:1250px;margin:auto;padding:22px}.tp-hero{margin-bottom:18px}"
             ".tp-hero h1{margin:0 0 6px;font-size:26px}.tp-hero-top{display:flex;align-items:center;justify-content:space-between;gap:12px}.tp-sidebar-toggle{width:36px;height:36px;flex:0 0 36px;border:1px solid #cfe0d2;border-radius:10px;background:#fff;color:#245b39;font-size:19px;cursor:pointer;display:grid;place-items:center}.tp-sidebar-toggle:hover{background:#e8f4eb}.tp-hero p,.tp-head p{color:#64748b;margin:0;font-size:12px}"
-            ".tp-filters{display:flex;flex-wrap:wrap;gap:12px;align-items:end;background:#fff;border:1px solid #dce9de;border-radius:14px;padding:13px 15px;margin:0 0 14px}.tp-filters label{display:flex;flex-direction:column;gap:5px;min-width:145px;flex:1;color:#315b3e;font-size:11px;font-weight:700}.tp-filters select{width:100%;min-height:38px;border:1px solid #cfe0d2;border-radius:9px;background:#f8fbf8;color:#173d2b;padding:7px 10px;font-size:13px;outline-color:#347b50}"
+            ".tp-filters{display:flex;flex-wrap:wrap;gap:12px;align-items:end;background:#fff;border:1px solid #dce9de;border-radius:14px;padding:13px 15px;margin:0 0 14px}.tp-filters label{display:flex;flex-direction:column;gap:5px;min-width:145px;flex:1;color:#315b3e;font-size:11px;font-weight:700}.tp-filters select{width:100%;min-height:38px;border:1px solid #cfe0d2;border-radius:9px;background:#f8fbf8;color:#173d2b;padding:7px 10px;font-size:13px;outline-color:#347b50}.tp-filter-apply{min-height:38px;border:0;border-radius:9px;background:#347b50;color:#fff;padding:0 18px;font-size:12px;font-weight:700;cursor:pointer}.tp-filter-apply:hover{background:#245b39}"
             ".tp-additional{margin-top:16px}.tp-additional h3{font-size:15px;margin:0 0 9px;color:#245b39}.tp-card{background:#fff;border:1px solid #dce9de;border-radius:14px;padding:16px;margin:14px 0}"
             ".tp-head{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:12px}"
             ".tp-head h2{font-size:17px;margin:0 0 5px}.tp-head span{background:#eaf5ec;color:#17633b;padding:6px 10px;border-radius:18px;font-size:10px;font-weight:bold}"
