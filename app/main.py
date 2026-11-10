@@ -377,16 +377,15 @@ SESSION_HTTPS_ONLY = os.environ.get("DAVISCHOOL_HTTPS_ONLY", "0").lower() in {"1
 
 
 
-# Automatic inactivity protection. An authenticated session expires after the
-# configured idle period, even though the normal session cookie can live longer.
-# Active users remain signed in because every authenticated request refreshes the
-# last-activity timestamp.
+# Automatic inactivity protection. The configured inactivity timeout is
+# 15 minutes. Keep a 15-minute floor so a stale/misconfigured deployment
+# variable (for example, 60 seconds) cannot lock users out after one minute.
+# Active users remain signed in because authenticated requests refresh activity.
 try:
-    IDLE_TIMEOUT_SECONDS = max(60, int(os.environ.get("DAVISCHOOL_IDLE_TIMEOUT_SECONDS", str(12 * 60 * 60))))
+    IDLE_TIMEOUT_SECONDS = max(15 * 60, int(os.environ.get("DAVISCHOOL_IDLE_TIMEOUT_SECONDS", str(15 * 60))))
 except (TypeError, ValueError):
-    # Never let a malformed Render environment variable prevent the web
-    # service from starting. Fall back to the requested 15-minute timeout.
-    IDLE_TIMEOUT_SECONDS = 12 * 60 * 60
+    # A malformed environment value must not shorten the configured timeout.
+    IDLE_TIMEOUT_SECONDS = 15 * 60
 
 @app.middleware("http")
 async def idle_session_timeout(request: Request, call_next):
