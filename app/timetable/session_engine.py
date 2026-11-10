@@ -310,7 +310,9 @@ def find_session_conflicts(connection: Any, school_id: int, profile_id: int,
                            ignore_generated_sessions: bool = False,
                            include_legacy_lessons: bool = True,
                            generated_run_id: int | None = None,
-                           ignore_generated_legacy_lessons: bool = False) -> list[dict[str, Any]]:
+                           ignore_generated_legacy_lessons: bool = False,
+                           duration_periods: int = 0,
+                           schedule_layer: str = "instructional") -> list[dict[str, Any]]:
     """Return every overlapping new-engine session sharing a resource."""
     classes = _unique_ids(class_ids, "class")
     teachers = _unique_ids(teacher_ids, "teacher")
@@ -405,6 +407,49 @@ def find_session_conflicts(connection: Any, school_id: int, profile_id: int,
         if room_id is not None:
             collect_legacy(legacy_base + " AND l.room_id=?",
                            legacy_params + (room_id,), f"room:{room_id}")
+    # School-wide reservation for instructional doubles/triples. Linked
+    # classes are stored together in one session row and therefore reserve
+    # the shared block once, rather than as competing lessons.
+    if schedule_layer == "instructional" and int(duration_periods or 0) > 1 and day_id is not None:
+        legacy_sql = """SELECT l.id FROM ds_timetable_lessons l
+                        JOIN ds_timetable_periods p ON p.id=l.period_id
+                          AND p.school_id=l.school_id AND p.profile_id=l.profile_id
+                        JOIN ds_timetable_periods e ON e.school_id=l.school_id
+                          AND e.profile_id=l.profile_id
+                          AND e.period_no=p.period_no+COALESCE(l.duration_periods,1)-1
+                        WHERE l.school_id=? AND l.profile_id=? AND l.day_id=?
+                          AND l.status='scheduled' AND COALESCE(l.duration_periods,1)>1
+                          AND p.start_time < ? AND e.end_time > ?"""
+        legacy_params = [school_id, profile_id, day_id, end_time, start_time]
+        if ignore_generated_legacy_lessons:
+            legacy_sql += " AND l.generation_run_id IS NULL"
+        if cur.execute(legacy_sql, tuple(legacy_params)).fetchone():
+            conflicts[-900000001] = {
+                "session_id": -900000001, "start_time": start_time, "end_time": end_time,
+                "session_type": "lesson", "schedule_layer": "instructional",
+                "reasons": ["school-wide extended-lesson reservation"],
+            }
+        session_sql = """SELECT id FROM ds_timetable_sessions
+                         WHERE school_id=? AND profile_id=? AND day_id=?
+                           AND session_date IS NULL AND schedule_layer='instructional'
+                           AND status NOT IN ('cancelled','void')
+                           AND COALESCE(duration_periods,1)>1
+                           AND start_time < ? AND end_time > ?"""
+        session_params = [school_id, profile_id, day_id, end_time, start_time]
+        if session_date:
+            session_sql = session_sql.replace("session_date IS NULL", "(session_date=? OR session_date IS NULL)")
+            session_params = [school_id, profile_id, day_id, session_date, end_time, start_time]
+        if ignore_generated_sessions:
+            session_sql += " AND generation_run_id IS NULL"
+        elif generated_run_id is not None:
+            session_sql += " AND (generation_run_id IS NULL OR generation_run_id=?)"
+            session_params.append(int(generated_run_id))
+        if cur.execute(session_sql, tuple(session_params)).fetchone():
+            conflicts[-900000002] = {
+                "session_id": -900000002, "start_time": start_time, "end_time": end_time,
+                "session_type": "lesson", "schedule_layer": "instructional",
+                "reasons": ["school-wide extended-lesson reservation"],
+            }
     return list(conflicts.values())
 
 
@@ -685,6 +730,7 @@ def create_scheduled_session(connection: Any, school_id: int, profile_id: int,
         classes, teachers, learners, room_id, day_id, session_date,
         ignore_generated_sessions=ignore_generated_conflicts,
         ignore_generated_legacy_lessons=ignore_generated_legacy_conflicts,
+        duration_periods=duration_periods, schedule_layer=schedule_layer,
     )
     if conflicts:
         summary = "; ".join(

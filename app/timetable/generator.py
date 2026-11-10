@@ -637,7 +637,7 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
     # Load normalized shared sessions once. These are fixed anchors for the
     # legacy lesson solver and include all linked classes and co-teachers.
     existing_by_id = {}
-    conflict_sql = """SELECT s.id,s.day_id,s.start_time,s.end_time,s.room_id,s.subject_id,s.schedule_layer,
+    conflict_sql = """SELECT s.id,s.day_id,s.start_time,s.end_time,s.duration_periods,s.room_id,s.subject_id,s.schedule_layer,
                               sc.class_id,st.teacher_id
                        FROM ds_timetable_sessions s
                        LEFT JOIN ds_timetable_session_classes sc
@@ -659,6 +659,7 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
             "room_id": int(row["room_id"]) if row["room_id"] is not None else None,
             "classes": set(), "teachers": set(), "subject_id": int(row["subject_id"]) if row["subject_id"] is not None else None,
             "schedule_layer": str(row["schedule_layer"] or "instructional"),
+            "duration_periods": int(row["duration_periods"] or 1),
         })
         if row["class_id"] is not None:
             item["classes"].add(int(row["class_id"]))
@@ -697,6 +698,7 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
     fixed_class_periods = set()
     fixed_teacher_periods = set()
     fixed_room_periods = set()
+    fixed_schoolwide_block_periods = set()
     fixed_subject_days = set()
     fixed_class_week = {}
     fixed_class_day_periods = {}
@@ -718,6 +720,9 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
         fixed_subject_day_count[(class_id, subject_id, teacher_id, day_id)] = fixed_subject_day_count.get((class_id, subject_id, teacher_id, day_id), 0) + 1
         fixed_class_day_periods[(class_id, day_id)] = fixed_class_day_periods.get((class_id, day_id), 0) + len(period_ids)
         fixed_teacher_day_periods[(teacher_id, day_id)] = fixed_teacher_day_periods.get((teacher_id, day_id), 0) + len(period_ids)
+        if len(period_ids) > 1:
+            for pid in period_ids:
+                fixed_schoolwide_block_periods.add((day_id, pid))
         for pid in period_ids:
             period_no = int(period_by_id[pid]["period_no"])
             fixed_subject_period_days[(class_id, subject_id, period_no)].add(day_id)
@@ -749,6 +754,9 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
                 if session["room_id"] is not None:
                     shared_room_periods.add((int(session["room_id"]), day_id, pid))
         if session.get("schedule_layer") == "instructional":
+            if int(session.get("duration_periods", 1) or 1) > 1:
+                for pid in session_periods:
+                    fixed_schoolwide_block_periods.add((day_id, pid))
             for class_id in session["classes"]:
                 fixed_class_week[class_id] = fixed_class_week.get(class_id, 0) + 1
                 fixed_class_day_periods[(class_id, day_id)] = fixed_class_day_periods.get((class_id, day_id), 0) + len(session_periods)
@@ -773,6 +781,7 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
         by_teacher_period = defaultdict(list)
         by_teacher_class_period_subject = defaultdict(list)
         by_room_period = defaultdict(list)
+        by_schoolwide_block_period = defaultdict(list)
         by_subject_day = defaultdict(list)
         by_subject_teacher_day = defaultdict(list)
         by_class_subject_period_day = defaultdict(list)
@@ -801,6 +810,8 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
                     if (task_index, day_id, int(candidate["period_id"]), room_id) in blocked_candidates:
                         continue
                     conflict = False
+                    if len(period_ids) > 1 and any((day_id, pid) in fixed_schoolwide_block_periods for pid in period_ids):
+                        conflict = True
                     for pid in period_ids:
                         if any((cid, day_id, pid) in fixed_class_periods or (cid, day_id, pid) in shared_class_periods for cid in class_ids):
                             conflict = True
@@ -863,6 +874,9 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
                     if room_id is not None:
                         for pid in period_ids:
                             by_room_period[(int(room_id), day_id, pid)].append(var)
+                    if len(period_ids) > 1:
+                        for pid in period_ids:
+                            by_schoolwide_block_period[(day_id, pid)].append(var)
                     by_subject_teacher_day[(int(task["class_id"]), int(task["subject_id"]), int(task["teacher_id"]), day_id)].append(var)
                     # Soft preferences: fallback-only cells carry a substantial
                     # penalty; preferred cells and earlier periods are favoured.
@@ -898,7 +912,7 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
                 next_rank = sum(rank * var for var, rank in rank_terms_by_task[next_index])
                 model.Add(previous_rank <= next_rank)
 
-        for group in (by_class_period, by_teacher_period, by_room_period, by_subject_day):
+        for group in (by_class_period, by_teacher_period, by_room_period, by_subject_day, by_schoolwide_block_period):
             for values in group.values():
                 if len(values) > 1:
                     model.Add(sum(values) <= 1)
