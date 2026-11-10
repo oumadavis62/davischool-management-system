@@ -808,7 +808,7 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
         .tt-session-row button:disabled{{opacity:.45}}
         .tt-session-instructions{{margin:8px 0 0;padding:10px 12px;border-left:3px solid #78a984;border-radius:7px;background:#f1f7f1;color:#58705e;font-size:10px;line-height:1.55}}
         .tt-session-step{{padding:5px 8px;border-radius:7px;background:#e8f3e9;color:#376a48;font-size:10px;font-weight:800}}
-        @media(max-width:640px){{.tt-session-row-main{{grid-template-columns:28px 1fr 1fr}}.tt-session-row-main small{{grid-column:2/-1}}.tt-session-row-main button{{grid-column:3}}.tt-session-row-sharing{{grid-template-columns:1fr}}}
+        @media(max-width:640px){{.tt-session-row-main{{grid-template-columns:28px 1fr 1fr}}.tt-session-row-main small{{grid-column:2/-1}}.tt-session-row-main button{{grid-column:3}}.tt-session-row-sharing{{grid-template-columns:1fr}}
         @media(max-width:600px){{.tt-req-overview{{grid-template-columns:repeat(2,minmax(0,1fr));padding:12px}}.tt-req-page-head,.tt-req-workspace{{padding:15px}}.tt-session-filters,.tt-session-linking{{grid-template-columns:1fr}}.tt-req-pagination .tt-btn{{padding:9px}}}}
 
         .tt-wrap *{{box-sizing:border-box}}
@@ -849,7 +849,7 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
         .tt-req-bulk-details[open]{{padding:10px;border:1px solid #e0ebe1;border-radius:12px;background:#fbfdfb}}
         .tt-req-add-modal[hidden]{{display:none!important}}
         .tt-req-add-modal{{position:fixed;inset:0;z-index:10060;display:flex;align-items:center;justify-content:center;padding:16px;background:rgba(15,35,27,.58)}}
-        .tt-req-add-dialog{{width:min(560px,100%);max-height:min(88vh,760px);overflow:auto;padding:20px;background:#fff;border:1px solid #dce8de;border-radius:18px;box-shadow:0 24px 70px rgba(0,0,0,.24)}}
+        .tt-req-add-dialog{{width:min(760px,100%);max-height:min(90vh,820px);overflow:auto;padding:20px;background:#fff;border:1px solid #dce8de;border-radius:18px;box-shadow:0 24px 70px rgba(0,0,0,.24)}}
         .tt-req-add-head{{display:flex;justify-content:space-between;align-items:flex-start;gap:14px;margin-bottom:16px}}
         .tt-req-add-head h3{{margin:5px 0;color:#234c37;font-size:18px}}
         .tt-req-add-head p{{margin:4px 0 0;color:#718579;font-size:11px;line-height:1.5}}
