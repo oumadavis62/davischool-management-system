@@ -210,17 +210,16 @@ def _cross_profile_conflicts(cur, school_id: int, profile) -> list[str]:
                 "SELECT teacher_id FROM ds_timetable_session_teachers WHERE school_id=? AND session_id=?",
                 (school_id, sid),
             ).fetchall()}
-            if not classes:
-                learner_ids = [int(x["student_id"]) for x in cur.execute(
-                    "SELECT student_id FROM ds_timetable_session_learners WHERE school_id=? AND session_id=?",
-                    (school_id, sid),
-                ).fetchall()]
-                if learner_ids:
-                    learner_marks = ",".join("?" for _ in learner_ids)
-                    classes.update(int(x["class_id"]) for x in cur.execute(
-                        "SELECT DISTINCT class_id FROM students WHERE school_id=? AND id IN (" + learner_marks + ") AND class_id IS NOT NULL",
-                        (school_id, *learner_ids),
-                    ).fetchall())
+            learner_ids = [int(x["student_id"]) for x in cur.execute(
+                "SELECT student_id FROM ds_timetable_session_learners WHERE school_id=? AND session_id=?",
+                (school_id, sid),
+            ).fetchall()]
+            if learner_ids:
+                learner_marks = ",".join("?" for _ in learner_ids)
+                classes.update(int(x["class_id"]) for x in cur.execute(
+                    "SELECT DISTINCT class_id FROM students WHERE school_id=? AND id IN (" + learner_marks + ") AND class_id IS NOT NULL",
+                    (school_id, *learner_ids),
+                ).fetchall())
             day_code = str(row["day_code"] or "").upper()
             session_date = str(row["session_date"] or "")
             if session_date:
@@ -312,6 +311,12 @@ def validate_timetable_for_publication(connection: Any, school_id: int, profile_
         (school_id, profile_id),
     ).fetchall():
         session_teachers.setdefault(int(row["session_id"]), []).append(int(row["teacher_id"]))
+    session_learners = {}
+    for row in cur.execute(
+        "SELECT session_id,student_id FROM ds_timetable_session_learners WHERE school_id=? AND profile_id=?",
+        (school_id, profile_id),
+    ).fetchall():
+        session_learners.setdefault(int(row["session_id"]), []).append(int(row["student_id"]))
     advanced_coverage = set()
     advanced_required_lessons = 0
     advanced_required_periods = 0
@@ -326,12 +331,16 @@ def validate_timetable_for_publication(connection: Any, school_id: int, profile_
             "SELECT teacher_id FROM ds_timetable_scheduling_requirement_teachers WHERE school_id=? AND profile_id=? AND requirement_id=?",
             (school_id, profile_id, rid),
         ).fetchall()))
+        learner_ids = tuple(sorted(int(row["student_id"]) for row in cur.execute(
+            "SELECT student_id FROM ds_timetable_scheduling_requirement_learners WHERE school_id=? AND profile_id=? AND requirement_id=?",
+            (school_id, profile_id, rid),
+        ).fetchall()))
         patterns = cur.execute(
             "SELECT duration_periods FROM ds_timetable_scheduling_patterns WHERE school_id=? AND profile_id=? AND requirement_id=? ORDER BY session_no",
             (school_id, profile_id, rid),
         ).fetchall()
-        if not class_ids:
-            errors.append("A combined teaching requirement has no linked classes.")
+        if not class_ids and not learner_ids:
+            errors.append("A combined teaching requirement has no linked classes or learners.")
         if not teacher_ids:
             errors.append("A combined teaching requirement has no assigned teacher.")
         if not patterns:
@@ -344,7 +353,7 @@ def validate_timetable_for_publication(connection: Any, school_id: int, profile_
         expected_durations = sorted(int(row["duration_periods"] or 1) for row in patterns)
         advanced_required_lessons += len(expected_durations)
         advanced_required_periods += sum(expected_durations)
-        advanced_requirement_signatures.append((class_ids, teacher_ids, subject_id, expected_durations,
+        advanced_requirement_signatures.append((class_ids, teacher_ids, learner_ids, subject_id, expected_durations,
                                                   int(requirement["teaching_group_id"]) if requirement["teaching_group_id"] is not None else None))
     if not days:
         errors.append("Configure at least one instructional day.")
@@ -460,8 +469,17 @@ def validate_timetable_for_publication(connection: Any, school_id: int, profile_
         session_id = int(session["id"])
         class_ids = sorted(set(session_classes.get(session_id, [])))
         teacher_ids = sorted(set(session_teachers.get(session_id, [])))
-        if not class_ids:
-            errors.append("A scheduled combined session has no linked classes.")
+        learner_ids = sorted(set(session_learners.get(session_id, [])))
+        effective_class_ids = list(class_ids)
+        if learner_ids:
+            learner_marks = ",".join("?" for _ in learner_ids)
+            effective_class_ids.extend(int(row["class_id"]) for row in cur.execute(
+                "SELECT DISTINCT class_id FROM students WHERE school_id=? AND id IN (" + learner_marks + ") AND class_id IS NOT NULL",
+                (school_id, *learner_ids),
+            ).fetchall())
+            effective_class_ids = sorted(set(effective_class_ids))
+        if not class_ids and not learner_ids:
+            errors.append("A scheduled combined session has no linked classes or learners.")
         if not teacher_ids:
             errors.append("A scheduled combined session has no assigned teacher.")
         if session["day_id"] is not None and int(session["day_id"]) not in day_ids:
@@ -499,14 +517,14 @@ def validate_timetable_for_publication(connection: Any, school_id: int, profile_
             "class_id":class_ids[0] if class_ids else 0,
             "subject_id":int(session["subject_id"]) if session["subject_id"] is not None else 0,
             "teacher_id":teacher_ids[0] if teacher_ids else 0,
-            "class_ids":class_ids,"teacher_ids":teacher_ids,
+            "class_ids":effective_class_ids,"teacher_ids":teacher_ids,
             "room_id":room_id,"day_id":day_id,"day_key":day_key,
             "start_time":str(session["start_time"]),"end_time":str(session["end_time"]),
             "start_index":start_index,"end_index":end_index,
         })
         advanced_session_durations.append(duration)
 
-    for class_ids, teacher_ids, subject_id, expected_durations, group_id in advanced_requirement_signatures:
+    for class_ids, teacher_ids, learner_ids, subject_id, expected_durations, group_id in advanced_requirement_signatures:
         matched = []
         for session in advanced_sessions:
             sid = int(session["id"])
@@ -517,6 +535,8 @@ def validate_timetable_for_publication(connection: Any, school_id: int, profile_
             if tuple(sorted(set(session_classes.get(sid, [])))) != class_ids:
                 continue
             if tuple(sorted(set(session_teachers.get(sid, [])))) != teacher_ids:
+                continue
+            if tuple(sorted(set(session_learners.get(sid, [])))) != learner_ids:
                 continue
             matched.append(max(1, int(session["duration_periods"] or 1)))
         if sorted(matched) != expected_durations:
