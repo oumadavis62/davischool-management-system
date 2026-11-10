@@ -738,7 +738,7 @@ class DaviSchoolTabSessionMiddleware:
                 location = headers.get("location")
                 if tab_id and location:
                     location = self._with_tab(location, tab_id)
-                    if new_tab_marker:
+                    if new_tab_marker and location.startswith("/") and not location.startswith("//"):
                         parts = urlsplit(location)
                         params = parse_qs(parts.query, keep_blank_values=True)
                         params["ds_tab_new"] = ["1"]
