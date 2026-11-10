@@ -761,13 +761,13 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
               <form method='post' data-native-post='true' action='/app/timetable/setup/requirement' class='tt-form compact tt-req-add-form'>
                 {hidden}
                 <label>Class / stream
-                  <select data-allocation-filter='class' required><option value=''>Choose class / stream</option>{requirement_class_options}</select>
+                  <select name='class_id' data-allocation-filter='class' required><option value=''>Choose class / stream</option>{requirement_class_options}</select>
                 </label>
                 <label>Teacher
-                  <select data-allocation-filter='teacher' required><option value=''>Choose teacher</option>{requirement_teacher_options}</select>
+                  <select name='teacher_id' data-allocation-filter='teacher' required><option value=''>Choose teacher</option>{requirement_teacher_options}</select>
                 </label>
                 <label class='wide'>Subject
-                  <select data-allocation-filter='subject' required><option value=''>Choose subject</option>{requirement_subject_options}</select>
+                  <select name='subject_id' data-allocation-filter='subject' required><option value=''>Choose subject</option>{requirement_subject_options}</select>
                   <small data-allocation-match>Choose any one filter first. The other fields will narrow to valid teacher allocations.</small>
                 </label>
                 <select name='allocation' data-allocation-source hidden>
@@ -2045,15 +2045,25 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
             con.close()
 
     @app.post("/app/timetable/setup/requirement")
-    def create_timetable_requirement(request: Request, profile_id: int = Form(...), allocation: str = Form(...), lessons_per_week: int = Form(...), duration_periods: int = Form(1), max_lessons_per_day: str = Form(""), allow_double: str = Form(""), weekly_pattern: str = Form(""), weekly_links: str = Form(""), pattern_mode: str = Form("replace")):
+    def create_timetable_requirement(request: Request, profile_id: int = Form(...), allocation: str = Form(""), class_id: int = Form(0), teacher_id: int = Form(0), subject_id: int = Form(0), lessons_per_week: int = Form(...), duration_periods: int = Form(1), max_lessons_per_day: str = Form(""), allow_double: str = Form(""), weekly_pattern: str = Form(""), weekly_links: str = Form(""), pattern_mode: str = Form("replace")):
         school = school_for(request)
         if not school: return RedirectResponse("/", 303)
         con = get_db()
         try:
-            parts = allocation.split("|")
-            if len(parts) != 3:
-                raise TimetableSetupError("Select a valid teacher allocation.")
-            class_id, subject_id, teacher_id = (int(part) for part in parts)
+            if allocation.strip():
+                parts = allocation.split("|")
+                if len(parts) != 3:
+                    raise TimetableSetupError("Select a valid teacher allocation.")
+                class_id, subject_id, teacher_id = (int(part) for part in parts)
+            else:
+                class_id, teacher_id, subject_id = int(class_id or 0), int(teacher_id or 0), int(subject_id or 0)
+            valid_allocation = con.execute(
+                """SELECT 1 FROM teacher_allocations
+                   WHERE school_id=? AND class_id=? AND teacher_id=? AND subject_id=? LIMIT 1""",
+                (int(school["id"]), class_id, teacher_id, subject_id),
+            ).fetchone()
+            if not valid_allocation:
+                raise TimetableSetupError("That teacher is not allocated to the selected subject in this class. Choose a valid class, teacher and subject combination.")
             save_class_requirement(con, int(school["id"]), profile_id, class_id, subject_id, teacher_id, lessons_per_week, 1, int(max_lessons_per_day) if max_lessons_per_day.strip() else None, False, commit=False)
             requirement = con.execute(
                 """SELECT id FROM ds_timetable_class_requirements
