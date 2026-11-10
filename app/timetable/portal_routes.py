@@ -135,9 +135,10 @@ def build_teacher_timetable_grid(view: dict) -> str:
     headers = ["<th class='tp-day-col'>Day</th>"]
     for _, kind, item in timeline:
         if kind == "break":
+            # Break headers show only the time range; the break name is
+            # rendered vertically in the single merged body cell below.
             headers.append(
-                "<th class='tp-break-head'><b>" + escape(str(item["label"]))
-                + "</b><span>" + escape(str(item["start_time"])) + "–"
+                "<th class='tp-break-head'><span>" + escape(str(item["start_time"])) + "–"
                 + escape(str(item["end_time"])) + "</span></th>"
             )
         else:
