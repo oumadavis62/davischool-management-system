@@ -689,6 +689,22 @@ def register_timetable_builder_routes(app, get_db, get_school_obj, module_page):
             if(event.target.closest('[data-modal-close]')||event.target.classList.contains('tb-modal'))closeAll();
           }});
           document.addEventListener('keydown',function(event){{if(event.key==='Escape')closeAll();}});
+          document.querySelectorAll('.tb-modal form[action="/app/timetable/builder/move"]').forEach(function(form){{
+            const start=form.querySelector('[data-move-start]'),end=form.querySelector('[data-move-end]'),label=form.querySelector('[data-move-duration]');
+            if(!start||!end)return;
+            function syncRange(){{
+              const startIndex=start.selectedIndex,previous=end.value;let allowed=[];
+              Array.from(end.options).forEach(function(option,index){{
+                const valid=!!option.value&&index>=startIndex&&index<=startIndex+2;
+                option.disabled=!!option.value&&!valid;option.hidden=!!option.value&&!valid;
+                if(valid)allowed.push(option);
+              }});
+              if(!allowed.some(function(option){{return option.value===previous;}}))end.value=allowed.length?allowed[0].value:'';
+              const length=Math.max(1,end.selectedIndex-startIndex+1);
+              if(label)label.textContent=length===1?'Single lesson · 1 period':length===2?'Double lesson · 2 consecutive periods': 'Triple lesson · 3 consecutive periods';
+            }}
+            start.addEventListener('change',syncRange);end.addEventListener('change',syncRange);syncRange();
+          }});
           const swapModal=document.getElementById('tb-modal-swap');
           if(swapModal){{
             const lessonSelects=Array.from(swapModal.querySelectorAll('[data-swap-lesson]'));
