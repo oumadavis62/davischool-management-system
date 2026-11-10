@@ -386,7 +386,9 @@ class DaviSchoolTabSessionMiddleware:
             scope.get("query_string", b"").decode("utf-8", "ignore"),
             keep_blank_values=True,
         )
-        force_new_tab = initial_query.get("ds_tab_new", [""])[0] == "1"
+        new_tab_marker = initial_query.get("ds_tab_new", [""])[0] == "1"
+        existing_query_tab = initial_query.get(_TAB_PARAM, [""])[0]
+        force_new_tab = new_tab_marker and not _TAB_RE.fullmatch(existing_query_tab or "")
         if force_new_tab:
             # A target=_blank tab can inherit a copy of its opener's
             # sessionStorage. Give it a distinct cookie namespace before
@@ -736,7 +738,7 @@ class DaviSchoolTabSessionMiddleware:
                 location = headers.get("location")
                 if tab_id and location:
                     location = self._with_tab(location, tab_id)
-                    if force_new_tab:
+                    if new_tab_marker:
                         parts = urlsplit(location)
                         params = parse_qs(parts.query, keep_blank_values=True)
                         params["ds_tab_new"] = ["1"]
