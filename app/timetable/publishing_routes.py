@@ -92,7 +92,7 @@ def register_timetable_publishing_routes(app, get_db, get_school_obj, module_pag
         error_list = "".join("<li>"+esc(item)+"</li>" for item in errors)
         error_html = ("<ul class='pub-errors'>" + error_list + "</ul>") if errors else "<p class='pub-ok'>All weekly requirements and scheduling constraints are satisfied.</p>"
         readiness_html = (
-            f"""<section class='pub-card'><div class='pub-card-head'><div><span class='pub-kicker'>PUBLISHING READINESS</span><h3>{'Ready to submit' if readiness['ready'] else 'Action required before publishing'}</h3></div><span class='pub-state {'good' if readiness['ready'] else 'bad'}'>{'READY' if readiness['ready'] else 'NOT READY'}</span></div><div class='pub-metrics'><span><b>{int(readiness['scheduled_lessons'])}</b>Scheduled lessons</span><span><b>{int(readiness['required_lessons'])}</b>Required lessons</span><span><b>{int(readiness['requirements'])}</b>Lesson requirements</span></div>{error_html}</section>"""
+            f"""<section class='pub-card'><div class='pub-card-head'><div><span class='pub-kicker'>PUBLISHING READINESS</span><h3>{'Ready to submit' if readiness['ready'] else 'Action required before publishing'}</h3></div><span class='pub-state {'good' if readiness['ready'] else 'bad'}'>{'READY' if readiness['ready'] else 'NOT READY'}</span></div><div class='pub-metrics'><span><b>{int(readiness['scheduled_periods'])}</b>Scheduled periods</span><span><b>{int(readiness['required_periods'])}</b>Required periods</span><span><b>{int(readiness['requirements'])}</b>Lesson requirements</span></div>{error_html}</section>"""
             if readiness else ""
         )
         action_html = ""
