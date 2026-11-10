@@ -8,8 +8,48 @@ from html import escape
 
 def timetable_workspace(request, body):
     path = str(request.url.path or "")
+    profile_id = str(request.query_params.get("profile_id", "") or "")
+    profile_qs = ("?profile_id=" + escape(profile_id, quote=True)) if profile_id.isdigit() and int(profile_id) > 0 else ""
+    links = [
+        ("/app/timetable", "Overview", "overview"),
+        ("/app/timetable/setup", "Configure", "setup"),
+        ("/app/timetable/setup?tab=requirements", "Requirements", "requirements"),
+        ("/app/timetable/builder", "Manual Builder", "builder"),
+        ("/app/timetable/automatic", "Generate", "automatic"),
+        ("/app/timetable/room-allocation", "Room Allocation", "room-allocation"),
+        ("/app/timetable/views", "Views", "views"),
+        ("/app/timetable/publishing", "Publish", "publishing"),
+    ]
+    active = {
+        "/app/timetable": "overview",
+        "/app/timetable/setup": "requirements" if str(request.query_params.get("tab", "")) == "requirements" else "setup",
+        "/app/timetable/builder": "builder",
+        "/app/timetable/automatic": "automatic",
+        "/app/timetable/room-allocation": "room-allocation",
+        "/app/timetable/views": "views",
+        "/app/timetable/publishing": "publishing",
+    }.get(path, "")
+    nav_items = []
+    for href, label, key in links:
+        if "?" in href:
+            href = href + ("&" if profile_qs else "") + profile_qs.lstrip("?")
+        else:
+            href += profile_qs
+        selected = " aria-current='page'" if active == key else ""
+        nav_items.append(f"<a href='{href}'{selected}>{label}</a>")
+    global_nav = (
+        "<nav class='tt-global-tabs' aria-label='Smart Timetable sections'>"
+        + "".join(nav_items) + "</nav>"
+        + "<style>"
+        ".tt-global-tabs{display:flex;align-items:center;gap:6px;overflow-x:auto;overscroll-behavior-x:contain;padding:7px;margin:0 0 16px;border:1px solid #dce9de;border-radius:13px;background:#f7fbf7;scrollbar-width:thin}"
+        ".tt-global-tabs a{display:inline-flex;align-items:center;justify-content:center;flex:0 0 auto;min-height:39px;padding:9px 13px;border-radius:9px;color:#52705b;text-decoration:none;font-size:11px;font-weight:800;white-space:nowrap}"
+        ".tt-global-tabs a:hover{background:#e8f3e9;color:#245d39}"
+        ".tt-global-tabs a[aria-current='page']{background:#2e7548;color:#fff;box-shadow:0 3px 9px rgba(36,103,61,.16)}"
+        "@media(max-width:600px){.tt-global-tabs{margin-left:-3px;margin-right:-3px}.tt-global-tabs a{min-height:38px;padding:8px 11px;font-size:10px}}"
+        "</style>"
+    )
     if path != "/app/timetable/setup":
-        return body
+        return global_nav + body
 
     requested = str(request.query_params.get("tab", "setup") or "setup").lower()
     requested_section = str(request.query_params.get("section", "") or "").lower()
