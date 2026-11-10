@@ -191,7 +191,11 @@ def _execute_job(get_db, job):
             )
             created_advanced_ids = list(advanced_result.get("session_ids") or [])
 
-        if advanced_result and not int(legacy_count or 0):
+        if profile_type != "main" and advanced_result and not int(legacy_count or 0):
+            con.execute(
+                "DELETE FROM ds_timetable_lessons WHERE school_id=? AND profile_id=? AND status='scheduled'",
+                (school_id, profile_id),
+            )
             result = {
                 "status": "completed",
                 "run_id": int(advanced_result["run_id"]),
