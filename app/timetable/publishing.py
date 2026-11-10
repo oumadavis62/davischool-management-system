@@ -189,6 +189,7 @@ def _cross_profile_conflicts(cur, school_id: int, profile, candidate_session_ids
                 "start": str(row["start_time"]),
                 "end": str(row["end_time"]),
                 "classes": {int(row["class_id"])},
+                "learners": set(),
                 "teachers": {int(row["teacher_id"])},
                 "rooms": {int(row["room_id"])} if row["room_id"] is not None else set(),
             })
@@ -241,6 +242,7 @@ def _cross_profile_conflicts(cur, school_id: int, profile, candidate_session_ids
                 "start": str(row["start_time"]),
                 "end": str(row["end_time"]),
                 "classes": classes,
+                "learners": set(learner_ids),
                 "teachers": teachers,
                 "rooms": {int(row["room_id"])} if row["room_id"] is not None else set(),
             })
@@ -261,6 +263,8 @@ def _cross_profile_conflicts(cur, school_id: int, profile, candidate_session_ids
                 conflicts.append("A teacher is scheduled in overlapping lessons across independent timetables.")
             if first["classes"] & second["classes"]:
                 conflicts.append("A class or learner group is scheduled in overlapping lessons across independent timetables.")
+            if first["learners"] & second["learners"]:
+                conflicts.append("A learner is scheduled in overlapping sessions across independent timetables.")
             if first["rooms"] & second["rooms"]:
                 conflicts.append("A room is assigned to overlapping lessons across independent timetables.")
     return list(dict.fromkeys(conflicts))
@@ -465,7 +469,7 @@ def validate_timetable_for_publication(connection: Any, school_id: int, profile_
             errors.append("A scheduled lesson uses an inactive or invalid room.")
         placements.append({
             "class_id":key[0],"subject_id":key[1],"teacher_id":key[2],"room_id":room_id,
-            "class_ids":[key[0]],"teacher_ids":[key[2]],
+            "class_ids":[key[0]],"learner_ids":[],"teacher_ids":[key[2]],
             "day_id":day_id,"day_key":"day:"+str(day_id),
             "start_time":str(span[0]["start_time"]),"end_time":str(span[-1]["end_time"]),
             "start_index":start_index,"end_index":start_index + duration - 1,
@@ -525,7 +529,7 @@ def validate_timetable_for_publication(connection: Any, school_id: int, profile_
             "class_id":class_ids[0] if class_ids else 0,
             "subject_id":int(session["subject_id"]) if session["subject_id"] is not None else 0,
             "teacher_id":teacher_ids[0] if teacher_ids else 0,
-            "class_ids":effective_class_ids,"teacher_ids":teacher_ids,
+            "class_ids":effective_class_ids,"learner_ids":learner_ids,"teacher_ids":teacher_ids,
             "room_id":room_id,"day_id":day_id,"day_key":day_key,
             "start_time":str(session["start_time"]),"end_time":str(session["end_time"]),
             "start_index":start_index,"end_index":end_index,
@@ -576,6 +580,8 @@ def validate_timetable_for_publication(connection: Any, school_id: int, profile_
                 errors.append("Two lessons overlap for the same class.")
             if set(first["teacher_ids"]) & set(second["teacher_ids"]):
                 errors.append("A teacher is assigned to overlapping lessons.")
+            if set(first.get("learner_ids", [])) & set(second.get("learner_ids", [])):
+                errors.append("A learner is assigned to overlapping sessions.")
             if first["room_id"] is not None and second["room_id"] is not None and first["room_id"] == second["room_id"]:
                 errors.append("A room is assigned to overlapping lessons.")
     # One combined placement may contain several linked classes; that is not
