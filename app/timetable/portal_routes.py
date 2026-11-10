@@ -40,9 +40,9 @@ def get_portal_timetable_targets(connection, school_id: int, role: str,
                WHERE s.id=? AND s.school_id=?""",
             (int(student_id), int(school_id)),
         ).fetchone()
-        if not student or not student["class_id"]:
+        if not student:
             return []
-        label = str(student["name"]) + " · " + str(student["class_name"] or "Class")
+        label = str(student["name"]) + " · " + str(student["class_name"] or "Unassigned class")
         if student["stream"]:
             label += " " + str(student["stream"])
         return [("student", int(student["id"]), label)]
@@ -54,13 +54,13 @@ def get_portal_timetable_targets(connection, school_id: int, role: str,
                FROM parent_student_links l
                JOIN students s ON s.id=l.student_id AND s.school_id=l.school_id
                LEFT JOIN classes c ON c.id=s.class_id AND c.school_id=s.school_id
-               WHERE l.school_id=? AND l.user_id=? AND s.class_id IS NOT NULL
+               WHERE l.school_id=? AND l.user_id=?
                ORDER BY s.name,s.id""",
             (int(school_id), int(user_id)),
         ).fetchall()
         return [
             ("student", int(row["id"]),
-             str(row["name"]) + " · " + str(row["class_name"] or "Class")
+             str(row["name"]) + " · " + str(row["class_name"] or "Unassigned class")
              + ((" " + str(row["stream"])) if row["stream"] else ""))
             for row in rows
         ]
