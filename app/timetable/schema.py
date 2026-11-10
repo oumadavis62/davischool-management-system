@@ -9,7 +9,7 @@ from __future__ import annotations
 from typing import Any
 
 
-SCHEMA_VERSION = "004"
+SCHEMA_VERSION = "005"
 
 
 _TABLES = (
@@ -19,6 +19,7 @@ _TABLES = (
         name TEXT NOT NULL,
         academic_year TEXT NOT NULL,
         term TEXT NOT NULL,
+        profile_type TEXT NOT NULL DEFAULT 'main',
         status TEXT NOT NULL DEFAULT 'draft',
         week_start TEXT,
         week_end TEXT,
@@ -454,6 +455,7 @@ _TABLES = (
 
 _INDEXES = (
     "CREATE INDEX IF NOT EXISTS idx_ds_tt_profiles_school_year ON ds_timetable_profiles(school_id, academic_year, term)",
+    "CREATE INDEX IF NOT EXISTS idx_ds_tt_profiles_type_status ON ds_timetable_profiles(school_id, academic_year, term, profile_type, status)",
     "CREATE INDEX IF NOT EXISTS idx_ds_tt_profiles_revision ON ds_timetable_profiles(school_id, revision_of_profile_id, revision_no)",
     "CREATE INDEX IF NOT EXISTS idx_ds_tt_days_profile_order ON ds_timetable_days(school_id, profile_id, day_order)",
     "CREATE INDEX IF NOT EXISTS idx_ds_tt_calendar_profile_date ON ds_timetable_calendar_exceptions(school_id, profile_id, exception_date)",
@@ -519,6 +521,7 @@ def ensure_timetable_schema(connection: Any) -> None:
         for col in (cursor.description or [])
     }
     profile_column_types = {
+        "profile_type": "TEXT NOT NULL DEFAULT 'main'",
         "academic_start_date": "TEXT",
         "academic_end_date": "TEXT",
         "approved_by": "TEXT",
