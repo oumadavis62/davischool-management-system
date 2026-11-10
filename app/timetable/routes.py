@@ -1727,7 +1727,10 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
         if not school: return RedirectResponse("/", 303)
         con = get_db()
         try:
-            for order, (code, name) in enumerate((("MON","Monday"),("TUE","Tuesday"),("WED","Wednesday"),("THU","Thursday"),("FRI","Friday")), 1):
+            profile = con.execute("SELECT profile_type FROM ds_timetable_profiles WHERE id=? AND school_id=?", (profile_id, int(school["id"]))).fetchone()
+            profile_type = str(profile["profile_type"] or "main").lower() if profile else "main"
+            standard_days = (("SAT","Saturday"),("SUN","Sunday")) if profile_type == "weekend" else (("MON","Monday"),("TUE","Tuesday"),("WED","Wednesday"),("THU","Thursday"),("FRI","Friday"))
+            for order, (code, name) in enumerate(standard_days, 1):
                 save_day(con, int(school["id"]), profile_id, code, name, order, True)
             return redirect_setup(profile_id, "Standard Monday–Friday school week saved.")
         except TimetableSetupError as exc:
