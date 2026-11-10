@@ -99,7 +99,7 @@ def register_timetable_publishing_routes(app, get_db, get_school_obj, module_pag
         action_submit_html = ""
         if status == "draft":
             action_html = "<button type='button' class='pub-btn' data-open='pub-action-dialog'>Confirm and Submit for approval</button>"
-            action_submit_html = f"""<form id='pub-submit-form' method='post' action='/app/timetable/publishing/submit'><input type='hidden' name='profile_id' value='{pid}'><button type='submit' class='pub-btn' {'disabled' if not readiness or not readiness['ready'] else ''}>Confirm and Submit for approval</button></form>"""
+            action_submit_html = f"""<form id='pub-submit-form' method='post' action='/app/timetable/publishing/submit'><input type='hidden' name='profile_id' value='{pid}'><button type='submit' class='pub-btn'>Confirm and Submit for approval</button></form>"""
         elif status == "pending_approval":
             action_html = "<button type='button' class='pub-btn' data-open='pub-action-dialog' " + ("disabled" if not readiness or not readiness["ready"] else "") + ">Approve & Publish</button>"
             action_submit_html = f"""<form method='post' action='/app/timetable/publishing/publish'><input type='hidden' name='profile_id' value='{pid}'><button class='pub-btn' {'disabled' if not readiness or not readiness['ready'] else ''}>Confirm & Publish</button></form>"""
