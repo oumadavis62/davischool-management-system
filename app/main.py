@@ -1049,12 +1049,20 @@ def home(request: Request):
     var current = sessionStorage.getItem(key) || "";
     var urlId = url.searchParams.get("ds_tab") || "";
     var valid = /^[A-Za-z0-9_-]{16,64}$/;
-    var id = valid.test(urlId) ? urlId : (forceNew ? field.value : (valid.test(current) ? current : field.value));
+    function newTabId() {
+      if (window.crypto && crypto.randomUUID) return crypto.randomUUID().replace(/-/g, "");
+      return Date.now().toString(36) + Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2);
+    }
+    // A fresh browser tab must not adopt a ds_tab copied from another tab's URL.
+    // The server-issued field value is used for forced new tabs; otherwise
+    // create a new identity when this tab has no tab-scoped storage yet.
+    var id = forceNew ? field.value : (valid.test(current) ? current : newTabId());
     if (!valid.test(id)) return;
     field.value = id;
     sessionStorage.setItem(key, id);
-    if (forceNew) {
-      url.searchParams.delete("ds_tab_new");
+    url.searchParams.delete("ds_tab_new");
+    url.searchParams.set("ds_tab", id);
+    if (url.search !== window.location.search) {
       window.history.replaceState(null, "", url.pathname + url.search + url.hash);
     }
   } catch (_) {}
