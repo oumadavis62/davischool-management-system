@@ -163,7 +163,7 @@ class TimetableViewTests(unittest.TestCase):
 
     def test_export_grid_preserves_double_lesson_colspan_and_class_rows(self):
         result = get_timetable_view(self.db, 1, self.profile_id, "school")
-        result["lessons"][0]["duration_periods"] = 2
+        result["lessons"] = [dict(result["lessons"][0], duration_periods=2), *result["lessons"][1:]]
         layout = build_export_grid(result, "school")
         lesson_cell = next(cell for cell in layout["rows"][0]["cells"] if cell["kind"] == "lesson")
         self.assertEqual(lesson_cell["span"], 2)
