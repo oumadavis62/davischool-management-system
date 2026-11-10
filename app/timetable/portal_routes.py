@@ -235,7 +235,7 @@ def register_timetable_portal_routes(app, get_db):
                 int(request.session.get("user_id") or 0),
             )
             profiles = con.execute(
-                """SELECT id,name,academic_year,term,revision_no,published_at
+                """SELECT id,name,academic_year,term,revision_no,published_at,profile_type
                    FROM ds_timetable_profiles
                    WHERE school_id=? AND status='published'
                    ORDER BY academic_year DESC,term DESC,published_at DESC,id DESC""",
@@ -271,7 +271,7 @@ def register_timetable_portal_routes(app, get_db):
                     sections.append(
                         "<section class='tp-card'><div class='tp-head'><div><h2>"
                         + escape(label) + "</h2><p>" + escape(str(profile["academic_year"]))
-                        + " · " + escape(str(profile["term"])) + " · Revision "
+                        + " · " + escape(str(profile["term"])) + " · " + escape(str(profile.get("profile_type") or "main").replace("_", " ").title()) + " · Revision "
                         + escape(str(profile["revision_no"] or 1)) + "</p></div><span>Published</span></div>"
                         + schedule_html + "</section>"
                     )
