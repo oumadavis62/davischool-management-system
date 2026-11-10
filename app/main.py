@@ -1047,8 +1047,9 @@ def home(request: Request):
     var url = new URL(window.location.href);
     var forceNew = url.searchParams.get("ds_tab_new") === "1";
     var current = sessionStorage.getItem(key) || "";
+    var urlId = url.searchParams.get("ds_tab") || "";
     var valid = /^[A-Za-z0-9_-]{16,64}$/;
-    var id = forceNew ? field.value : (valid.test(current) ? current : field.value);
+    var id = valid.test(urlId) ? urlId : (forceNew ? field.value : (valid.test(current) ? current : field.value));
     if (!valid.test(id)) return;
     field.value = id;
     sessionStorage.setItem(key, id);
