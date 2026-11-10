@@ -258,6 +258,47 @@ class TimetableGeneratorTests(unittest.TestCase):
                 (self.profile_id,),
             ).fetchone()[0], 0)
 
+    def test_manual_placement_consumes_matching_session_from_configured_pattern(self):
+        from app.timetable.advanced_setup import save_requirement_session_pattern
+
+        save_period(self.db, 1, self.profile_id, 3, "Period 3", "09:20", "10:00")
+        save_class_requirement(self.db, 1, self.profile_id, 20, 30, 10, 3, 1, 1, False)
+        requirement_id = self.db.execute(
+            """SELECT id FROM ds_timetable_class_requirements
+               WHERE school_id=1 AND profile_id=? AND class_id=20 AND subject_id=30 AND teacher_id=10""",
+            (self.profile_id,),
+        ).fetchone()["id"]
+        save_requirement_session_pattern(
+            self.db, 1, self.profile_id, requirement_id,
+            [{"duration_periods": 2}, {"duration_periods": 1}],
+        )
+        monday = self.db.execute(
+            "SELECT id FROM ds_timetable_days WHERE day_code='MON'"
+        ).fetchone()["id"]
+        first_period = self.db.execute(
+            "SELECT id FROM ds_timetable_periods WHERE period_no=1"
+        ).fetchone()["id"]
+        place_lesson(self.db, 1, self.profile_id, 20, 30, 10, monday, first_period)
+        self.db.execute(
+            """UPDATE ds_timetable_lessons SET duration_periods=2
+               WHERE school_id=1 AND profile_id=? AND class_id=20 AND subject_id=30
+                 AND teacher_id=10 AND generation_run_id IS NULL""",
+            (self.profile_id,),
+        )
+        self.db.commit()
+
+        result = generate_timetable(self.db, 1, self.profile_id, "admin@test")
+        self.assertEqual(result["status"], "completed")
+        self.assertEqual(result["manual_lessons_kept"], 1)
+        self.assertEqual(result["generated_lessons"], 1)
+        rows = self.db.execute(
+            """SELECT duration_periods,generation_run_id FROM ds_timetable_lessons
+               WHERE school_id=1 AND profile_id=? AND class_id=20 AND subject_id=30
+               ORDER BY generation_run_id IS NOT NULL""",
+            (self.profile_id,),
+        ).fetchall()
+        self.assertEqual([int(row["duration_periods"]) for row in rows], [2, 1])
+
     def test_manual_lessons_are_preserved_and_generator_fills_remainder(self):
         day_id = self.db.execute(
             "SELECT id FROM ds_timetable_days WHERE day_code='MON'"
