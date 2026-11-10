@@ -170,10 +170,25 @@ def _cross_profile_conflicts(cur, school_id: int, profile, candidate_session_ids
         return []
     placeholders = ",".join("?" for _ in other_ids)
 
+    def weekday_key(day_code, day_name, session_date=None):
+        if session_date:
+            try:
+                return "weekday:" + str(datetime.strptime(str(session_date), "%Y-%m-%d").weekday())
+            except ValueError:
+                pass
+        names = {"monday": 0, "tuesday": 1, "wednesday": 2, "thursday": 3,
+                 "friday": 4, "saturday": 5, "sunday": 6}
+        name_key = str(day_name or "").strip().lower()
+        if name_key in names:
+            return "weekday:" + str(names[name_key])
+        code_key = str(day_code or "").strip().upper()
+        codes = {"MON": 0, "TUE": 1, "WED": 2, "THU": 3, "FRI": 4, "SAT": 5, "SUN": 6}
+        return "weekday:" + str(codes[code_key]) if code_key in codes else "code:" + code_key
+
     def placements(profile_ids, session_ids=None):
         found = []
         lesson_rows = cur.execute(
-            """SELECT l.class_id,l.teacher_id,l.room_id,d.day_code,NULL AS session_date,
+            """SELECT l.class_id,l.teacher_id,l.room_id,d.day_code,d.day_name,NULL AS session_date,
                       p.start_time,p.end_time
                FROM ds_timetable_lessons l
                JOIN ds_timetable_days d ON d.id=l.day_id AND d.profile_id=l.profile_id
@@ -184,7 +199,7 @@ def _cross_profile_conflicts(cur, school_id: int, profile, candidate_session_ids
         ).fetchall()
         for row in lesson_rows:
             found.append({
-                "day_code": str(row["day_code"] or "").upper(),
+                "day_key": weekday_key(row["day_code"], row["day_name"]),
                 "session_date": None,
                 "start": str(row["start_time"]),
                 "end": str(row["end_time"]),
@@ -202,7 +217,7 @@ def _cross_profile_conflicts(cur, school_id: int, profile, candidate_session_ids
             else:
                 session_id_filter = " AND 1=0"
         session_rows = cur.execute(
-            """SELECT s.id,s.day_id,s.session_date,s.start_time,s.end_time,s.room_id,d.day_code
+            """SELECT s.id,s.day_id,s.session_date,s.start_time,s.end_time,s.room_id,d.day_code,d.day_name
                FROM ds_timetable_sessions s
                LEFT JOIN ds_timetable_days d ON d.id=s.day_id AND d.profile_id=s.profile_id
                WHERE s.school_id=? AND s.profile_id IN (""" + ",".join("?" for _ in profile_ids) + """)
@@ -229,15 +244,9 @@ def _cross_profile_conflicts(cur, school_id: int, profile, candidate_session_ids
                     "SELECT DISTINCT class_id FROM students WHERE school_id=? AND id IN (" + learner_marks + ") AND class_id IS NOT NULL",
                     (school_id, *learner_ids),
                 ).fetchall())
-            day_code = str(row["day_code"] or "").upper()
             session_date = str(row["session_date"] or "")
-            if session_date:
-                try:
-                    day_code = datetime.strptime(session_date, "%Y-%m-%d").strftime("%a").upper()
-                except ValueError:
-                    pass
             found.append({
-                "day_code": day_code,
+                "day_key": weekday_key(row["day_code"], row["day_name"], session_date),
                 "session_date": session_date or None,
                 "start": str(row["start_time"]),
                 "end": str(row["end_time"]),
@@ -253,7 +262,7 @@ def _cross_profile_conflicts(cur, school_id: int, profile, candidate_session_ids
     conflicts = []
     for first in candidate:
         for second in existing:
-            if not first["day_code"] or first["day_code"] != second["day_code"]:
+            if not first["day_key"] or first["day_key"] != second["day_key"]:
                 continue
             if first["session_date"] and second["session_date"] and first["session_date"] != second["session_date"]:
                 continue
