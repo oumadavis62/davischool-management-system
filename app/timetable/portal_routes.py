@@ -68,6 +68,15 @@ def get_portal_timetable_targets(connection, school_id: int, role: str,
 
 
 
+def _subject_code_label(initial: object, name: object) -> str:
+    """Prefer the configured subject code/initial; safely abbreviate if absent."""
+    code = str(initial or "").strip()
+    if code:
+        return code.upper()
+    words = [part for part in str(name or "").replace("&", " ").split() if part]
+    return "".join(part[0] for part in words[:4]).upper() or "LESSON"
+
+
 def build_portal_timetable_rows(view: dict) -> list[dict]:
     """Merge legacy weekly lessons and normalized sessions for portal display."""
     rows = []
@@ -75,7 +84,7 @@ def build_portal_timetable_rows(view: dict) -> list[dict]:
         rows.append({
             "date_day": str(lesson["day_name"]),
             "time": str(lesson["period_label"]) + " · " + str(lesson["start_time"]) + "–" + str(lesson["end_time"]),
-            "subject": str(lesson["subject_name"]),
+            "subject": _subject_code_label(lesson.get("subject_initial"), lesson.get("subject_name")),
             "class_group": str(lesson["class_name"]) + ((" " + str(lesson["stream"])) if lesson["stream"] else ""),
             "teachers": str(lesson["teacher_name"]),
             "venue": str(lesson.get("room_name") or "—"),
@@ -91,7 +100,9 @@ def build_portal_timetable_rows(view: dict) -> list[dict]:
         rows.append({
             "date_day": date_day,
             "time": str(session.get("start_time") or "") + "–" + str(session.get("end_time") or ""),
-            "subject": str(session.get("subject_name") or session.get("programme_name") or session.get("session_type") or "Session"),
+            "subject": (_subject_code_label(session.get("subject_initial"), session.get("subject_name"))
+                        if session.get("subject_name") else
+                        str(session.get("programme_name") or session.get("session_type") or "Session")),
             "class_group": str(session.get("class_names") or "—"),
             "teachers": str(session.get("teacher_names") or "—"),
             "venue": str(session.get("room_name") or "—"),
@@ -200,7 +211,7 @@ def build_teacher_timetable_grid(view: dict, compact: bool = False) -> str:
                     room = str(lesson.get("room_name") or "Room not assigned")
                     cards.append(
                         "<article class='tp-lesson' style='--lesson-color:" + escape(color) + "'>"
-                        "<div class='tp-lesson-top'><b>" + escape(str(lesson.get("subject_name") or "Lesson"))
+                        "<div class='tp-lesson-top'><b>" + escape(_subject_code_label(lesson.get("subject_initial"), lesson.get("subject_name")))
                         + "</b><span>" + str(duration) + "P</span></div>"
                         "<div class='tp-lesson-class'>" + escape(class_label) + "</div>"
                         "<div class='tp-lesson-room'>⌂ " + escape(room) + "</div></article>"
@@ -209,7 +220,7 @@ def build_teacher_timetable_grid(view: dict, compact: bool = False) -> str:
             elif continued:
                 cells.append(
                     "<td class='tp-continued'>↳ " + " · ".join(
-                        escape(str(item.get("subject_name") or "Lesson")) + " continues"
+                        escape(_subject_code_label(item.get("subject_initial"), item.get("subject_name"))) + " continues"
                         for item in continued
                     ) + "</td>"
                 )
