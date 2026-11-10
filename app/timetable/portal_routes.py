@@ -325,4 +325,29 @@ def register_timetable_portal_routes(app, get_db):
             + "".join(sections)
             + "</main></body></html>"
         )
+        if role == "teacher":
+            # Teacher My Timetable must use the same shared portal shell as the
+            # other teacher tabs so its real sidebar and hide/show control remain
+            # available. Keep the timetable markup and its scoped styles intact.
+            from app.new_ui import _school_page
+
+            style_start = body.find("<style>")
+            style_end = body.find("</style>", style_start) + len("</style>")
+            body_start = body.find("<body>")
+            content_start = body.find(">", body_start) + 1
+            content_end = body.rfind("</body>")
+            style_block = body[style_start:style_end]
+            style_block = style_block.replace(
+                "body{margin:0;background:#f1f7f1;color:#173d2b;font:14px Arial,sans-serif}",
+                ""
+            )
+            timetable_content = body[content_start:content_end]
+            timetable_content = timetable_content.replace(
+                "<main class='tp-wrap'>", "<div class='tp-wrap'>", 1
+            )
+            timetable_content = timetable_content.replace("</main>", "</div>", 1)
+            return _school_page(request, "My Timetable", style_block + timetable_content)
+
+        # Parent and student timetable views retain their existing standalone
+        # presentation; the shared teacher shell is specifically for teachers.
         return HTMLResponse(body)
