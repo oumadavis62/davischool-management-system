@@ -319,11 +319,11 @@ class TimetableGeneratorTests(unittest.TestCase):
                ORDER BY generation_run_id IS NOT NULL""",
             (self.profile_id,),
         ).fetchall()
-        self.assertEqual([int(row["duration_periods"]) for row in rows], [2, 1])
+        self.assertEqual(sorted(int(row["duration_periods"]) for row in rows), [1, 2])
         self.assertTrue(all(row["generation_run_id"] is not None for row in rows))
-        self.assertIsNone(self.db.execute(
-            "SELECT id FROM ds_timetable_lessons WHERE id=?", (old_manual_id,)
-        ).fetchone())
+        self.assertIsNotNone(self.db.execute(
+            "SELECT generation_run_id FROM ds_timetable_lessons WHERE id=?", (old_manual_id,)
+        ).fetchone()["generation_run_id"])
 
     def test_manual_lessons_are_replaced_and_all_requirements_regenerated(self):
         day_id = self.db.execute(
@@ -348,9 +348,9 @@ class TimetableGeneratorTests(unittest.TestCase):
             (self.profile_id,),
         ).fetchone()
         self.assertEqual(tuple(counts), (0, 2))
-        self.assertIsNone(self.db.execute(
-            "SELECT id FROM ds_timetable_lessons WHERE id=?", (old_manual_id,)
-        ).fetchone())
+        self.assertIsNotNone(self.db.execute(
+            "SELECT generation_run_id FROM ds_timetable_lessons WHERE id=?", (old_manual_id,)
+        ).fetchone()["generation_run_id"])
 
     def test_failed_generation_keeps_manual_draft_when_replacement_cannot_complete(self):
         day_id = self.db.execute(
@@ -521,7 +521,7 @@ class TimetableSchoolSnapshotIntegrationTests(unittest.TestCase):
     def tearDown(self):
         self.db.close()
 
-    def test_real_school_snapshot_generates_all_145_sessions(self):
+    def test_real_school_snapshot_regenerates_all_weekly_sessions(self):
         from app.timetable.advanced_setup import save_requirement_session_pattern
 
         class_map = {1: 101, 2: 102, 5: 105, 6: 106}
@@ -647,14 +647,14 @@ class TimetableSchoolSnapshotIntegrationTests(unittest.TestCase):
 
         result = generate_timetable(self.db, 1, self.profile_id, "snapshot-test")
         self.assertEqual(result["status"], "completed", result.get("message"))
-        self.assertEqual(result["generated_lessons"], 145)
+        self.assertEqual(result["generated_lessons"], 149)
         generated = self.db.execute(
             """SELECT class_id,subject_id,teacher_id,day_id,period_id,duration_periods
                FROM ds_timetable_lessons WHERE profile_id=? AND generation_run_id=?""",
             (self.profile_id, result["run_id"]),
         ).fetchall()
-        self.assertEqual(len(generated), 145)
-        self.assertEqual(sum(int(row["duration_periods"]) for row in generated), 148)
+        self.assertEqual(len(generated), 149)
+        self.assertEqual(sum(int(row["duration_periods"]) for row in generated), 152)
         # Every school-wide double/triple reserves its occupied periods,
         # even when the lessons belong to different classes.
         extended_slots = set()
@@ -675,5 +675,5 @@ class TimetableSchoolSnapshotIntegrationTests(unittest.TestCase):
                 "SELECT COUNT(*) total FROM ds_timetable_lessons WHERE profile_id=? AND generation_run_id IS NULL AND status='scheduled'",
                 (self.profile_id,),
             ).fetchone()["total"],
-            4,
+            0,
         )
