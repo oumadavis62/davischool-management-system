@@ -277,12 +277,16 @@ def register_timetable_portal_routes(app, get_db):
             selected_type = request.query_params.get("profile_type") or (
                 str(all_profiles[0]["profile_type"] or "main") if all_profiles else ""
             )
+            selected_profile = request.query_params.get("profile_id") or (
+                str(all_profiles[0]["id"]) if all_profiles else ""
+            )
             if role == "teacher" and all_profiles:
                 profiles = [
                     p for p in all_profiles
                     if str(p["academic_year"]) == selected_year
                     and str(p["term"]) == selected_term
                     and str(p["profile_type"] or "main") == selected_type
+                    and str(p["id"]) == selected_profile
                 ]
             else:
                 profiles = all_profiles
@@ -298,6 +302,15 @@ def register_timetable_portal_routes(app, get_db):
             filter_html = ""
             if role == "teacher" and all_profiles:
                 type_label = lambda value: value.replace("_", " ").title()
+                profile_labels = {
+                    str(p["id"]): (
+                        str(p["name"]) + " · " + str(p["academic_year"])
+                        + " · " + str(p["term"]) + " · "
+                        + type_label(str(p["profile_type"] or "main"))
+                        + " · Rev " + str(p["revision_no"] or 1)
+                    )
+                    for p in all_profiles
+                }
                 filter_html = (
                     "<form class='tp-filters' method='get' action='/app/timetable/my'>"
                     "<label>Academic Year<select name='academic_year' onchange='this.form.submit()'>"
@@ -308,6 +321,14 @@ def register_timetable_portal_routes(app, get_db):
                     + "</select></label>"
                     "<label>Timetable Type<select name='profile_type' onchange='this.form.submit()'>"
                     + filter_options(profile_types, selected_type, type_label)
+                    + "</select></label>"
+                    "<label>Published Timetable<select name='profile_id' onchange='this.form.submit()'>"
+                    + "".join(
+                        "<option value='" + escape(pid, quote=True) + "'"
+                        + (" selected" if pid == selected_profile else "") + ">"
+                        + escape(label) + "</option>"
+                        for pid, label in profile_labels.items()
+                    )
                     + "</select></label></form>"
                 )
 
