@@ -59,10 +59,13 @@ def get_timetable_view(connection: Any, school_id: int, profile_id: int, view_ty
                WHERE s.id=? AND s.school_id=?""",
             (target_id, school_id),
         ).fetchone()
-        if not target or not target["class_id"]:
-            raise TimetableSetupError("Select a learner linked to a class in this school.")
-        where = " AND l.class_id=?"
-        params.append(int(target["class_id"]))
+        if not target:
+            raise TimetableSetupError("Select a learner belonging to this school.")
+        if target["class_id"]:
+            where = " AND l.class_id=?"
+            params.append(int(target["class_id"]))
+        else:
+            where = " AND 1=0"
         title = str(target["name"]) + " — learner timetable"
     elif view_type == "teacher":
         target = cur.execute(
