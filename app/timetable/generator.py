@@ -1354,6 +1354,17 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
                VALUES(?,?,?,?,?,?,?,?)""",
             (school_id, profile_id, lesson_id, "AUTO_GENERATE", None, json.dumps(dict(after), default=str, sort_keys=True), created_by, _now()),
         )
+    # Do not commit a generated schedule that collides with another active
+    # timetable programme for the same school and overlapping academic dates.
+    from app.timetable.publishing import _cross_profile_conflicts
+    profile_for_conflicts = cur.execute(
+        "SELECT * FROM ds_timetable_profiles WHERE id=? AND school_id=?",
+        (profile_id, school_id),
+    ).fetchone()
+    cross_conflicts = _cross_profile_conflicts(cur, school_id, profile_for_conflicts)
+    if cross_conflicts:
+        raise TimetableSetupError("Generation found cross-timetable conflicts: " + " ".join(cross_conflicts[:3]))
+
     day_loads = {}
     for placement in placements:
         day_key = int(placement["day_id"])
@@ -1782,11 +1793,19 @@ def generate_advanced_instructional_sessions(connection: Any, school_id: int,
                 generation_run_id=run_id, ignore_generated_conflicts=True,
                 ignore_generated_legacy_conflicts=True,
             ))
+        if not defer_replacement:
+            from app.timetable.publishing import _cross_profile_conflicts
+            profile_for_conflicts = cur.execute(
+                "SELECT * FROM ds_timetable_profiles WHERE id=? AND school_id=?",
+                (profile_id, school_id),
+            ).fetchone()
+            cross_conflicts = _cross_profile_conflicts(cur, school_id, profile_for_conflicts)
+            if cross_conflicts:
+                raise TimetableSetupError("Advanced generation found cross-timetable conflicts: " + " ".join(cross_conflicts[:3]))
         old_rows = cur.execute(
             """SELECT id FROM ds_timetable_sessions
                WHERE school_id=? AND profile_id=? AND schedule_layer='instructional'
-                 AND generation_run_id IS NOT NULL AND generation_run_id<>?
-                 AND status='scheduled'""",
+                 AND generation_run_id IS NOT NULL AND generation_run_id<>?""
             (school_id, profile_id, run_id),
         ).fetchall()
         old_ids = [int(row["id"]) for row in old_rows]
@@ -2173,6 +2192,14 @@ def generate_dated_advanced_sessions(connection: Any, school_id: int, profile_id
                 scheduling_requirement_id=task["requirement_id"],
                 pattern_session_no=task["session_no"], created_by=created_by,
             ))
+        from app.timetable.publishing import _cross_profile_conflicts
+        profile_for_conflicts = cur.execute(
+            "SELECT * FROM ds_timetable_profiles WHERE id=? AND school_id=?",
+            (profile_id, school_id),
+        ).fetchone()
+        cross_conflicts = _cross_profile_conflicts(cur, school_id, profile_for_conflicts)
+        if cross_conflicts:
+            raise TimetableSetupError("Dated generation found cross-timetable conflicts: " + " ".join(cross_conflicts[:3]))
     except Exception:
         if created:
             marks = ",".join("?" for _ in created)
