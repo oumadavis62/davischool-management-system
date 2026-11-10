@@ -215,6 +215,7 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                     if cell["span"]>1:
                         col=len(cells)-1
                         span_commands.append(("SPAN",(col,row_index),(col+cell["span"]-1,row_index)))
+                        cells.extend([""] * (cell["span"]-1))
             data.append(cells)
         column_count=len(data[0])
         first_width=42 if not layout["show_class_column"] else 76
