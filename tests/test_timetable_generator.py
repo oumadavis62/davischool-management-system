@@ -352,6 +352,47 @@ class TimetableGeneratorTests(unittest.TestCase):
             "SELECT id FROM ds_timetable_lessons WHERE id=?", (old_manual_id,)
         ).fetchone())
 
+    def test_failed_generation_keeps_manual_draft_when_replacement_cannot_complete(self):
+        day_id = self.db.execute(
+            "SELECT id FROM ds_timetable_days WHERE day_code='MON'"
+        ).fetchone()[0]
+        period_id = self.db.execute(
+            "SELECT id FROM ds_timetable_periods WHERE period_no=1"
+        ).fetchone()[0]
+        self.db.execute(
+            """INSERT INTO ds_timetable_lessons
+               (school_id,profile_id,class_id,subject_id,teacher_id,day_id,period_id,
+                duration_periods,generation_run_id,status,created_by,created_at,updated_at)
+               VALUES(1,?,?,?,?,?,?,1,NULL,'scheduled','admin@test','2026-01-01','2026-01-01')""",
+            (self.profile_id,20,30,10,day_id,period_id),
+        )
+        self.db.commit()
+        manual_id = self.db.execute(
+            "SELECT id FROM ds_timetable_lessons WHERE generation_run_id IS NULL"
+        ).fetchone()[0]
+        for day in self.db.execute(
+            "SELECT id FROM ds_timetable_days WHERE school_id=1 AND profile_id=?",
+            (self.profile_id,),
+        ).fetchall():
+            for period in self.db.execute(
+                "SELECT id FROM ds_timetable_periods WHERE school_id=1 AND profile_id=?",
+                (self.profile_id,),
+            ).fetchall():
+                self.db.execute(
+                    """INSERT INTO ds_timetable_teacher_availability
+                       (school_id,profile_id,teacher_id,day_id,period_id,availability,reason)
+                       VALUES(1,?,?,?,?, 'unavailable','Unavailable for test')""",
+                    (self.profile_id,10,day["id"],period["id"]),
+                )
+        self.db.commit()
+
+        result = generate_timetable(self.db, 1, self.profile_id, "admin@test")
+        self.assertEqual(result["status"], "failed")
+        self.assertIsNotNone(self.db.execute(
+            "SELECT id FROM ds_timetable_lessons WHERE id=? AND generation_run_id IS NULL",
+            (manual_id,),
+        ).fetchone())
+
     def test_failed_generation_keeps_previous_automatic_schedule(self):
         first = generate_timetable(self.db, 1, self.profile_id, "admin@test")
         self.assertEqual(first["status"], "completed")
