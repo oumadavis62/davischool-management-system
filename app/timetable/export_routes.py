@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from io import BytesIO
+import logging
 import re
 from xml.sax.saxutils import escape as xml_escape
 
@@ -10,6 +11,8 @@ from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
 
 from app.timetable.views import get_timetable_view
 from app.timetable.setup import TimetableSetupError
+
+logger = logging.getLogger(__name__)
 
 
 def register_timetable_export_routes(app, get_db, get_school_obj):
@@ -32,6 +35,13 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
         finally:
             con.close()
 
+    def field_value(row, key, default=None):
+        try:
+            value = row[key]
+            return default if value is None else value
+        except (KeyError, IndexError, TypeError):
+            return default
+
     def filename_prefix(school, result):
         raw = str(school["name"] or "School") + "-" + str(result["title"] or "Timetable")
         safe = re.sub(r"[^A-Za-z0-9_-]+", "-", raw).strip("-")
@@ -51,6 +61,107 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                     if start + offset < len(periods):
                         continued[(int(lesson["day_id"]),int(periods[start+offset]["id"]))] = lesson
         return starts, continued
+
+    @app.get("/app/timetable/export/print", response_class=HTMLResponse)
+    def timetable_export_print(
+        request: Request,
+        profile_id: int,
+        view_type: str = "school",
+        class_id: int = 0,
+        teacher_id: int = 0,
+        room_id: int = 0,
+        remedial_display: str = "combined",
+    ):
+        school, result, error = load_view(request, profile_id, view_type, class_id, teacher_id, room_id)
+        if error:
+            return error
+        timeline = sorted(
+            [(str(p["start_time"]), "period", p) for p in result["periods"]] +
+            [(str(br["start_time"]), "break", br) for br in result.get("breaks", [])],
+            key=lambda item: (item[0], 0 if item[1] == "period" else 1),
+        )
+        periods = [item for _, kind, item in timeline if kind == "period"]
+        period_index = {int(p["id"]): i for i, p in enumerate(periods)}
+        starts, continued = cell_map(result)
+        room_view = view_type == "room"
+        resource_view = view_type in ("teacher", "room")
+        class_rows = {}
+        for lesson in result["lessons"]:
+            class_rows.setdefault(int(lesson["class_id"]), lesson)
+        if view_type == "class" and result.get("target"):
+            class_rows = {int(result["target"]["id"]): None}
+        if view_type == "school":
+            class_rows = {int(row["class_id"]): row for row in result.get("allocation_classes", [])}
+            for lesson in result["lessons"]:
+                class_rows.setdefault(int(lesson["class_id"]), lesson)
+        if resource_view:
+            class_rows = {0: None}
+        if not class_rows:
+            class_rows = {0: None}
+        headers = ["Day"]
+        if view_type == "school":
+            headers.append("Class / Stream")
+        for _, kind, item in timeline:
+            headers.append(str(item["label"]) + " " + str(item["start_time"]) + "–" + str(item["end_time"]))
+        rows_html = []
+        for day in result["days"]:
+            for class_id_value, class_row in class_rows.items():
+                cells = ["<th>" + escape(str(day["day_name"])) + "</th>"]
+                if view_type == "school":
+                    if class_row is None:
+                        class_label = "—"
+                    else:
+                        class_label = str(class_row.get("class_name") or class_row.get("name") or "") + (" " + str(class_row.get("stream") or "") if class_row.get("stream") else "")
+                    cells.append("<th>" + escape(class_label) + "</th>")
+                for _, kind, item in timeline:
+                    if kind == "break":
+                        cells.append("<td class='break'>" + escape(str(item["label"])) + "</td>")
+                        continue
+                    period_id = int(item["id"])
+                    if resource_view:
+                        lessons = [
+                            lesson for lesson in result["lessons"]
+                            if int(lesson["day_id"]) == int(day["id"]) and int(lesson["period_id"]) == period_id
+                        ]
+                    else:
+                        lessons = starts.get((int(day["id"]), period_id), [])
+                        if view_type != "school":
+                            lessons = [lesson for lesson in lessons if int(lesson["class_id"]) == class_id_value]
+                    values = []
+                    for lesson in lessons:
+                        class_label = str(lesson["class_name"]) + (" " + str(lesson["stream"]) if lesson["stream"] else "")
+                        detail = "<b>" + escape(str(lesson["subject_name"])) + "</b>"
+                        if resource_view:
+                            detail += "<br>" + escape(class_label)
+                        if view_type != "teacher":
+                            detail += "<br>" + escape(str(lesson["teacher_name"]))
+                        if not room_view and lesson["room_name"]:
+                            detail += "<br>" + escape(str(lesson["room_name"]))
+                        values.append(detail)
+                    if not values:
+                        next_period = period_index.get(period_id)
+                        carry = []
+                        if next_period is not None:
+                            for lesson in result["lessons"]:
+                                start = period_index.get(int(lesson["period_id"]))
+                                if int(lesson["day_id"]) == int(day["id"]) and start is not None and start < next_period < start + max(1, int(lesson["duration_periods"] or 1)):
+                                    if not resource_view and view_type != "school" and int(lesson["class_id"]) != class_id_value:
+                                        continue
+                                    carry.append("↳ " + escape(str(lesson["subject_name"])) + " continues")
+                        values = carry or ["—"]
+                    cells.append("<td>" + "<br><hr>".join(values) + "</td>")
+                rows_html.append("<tr>" + "".join(cells) + "</tr>")
+        table_head = "".join("<th>" + escape(label) + "</th>" for label in headers)
+        school_name = escape(str(field_value(school, "name", "School")))
+        title = escape(str(result["title"]))
+        profile_meta = escape(str(result["profile"]["academic_year"]) + " · " + str(result["profile"]["term"]))
+        html = f"""<!doctype html><html><head><meta charset="utf-8"><title>{title}</title>
+        <style>body{{font:12px Arial,sans-serif;color:#173d2b;margin:18px}}h1{{font-size:18px;text-align:center;margin:0 0 5px}}h2{{font-size:14px;text-align:center;margin:0 0 5px}}p{{text-align:center;margin:0 0 14px;color:#526b59}}table{{width:100%;border-collapse:collapse;table-layout:fixed}}th,td{{border:1px solid #b9cbbb;padding:6px;vertical-align:top;overflow-wrap:anywhere}}thead th{{background:#17633b;color:#fff}}tbody th{{background:#edf5ee}}td.break{{background:#f1ead8;color:#75551d;text-align:center}}.actions{{display:flex;justify-content:center;gap:8px;margin:0 0 14px}}button{{padding:9px 16px;border:0;border-radius:7px;background:#17633b;color:white;font-weight:bold}}@page{{size:A4 landscape;margin:8mm}}@media print{{body{{margin:0}}.actions{{display:none}}tr{{break-inside:avoid}}}}</style></head>
+        <body><div class="actions"><button onclick="window.print()">Print timetable</button></div>
+        <h1>{school_name}</h1><h2>{title}</h2><p>{profile_meta}</p>
+        <table><thead><tr>{table_head}</tr></thead><tbody>{"".join(rows_html)}</tbody></table>
+        <script>window.addEventListener("load",()=>setTimeout(()=>window.print(),250));</script></body></html>"""
+        return HTMLResponse(html)
 
     @app.get("/app/timetable/export/pdf")
     def timetable_export_pdf(
@@ -82,7 +193,7 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
         def pdf_text(value):
             return xml_escape(str(value).encode("latin-1", "replace").decode("latin-1"))
         school_name = pdf_text(str(school["name"] or "School"))
-        address = pdf_text(str(school["address"] or ""))
+        address = pdf_text(str(field_value(school, "address", field_value(school, "location", "")) or ""))
         story = [Paragraph(school_name, school_style)]
         if address:
             story.append(Paragraph(address, styles["Normal"]))
