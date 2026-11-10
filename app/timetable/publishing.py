@@ -134,6 +134,116 @@ def _clone_advanced_profile_data(cur, school_id: int, source_profile_id: int, ne
 
 
 
+
+def _cross_profile_conflicts(cur, school_id: int, profile) -> list[str]:
+    """Detect teacher, class and room overlaps against other active programmes.
+
+    A revision is compared with other independent programmes, not with its own
+    currently-published predecessor; this keeps the normal revision workflow
+    usable while still protecting the rest of the school's timetable.
+    """
+    root_id = int(profile["revision_of_profile_id"] or profile["id"])
+    other_profiles = cur.execute(
+        """SELECT id,name,profile_type FROM ds_timetable_profiles
+           WHERE school_id=? AND academic_year=? AND term=?
+             AND status IN ('published','pending_approval')
+             AND COALESCE(revision_of_profile_id,id)<>?""",
+        (school_id, profile["academic_year"], profile["term"], root_id),
+    ).fetchall()
+    other_ids = [int(row["id"]) for row in other_profiles]
+    if not other_ids:
+        return []
+    placeholders = ",".join("?" for _ in other_ids)
+
+    def placements(profile_ids):
+        found = []
+        lesson_rows = cur.execute(
+            """SELECT l.class_id,l.teacher_id,l.room_id,d.day_code,NULL AS session_date,
+                      p.start_time,p.end_time
+               FROM ds_timetable_lessons l
+               JOIN ds_timetable_days d ON d.id=l.day_id AND d.profile_id=l.profile_id
+               JOIN ds_timetable_periods p ON p.id=l.period_id AND p.profile_id=l.profile_id
+               WHERE l.school_id=? AND l.profile_id IN (""" + ",".join("?" for _ in profile_ids) + """)
+                 AND l.status='scheduled'""",
+            (school_id, *profile_ids),
+        ).fetchall()
+        for row in lesson_rows:
+            found.append({
+                "day_code": str(row["day_code"] or "").upper(),
+                "session_date": None,
+                "start": str(row["start_time"]),
+                "end": str(row["end_time"]),
+                "classes": {int(row["class_id"])},
+                "teachers": {int(row["teacher_id"])},
+                "rooms": {int(row["room_id"])} if row["room_id"] is not None else set(),
+            })
+        session_rows = cur.execute(
+            """SELECT s.id,s.day_id,s.session_date,s.start_time,s.end_time,s.room_id,d.day_code
+               FROM ds_timetable_sessions s
+               LEFT JOIN ds_timetable_days d ON d.id=s.day_id AND d.profile_id=s.profile_id
+               WHERE s.school_id=? AND s.profile_id IN (""" + ",".join("?" for _ in profile_ids) + """)
+                 AND s.status='scheduled'""",
+            (school_id, *profile_ids),
+        ).fetchall()
+        for row in session_rows:
+            sid = int(row["id"])
+            classes = {int(x["class_id"]) for x in cur.execute(
+                "SELECT class_id FROM ds_timetable_session_classes WHERE school_id=? AND session_id=?",
+                (school_id, sid),
+            ).fetchall()}
+            teachers = {int(x["teacher_id"]) for x in cur.execute(
+                "SELECT teacher_id FROM ds_timetable_session_teachers WHERE school_id=? AND session_id=?",
+                (school_id, sid),
+            ).fetchall()}
+            if not classes:
+                learner_ids = [int(x["student_id"]) for x in cur.execute(
+                    "SELECT student_id FROM ds_timetable_session_learners WHERE school_id=? AND session_id=?",
+                    (school_id, sid),
+                ).fetchall()]
+                if learner_ids:
+                    learner_marks = ",".join("?" for _ in learner_ids)
+                    classes.update(int(x["class_id"]) for x in cur.execute(
+                        "SELECT DISTINCT class_id FROM students WHERE school_id=? AND id IN (" + learner_marks + ") AND class_id IS NOT NULL",
+                        (school_id, *learner_ids),
+                    ).fetchall())
+            day_code = str(row["day_code"] or "").upper()
+            session_date = str(row["session_date"] or "")
+            if session_date:
+                try:
+                    day_code = datetime.strptime(session_date, "%Y-%m-%d").strftime("%a").upper()
+                except ValueError:
+                    pass
+            found.append({
+                "day_code": day_code,
+                "session_date": session_date or None,
+                "start": str(row["start_time"]),
+                "end": str(row["end_time"]),
+                "classes": classes,
+                "teachers": teachers,
+                "rooms": {int(row["room_id"])} if row["room_id"] is not None else set(),
+            })
+        return found
+
+    candidate = placements([int(profile["id"])])
+    existing = placements(other_ids)
+    conflicts = []
+    for first in candidate:
+        for second in existing:
+            if not first["day_code"] or first["day_code"] != second["day_code"]:
+                continue
+            if first["session_date"] and second["session_date"] and first["session_date"] != second["session_date"]:
+                continue
+            if not (first["start"] < second["end"] and first["end"] > second["start"]):
+                continue
+            if first["teachers"] & second["teachers"]:
+                conflicts.append("A teacher is scheduled in overlapping lessons across independent timetables.")
+            if first["classes"] & second["classes"]:
+                conflicts.append("A class or learner group is scheduled in overlapping lessons across independent timetables.")
+            if first["rooms"] & second["rooms"]:
+                conflicts.append("A room is assigned to overlapping lessons across independent timetables.")
+    return list(dict.fromkeys(conflicts))
+
+
 def validate_timetable_for_publication(connection: Any, school_id: int, profile_id: int) -> dict:
     cur = connection.cursor()
     profile = cur.execute(
@@ -235,16 +345,18 @@ def validate_timetable_for_publication(connection: Any, school_id: int, profile_
         (school_id,),
     ).fetchall()
     allocation_keys = {(int(a["class_id"]),int(a["subject_id"]),int(a["teacher_id"])) for a in allocations}
+    is_main_profile = str(profile["profile_type"] or "main").strip().lower() == "main"
     requirement_map = {
         (int(r["class_id"]),int(r["subject_id"]),int(r["teacher_id"])): r
         for r in requirements
     }
-    for key in sorted(allocation_keys - set(requirement_map) - advanced_coverage):
-        errors.append("A current class/subject/teacher allocation is missing its weekly lesson requirement.")
-        break
-    for key in sorted(set(requirement_map) - allocation_keys):
-        errors.append("A weekly requirement no longer matches a current teacher allocation.")
-        break
+    if is_main_profile:
+        for key in sorted(allocation_keys - set(requirement_map) - advanced_coverage):
+            errors.append("A current class/subject/teacher allocation is missing its weekly lesson requirement.")
+            break
+        for key in sorted(set(requirement_map) - allocation_keys):
+            errors.append("A weekly requirement no longer matches a current teacher allocation.")
+            break
 
     breaks = cur.execute(
         "SELECT * FROM ds_timetable_breaks WHERE school_id=? AND profile_id=?",
@@ -283,7 +395,7 @@ def validate_timetable_for_publication(connection: Any, school_id: int, profile_
         lesson_counts[key] = lesson_counts.get(key,0) + duration
         daily_key = key + (int(lesson["day_id"]),)
         daily_counts[daily_key] = daily_counts.get(daily_key,0) + 1
-        if key not in allocation_keys:
+        if is_main_profile and key not in allocation_keys:
             errors.append("A scheduled lesson references a class/subject/teacher combination that is no longer allocated.")
         day_id = int(lesson["day_id"])
         if day_id not in day_ids:
@@ -440,6 +552,7 @@ def validate_timetable_for_publication(connection: Any, school_id: int, profile_
                 continue
             if first["end_index"] + 1 == second["start_index"] or second["end_index"] + 1 == first["start_index"]:
                 errors.append("A teacher cannot teach different subjects to the same class in consecutive periods.")
+    errors.extend(_cross_profile_conflicts(cur, school_id, profile))
     errors = list(dict.fromkeys(errors))
     return {
         "ready": not errors,
@@ -540,10 +653,12 @@ def publish_timetable(connection: Any, school_id: int, profile_id: int, actor: s
         ).fetchone()["id"])
     # A newly published revision becomes current; previous published revisions
     # remain archived and fully viewable for audit/history.
+    revision_root_id = int(profile["revision_of_profile_id"] or profile["id"])
     previous = cur.execute(
         """SELECT id FROM ds_timetable_profiles
-           WHERE school_id=? AND academic_year=? AND term=? AND status='published' AND id<>?""",
-        (school_id,profile["academic_year"],profile["term"],profile_id),
+           WHERE school_id=? AND status='published' AND id<>?
+             AND COALESCE(revision_of_profile_id,id)=?""",
+        (school_id,profile_id,revision_root_id),
     ).fetchall()
     for old in previous:
         cur.execute(
@@ -591,11 +706,11 @@ def create_revision(connection: Any, school_id: int, source_profile_id: int, act
     name = str(source["name"] or "Timetable").split(" · Revision ")[0] + " · Revision " + str(revision_no)
     cur.execute(
         """INSERT INTO ds_timetable_profiles
-           (school_id,name,academic_year,term,status,week_start,week_end,academic_start_date,academic_end_date,
+           (school_id,name,academic_year,term,profile_type,status,week_start,week_end,academic_start_date,academic_end_date,
             settings_json,created_by,created_at,updated_at,revision_no,revision_of_profile_id)
-           VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+           VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
         (
-            school_id,name,source["academic_year"],source["term"],"draft",source["week_start"],source["week_end"],
+            school_id,name,source["academic_year"],source["term"],source["profile_type"] or "main","draft",source["week_start"],source["week_end"],
             source["academic_start_date"],source["academic_end_date"],source["settings_json"],actor,now,now,
             revision_no,root_id,
         ),
