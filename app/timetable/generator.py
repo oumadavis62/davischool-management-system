@@ -154,6 +154,11 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
     deadline = deadline if deadline is not None else time.monotonic() + GENERATION_TIME_LIMIT_SECONDS
     cur = connection.cursor()
     profile = _profile(cur, school_id, profile_id)
+    profile_details = cur.execute(
+        "SELECT * FROM ds_timetable_profiles WHERE id=? AND school_id=?",
+        (profile_id, school_id),
+    ).fetchone()
+    is_main_profile = str(profile_details["profile_type"] or "main").strip().lower() == "main"
     active_run_sql = """SELECT id FROM ds_timetable_generation_runs
            WHERE school_id=? AND profile_id=? AND status='running'"""
     active_run_params = [school_id, profile_id]
@@ -231,8 +236,8 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
     }
     if not requirements and not normalized_coverage:
         raise TimetableSetupError("Configure at least one weekly lesson requirement or shared instructional session before automatic generation.")
-    missing_requirements = allocation_keys - requirement_keys
-    stale_requirements = requirement_keys - allocation_keys
+    missing_requirements = allocation_keys - requirement_keys if is_main_profile else set()
+    stale_requirements = requirement_keys - allocation_keys if is_main_profile else set()
     if missing_requirements:
         raise TimetableSetupError(
             str(len(missing_requirements)) + " existing class/subject/teacher allocations are missing weekly lesson requirements. Configure every allocation before generating a complete timetable."
