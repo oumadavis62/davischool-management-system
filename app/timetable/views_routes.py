@@ -350,7 +350,7 @@ def register_timetable_view_routes(app, get_db, get_school_obj, module_page):
         .tv-wrap .tb-grid-compact .tb-lesson{{padding:3px 2px;min-height:48px;gap:1px;border-left-width:2px;border-radius:5px}}
         .tv-wrap .tb-grid-compact .tb-subject-initials{{font-size:9px;letter-spacing:0}}
         .tv-wrap .tb-grid-compact .tb-lesson-top{{font-size:8px;gap:1px}}
-        .tv-wrap .tb-grid-compact .tb-lesson-top span{{top:2px;right:2px;font-size:7px;padding:1px 3px}}
+        .tv-wrap .tb-grid-compact .tb-lesson-top span{{position:absolute;top:2px;right:2px;font-size:7px;padding:1px 3px}}
         .tv-wrap .tb-grid-compact .tb-meta{{font-size:7px;line-height:1.05}}
         .tv-wrap .tb-grid-compact .tb-teacher-initials{{min-width:15px;height:13px;padding:0 2px;font-size:7px}}
         .tv-wrap .tb-grid-compact .tb-continued-item{{padding:2px;font-size:7px;line-height:1.1}}
