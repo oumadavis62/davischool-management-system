@@ -340,6 +340,11 @@ def register_timetable_view_routes(app, get_db, get_school_obj, module_page):
         @media print{{.tv-wrap{{padding:0;max-width:none;background:#fff}}.tv-wrap .tv-grid-scroll{{overflow:visible;border:1px solid #999}}.tv-wrap .tb-grid{{min-width:0}}.tv-wrap .tb-grid thead th{{position:static;background:#347b50!important;color:#fff!important}}.tv-wrap .tb-grid .tb-cell{{min-width:0}}}}
         /* Match the teacher portal's non-main programme density; main stays unchanged. */
         .tv-wrap .tb-grid-compact{{min-width:500px;table-layout:fixed}}
+        .tv-wrap .tb-grid-compact .tb-day-heading{{width:42px;min-width:42px;max-width:42px;padding:5px 2px;font-size:9px;overflow-wrap:anywhere}}
+        .tv-wrap .tb-grid-compact .tb-class-heading{{left:42px}}
+        .tv-wrap .tb-grid-compact thead th.tb-break-heading{{width:34px;min-width:34px;max-width:34px;padding:5px 1px;font-size:8px;overflow-wrap:anywhere;white-space:normal}}
+        .tv-wrap .tb-grid-compact .tb-break-cell{{width:34px;min-width:34px;max-width:34px;padding:4px 2px}}
+        .tv-wrap .tb-grid .tb-break-cell b{{writing-mode:vertical-rl;text-orientation:mixed;display:flex;flex-direction:column;justify-content:space-between;align-items:center;width:100%;height:100%;min-height:100%;vertical-align:middle;line-height:1;font-size:18px;font-weight:900;letter-spacing:.12em;white-space:nowrap}}
         .tv-wrap .tb-grid-compact thead th.tb-period-heading{{width:41px;min-width:41px;max-width:41px;padding:5px 2px;font-size:9px;overflow-wrap:anywhere}}
         .tv-wrap .tb-grid-compact tbody td.tb-cell{{width:41px;min-width:41px;max-width:41px;padding:2px;overflow:hidden}}
         .tv-wrap .tb-grid-compact .tb-lesson{{padding:3px 2px;min-height:48px;gap:1px;border-left-width:2px;border-radius:5px}}
