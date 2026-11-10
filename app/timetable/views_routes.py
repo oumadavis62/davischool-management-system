@@ -356,6 +356,7 @@ def register_timetable_view_routes(app, get_db, get_school_obj, module_page):
         .tv-wrap .tb-grid-compact .tb-continued-item{{padding:2px;font-size:7px;line-height:1.1}}
         .tv-wrap .tb-grid-compact .tb-break-heading{{width:34px;min-width:34px;max-width:34px}}
         .tv-wrap .tb-grid-compact .tb-break-cell{{width:34px;min-width:34px;max-width:34px;padding:0;position:relative}}
+        .tv-wrap .tb-grid .tb-break-cell{{position:relative;padding:0}}
         .tv-wrap .tb-grid .tb-break-cell b{{position:absolute;inset:3px 0;display:flex;flex-direction:column;justify-content:space-evenly;align-items:center;white-space:nowrap;overflow:hidden;line-height:1.0}}
         .tv-wrap .tb-grid .tb-break-cell b i{{display:block;font-style:normal;font-size:clamp(20px,3.4vh,34px);font-weight:950;line-height:1;letter-spacing:0}}
         .tv-wrap .tb-grid .tb-week-break{{vertical-align:middle!important}}
