@@ -154,9 +154,9 @@ def build_teacher_timetable_grid(view: dict) -> str:
         for pos, (_, kind, item) in enumerate(timeline):
             if kind == "break":
                 cells.append(
-                    "<td class='tp-break-cell'><b>" + escape(str(item["label"]))
-                    + "</b><span>" + escape(str(item["start_time"])) + "–"
-                    + escape(str(item["end_time"])) + "</span></td>"
+                    "<td class='tp-break-cell' aria-label='" + escape(str(item["label"]), quote=True)
+                    + " " + escape(str(item["start_time"])) + "–"
+                    + escape(str(item["end_time"])) + "'></td>"
                 )
                 continue
             period_id = int(item["id"])
