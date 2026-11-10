@@ -804,7 +804,7 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
             root.dataset.reqAddReady='1';
             const modal=root.querySelector('#tt-req-add-modal');
             if(!modal)return;
-            const open=()=>{{modal.hidden=false;modal.querySelector('select')?.focus();document.body.classList.add('tt-modal-scroll-locked');}};
+            const open=()=>{{modal.hidden=false;document.body.classList.add('tt-modal-scroll-locked');}};
             root.querySelectorAll('[data-session-editor]').forEach(ed=>{{
               const list=ed.querySelector('[data-session-list]'), hidden=ed.querySelector('[data-weekly-pattern]');
               const periodOptions="<option value=''>Auto</option>{period_start_options}";
@@ -1347,7 +1347,7 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
               const addButton=event.target.closest('[data-req-add-open]');
               if(addButton){{
                 const modal=document.getElementById('tt-req-add-modal');
-                if(modal&&modal.hidden){{modal.hidden=false;document.body.classList.add('tt-modal-scroll-locked');modal.querySelector('select')?.focus();}}
+                if(modal&&modal.hidden){{modal.hidden=false;document.body.classList.add('tt-modal-scroll-locked');}}
                 return;
               }}
               const manageButton=event.target.closest('[data-req-manage-open]');
