@@ -1804,14 +1804,15 @@ def generate_advanced_instructional_sessions(connection: Any, school_id: int,
                 generation_run_id=run_id, ignore_generated_conflicts=True,
                 ignore_generated_legacy_conflicts=True,
             ))
-        from app.timetable.publishing import _cross_profile_conflicts
-        profile_for_conflicts = cur.execute(
-            "SELECT * FROM ds_timetable_profiles WHERE id=? AND school_id=?",
-            (profile_id, school_id),
-        ).fetchone()
-        cross_conflicts = _cross_profile_conflicts(cur, school_id, profile_for_conflicts)
-        if cross_conflicts:
-            raise TimetableSetupError("Advanced generation found cross-timetable conflicts: " + " ".join(cross_conflicts[:3]))
+        if not defer_replacement:
+            from app.timetable.publishing import _cross_profile_conflicts
+            profile_for_conflicts = cur.execute(
+                "SELECT * FROM ds_timetable_profiles WHERE id=? AND school_id=?",
+                (profile_id, school_id),
+            ).fetchone()
+            cross_conflicts = _cross_profile_conflicts(cur, school_id, profile_for_conflicts)
+            if cross_conflicts:
+                raise TimetableSetupError("Advanced generation found cross-timetable conflicts: " + " ".join(cross_conflicts[:3]))
         old_rows = cur.execute(
             """SELECT id FROM ds_timetable_sessions
                WHERE school_id=? AND profile_id=? AND """ + advanced_layer_filter + """
