@@ -39,10 +39,13 @@ def _time_range(start_time: str, end_time: str) -> tuple[str, str]:
     return start, end
 
 
-def create_profile(connection: Any, school_id: int, name: str, academic_year: str, term: str, created_by: str = "", academic_start_date: str = "", academic_end_date: str = "") -> int:
+def create_profile(connection: Any, school_id: int, name: str, academic_year: str, term: str, created_by: str = "", academic_start_date: str = "", academic_end_date: str = "", profile_type: str = "main") -> int:
     name, academic_year, term = (name or "").strip(), (academic_year or "").strip(), (term or "").strip()
     if not name or not academic_year or not term:
         raise TimetableSetupError("Profile name, academic year and term are required.")
+    profile_type = (profile_type or "main").strip().lower()
+    if profile_type not in {"main", "weekend", "remedial", "special"}:
+        raise TimetableSetupError("Choose a valid timetable programme type.")
     academic_start_date = (academic_start_date or "").strip()
     academic_end_date = (academic_end_date or "").strip()
     if academic_start_date or academic_end_date:
@@ -55,21 +58,21 @@ def create_profile(connection: Any, school_id: int, name: str, academic_year: st
             raise TimetableSetupError("Academic end date must be after the start date.")
     cur = connection.cursor()
     exists = cur.execute(
-        "SELECT id FROM ds_timetable_profiles WHERE school_id=? AND academic_year=? AND term=? AND status<>'archived'",
-        (school_id, academic_year, term),
+        "SELECT id FROM ds_timetable_profiles WHERE school_id=? AND academic_year=? AND term=? AND profile_type=? AND status<>'archived' AND revision_of_profile_id IS NULL",
+        (school_id, academic_year, term, profile_type),
     ).fetchone()
     if exists:
-        raise TimetableSetupError("A timetable profile already exists for this academic year and term.")
+        raise TimetableSetupError("A " + profile_type + " timetable already exists for this academic year and term. Create a revision from its published profile instead.")
     now = _now()
     cur.execute(
         """INSERT INTO ds_timetable_profiles
-           (school_id,name,academic_year,term,status,academic_start_date,academic_end_date,created_by,created_at,updated_at)
-           VALUES(?,?,?,?,?,?,?,?,?,?)""",
-        (school_id, name, academic_year, term, "draft", academic_start_date or None, academic_end_date or None, created_by, now, now),
+           (school_id,name,academic_year,term,profile_type,status,academic_start_date,academic_end_date,created_by,created_at,updated_at)
+           VALUES(?,?,?,?,?,?,?,?,?,?,?)""",
+        (school_id, name, academic_year, term, profile_type, "draft", academic_start_date or None, academic_end_date or None, created_by, now, now),
     )
     row = cur.execute(
-        "SELECT id FROM ds_timetable_profiles WHERE school_id=? AND academic_year=? AND term=? ORDER BY id DESC LIMIT 1",
-        (school_id, academic_year, term),
+        "SELECT id FROM ds_timetable_profiles WHERE school_id=? AND academic_year=? AND term=? AND profile_type=? AND created_at=? ORDER BY id DESC LIMIT 1",
+        (school_id, academic_year, term, profile_type, now),
     ).fetchone()
     connection.commit()
     return int(row["id"])
