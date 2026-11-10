@@ -306,8 +306,15 @@ def validate_timetable_for_publication(connection: Any, school_id: int, profile_
     return {
         "ready": not errors,
         "errors": errors,
+        # Readiness metrics use occupied periods, while the validation above
+        # continues to compare lesson occurrences against weekly requirements.
         "scheduled_lessons": len(lessons),
         "required_lessons": sum(int(r["lessons_per_week"] or 0) for r in requirements),
+        "scheduled_periods": sum(int(lesson["duration_periods"] or 1) for lesson in lessons),
+        "required_periods": sum(
+            int(r["lessons_per_week"] or 0) * int(r["duration_periods"] or 1)
+            for r in requirements
+        ),
         "requirements": len(requirements),
     }
 
