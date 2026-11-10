@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from html import escape
+import logging
 from urllib.parse import quote
 
 from fastapi import Form, Request
@@ -170,7 +171,22 @@ def register_timetable_publishing_routes(app, get_db, get_school_obj, module_pag
             submit_for_approval(con,int(school["id"]),profile_id,request.session.get("email",""))
             return redirect_publishing(profile_id,"Timetable submitted for approval. Editing is now locked.")
         except TimetableSetupError as exc:
+            try:
+                con.rollback()
+            except Exception:
+                pass
             return redirect_publishing(profile_id,str(exc),True)
+        except Exception:
+            try:
+                con.rollback()
+            except Exception:
+                pass
+            logging.exception("Timetable submission for approval failed (profile_id=%s, school_id=%s)", profile_id, int(school["id"]))
+            return redirect_publishing(
+                profile_id,
+                "Submission failed while saving the approval request. The error has been recorded; please try again or contact support.",
+                True,
+            )
         finally:
             con.close()
 
