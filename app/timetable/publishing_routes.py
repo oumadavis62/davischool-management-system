@@ -96,18 +96,16 @@ def register_timetable_publishing_routes(app, get_db, get_school_obj, module_pag
             if readiness else ""
         )
         action_html = ""
+        action_submit_html = ""
         if status == "draft":
-            action_html = (
-                f"""<form method='post' action='/app/timetable/publishing/submit'><input type='hidden' name='profile_id' value='{pid}'><button class='pub-btn' {'disabled' if not readiness or not readiness['ready'] else ''}>Submit for approval</button></form>"""
-            )
+            action_html = "<button type='button' class='pub-btn' data-open='pub-action-dialog' " + ("disabled" if not readiness or not readiness["ready"] else "") + ">Submit for approval</button>"
+            action_submit_html = f"""<form method='post' action='/app/timetable/publishing/submit'><input type='hidden' name='profile_id' value='{pid}'><button class='pub-btn' {'disabled' if not readiness or not readiness['ready'] else ''}>Confirm & Submit for Approval</button></form>"""
         elif status == "pending_approval":
-            action_html = (
-                f"""<form method='post' action='/app/timetable/publishing/publish'><input type='hidden' name='profile_id' value='{pid}'><button class='pub-btn' {'disabled' if not readiness or not readiness['ready'] else ''}>Approve & Publish</button></form>"""
-            )
+            action_html = "<button type='button' class='pub-btn' data-open='pub-action-dialog' " + ("disabled" if not readiness or not readiness["ready"] else "") + ">Approve & Publish</button>"
+            action_submit_html = f"""<form method='post' action='/app/timetable/publishing/publish'><input type='hidden' name='profile_id' value='{pid}'><button class='pub-btn' {'disabled' if not readiness or not readiness['ready'] else ''}>Confirm & Publish</button></form>"""
         elif status in ("published","archived"):
-            action_html = (
-                f"""<form method='post' action='/app/timetable/publishing/revision'><input type='hidden' name='profile_id' value='{pid}'><button class='pub-btn'>Create editable revision</button></form>"""
-            )
+            action_html = "<button type='button' class='pub-btn' data-open='pub-action-dialog'>Create editable revision</button>"
+            action_submit_html = f"""<form method='post' action='/app/timetable/publishing/revision'><input type='hidden' name='profile_id' value='{pid}'><button class='pub-btn'>Create revision</button></form>"""
         version_rows = "".join(
             f"<tr><td>{esc(v['label'])}</td><td>{esc(v['profile_name'])}</td><td>R{int(v['revision_no'] or 1)}</td><td>{esc(v['created_at'])}</td><td>{esc(v['created_by'])}</td></tr>"
             for v in versions
@@ -136,7 +134,7 @@ def register_timetable_publishing_routes(app, get_db, get_school_obj, module_pag
         action_modal = f"""
         <dialog class='pub-dialog' id='pub-action-dialog'><div class='pub-dialog-head'><div><span class='pub-kicker'>WORKFLOW ACTION</span><h3>{'Submit for approval' if status=='draft' else 'Approve and publish' if status=='pending_approval' else 'Create a new revision' if status in ('published','archived') else 'No action available'}</h3></div><button type='button' class='pub-close' data-close='pub-action-dialog' aria-label='Close'>×</button></div>
         <p class='pub-dialog-copy'>{'Submitting locks this draft for editing until a new revision is created.' if status=='draft' else 'Publishing makes this revision the official timetable and archives the previously published revision for the same academic year and term.' if status=='pending_approval' else 'A new editable draft will be copied from this version. The published snapshot remains unchanged.' if status in ('published','archived') else 'Choose a timetable profile to continue.'}</p>
-        <div class='pub-actions'>{action_html or "<span class='pub-muted'>This profile has no available workflow action.</span>"}</div>
+        <div class='pub-actions'><button type='button' class='pub-btn secondary' data-close='pub-action-dialog'>Cancel</button>{action_submit_html or "<span class='pub-muted'>This profile has no available workflow action.</span>"}</div>
         </dialog>
         <script>
         (function(){{
@@ -158,7 +156,7 @@ def register_timetable_publishing_routes(app, get_db, get_school_obj, module_pag
           <section class='pub-card'><div class='pub-card-head'><div><span class='pub-kicker'>ACTIVE WORKSPACE</span><h3>{esc(selected['name'])}</h3><p>{esc(selected['academic_year'])} · {esc(selected['term'])} · Revision {int(selected['revision_no'] or 1)}</p></div><span class='pub-state {'good' if status=='published' else 'bad' if status=='pending_approval' else ''}'>{esc(status.replace('_',' ').upper())}</span></div><div class='pub-profile-line'><span>Current profile selected</span><button type='button' class='pub-btn secondary' data-open='pub-compare-dialog' {'disabled' if len(versions)<2 else ''}>Compare versions</button></div></section>
           {readiness_html}
           <section class='pub-card'><div class='pub-card-head'><div><span class='pub-kicker'>VERSION CONTROL</span><h3>Published timetable history</h3></div><span class='pub-state'>{len(versions)} saved version{'s' if len(versions)!=1 else ''}</span></div><div class='pub-table-scroll'><table><tr><th>Version</th><th>Profile</th><th>Revision</th><th>Published at</th><th>Published by</th></tr>{version_rows}</table></div></section>
-        </div>{profile_modal}{compare_modal}
+        </div>{profile_modal}{compare_modal}{action_modal}
         """
         return module_page(request,"Publishing & Versions","timetable",body)
 
