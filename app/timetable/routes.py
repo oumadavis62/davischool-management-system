@@ -808,7 +808,7 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
         .tt-session-row button:disabled{{opacity:.45}}
         .tt-session-instructions{{margin:8px 0 0;padding:10px 12px;border-left:3px solid #78a984;border-radius:7px;background:#f1f7f1;color:#58705e;font-size:10px;line-height:1.55}}
         .tt-session-step{{padding:5px 8px;border-radius:7px;background:#e8f3e9;color:#376a48;font-size:10px;font-weight:800}}
-        @media(max-width:640px){{.tt-session-row-main{{grid-template-columns:28px 1fr 1fr}}.tt-session-row-main small{{grid-column:2/-1}}.tt-session-row-main button{{grid-column:3}}.tt-session-row-sharing{{grid-template-columns:1fr}}
+        @media(max-width:640px){{.tt-session-row-main{{grid-template-columns:28px 1fr 1fr}}.tt-session-row-main small{{grid-column:2/-1}}.tt-session-row-main button{{grid-column:3}}.tt-session-row-sharing{{grid-template-columns:1fr}}}}
         @media(max-width:600px){{.tt-req-overview{{grid-template-columns:repeat(2,minmax(0,1fr));padding:12px}}.tt-req-page-head,.tt-req-workspace{{padding:15px}}.tt-session-filters,.tt-session-linking{{grid-template-columns:1fr}}.tt-req-pagination .tt-btn{{padding:9px}}}}
 
         .tt-wrap *{{box-sizing:border-box}}
