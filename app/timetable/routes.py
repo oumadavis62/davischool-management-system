@@ -730,6 +730,17 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
                 f"{esc(class_label)} · {esc(allocation_row['subject_name'])} · {esc(allocation_row['teacher_name'])}</option>"
             )
         requirement_allocation_options = "".join(requirement_allocation_option_rows)
+        # Render allocated classes into the Add Subject Requirement dialog on
+        # the server. This keeps the class selector usable even if client-side
+        # filter initialisation is delayed or interrupted.
+        allocated_class_labels = {
+            int(row["class_id"]): str(row["class_name"]) + (" " + str(row["stream"] or "")).rstrip()
+            for row in allocations
+        }
+        requirement_class_options = "".join(
+            f"<option value='{class_id}'>{esc(label)}</option>"
+            for class_id, label in sorted(allocated_class_labels.items(), key=lambda item: item[1].casefold())
+        )
         bulk_requirement_form = f"""
           <div class='tt-req-add-modal' id='tt-req-add-modal' role='dialog' aria-modal='true' aria-labelledby='tt-req-add-title' hidden>
             <div class='tt-req-add-dialog'>
@@ -740,7 +751,7 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
               <form method='post' data-native-post='true' action='/app/timetable/setup/requirement' class='tt-form compact tt-req-add-form'>
                 {hidden}
                 <label>Class / stream
-                  <select data-allocation-filter='class' required><option value=''>Choose class / stream</option></select>
+                  <select data-allocation-filter='class' required><option value=''>Choose class / stream</option>{requirement_class_options}</select>
                 </label>
                 <label>Teacher
                   <select data-allocation-filter='teacher' required><option value=''>Choose teacher</option></select>
