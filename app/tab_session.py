@@ -107,6 +107,24 @@ class DaviSchoolTabSessionMiddleware:
       return Date.now().toString(36) + Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2);
     }
 
+    var currentUrl = new URL(window.location.href);
+    var urlTabId = currentUrl.searchParams.get("ds_tab") || "";
+    var forceNewTab = currentUrl.searchParams.get("ds_tab_new") === "1";
+    if (forceNewTab) {
+      id = newTabId();
+      sessionStorage.setItem(KEY, id);
+      currentUrl.searchParams.delete("ds_tab_new");
+      currentUrl.searchParams.set("ds_tab", id);
+      window.history.replaceState(null, "", currentUrl.pathname + currentUrl.search + currentUrl.hash);
+      urlTabId = id;
+    } else if (!id && /^[A-Za-z0-9_-]{16,64}$/.test(urlTabId)) {
+      // The login POST already created the session cookie using this ID.
+      // Adopt it on first authenticated load instead of generating a new ID
+      // and accidentally selecting a different, empty session cookie.
+      id = urlTabId;
+      sessionStorage.setItem(KEY, id);
+    }
+
     var navigationType = "navigate";
     try {
       var nav = performance.getEntriesByType("navigation")[0];
@@ -150,8 +168,6 @@ class DaviSchoolTabSessionMiddleware:
       }
     }
 
-    var currentUrl = new URL(window.location.href);
-    var urlTabId = currentUrl.searchParams.get("ds_tab") || "";
     // The URL and sessionStorage must always refer to the same tab session.
     // This is especially important after a redirect or when a page was opened
     // in a new tab: a stale ds_tab in the URL must never cause this tab to use
@@ -182,8 +198,23 @@ class DaviSchoolTabSessionMiddleware:
       var href = link.getAttribute("href");
       if (!href || href[0] === "#" || /^(mailto|tel|javascript):/i.test(href)) return;
       if (/^https?:/i.test(href) && !href.startsWith(window.location.origin)) return;
-      link.setAttribute("href", addTab(href));
-      if (link.target !== "_blank") markInternalNavigation();
+      var targetBlank = link.target === "_blank";
+      var destination = addTab(href);
+      if (targetBlank) {
+        try {
+          var newTabUrl = new URL(destination, window.location.origin);
+          // Only explicitly shared print/preview windows reuse this tab's
+          // authenticated session. Ordinary new tabs must get a fresh ID,
+          // even when the browser clones the opener's sessionStorage.
+          if (newTabUrl.searchParams.get("ds_tab_shared") !== "1") {
+            newTabUrl.searchParams.delete("ds_tab");
+            newTabUrl.searchParams.set("ds_tab_new", "1");
+            destination = newTabUrl.pathname + newTabUrl.search + newTabUrl.hash;
+          }
+        } catch (_) {}
+      }
+      link.setAttribute("href", destination);
+      if (!targetBlank) markInternalNavigation();
     }, true);
 
     document.addEventListener("submit", function (event) {
