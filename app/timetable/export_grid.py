@@ -44,8 +44,12 @@ def build_export_grid(result, view_type):
                     if view_type in ("class", "teacher", "room"):
                         if day_index == 0 and class_index == 0:
                             cells.append({"kind":"break","item":item,"rowspan":len(days)})
+                        else:
+                            cells.append({"kind":"break_placeholder"})
                     elif class_index == 0:
                         cells.append({"kind":"break","item":item,"rowspan":len(rowspec)})
+                    else:
+                        cells.append({"kind":"break_placeholder"})
                     continue
                 pid = int(item["id"])
                 if pid in covered:
