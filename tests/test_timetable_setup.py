@@ -11,6 +11,7 @@ from app.timetable.setup import (
     save_break,
     save_calendar_exception,
     save_room,
+    save_classroom_assignment,
     save_teacher_availability,
     save_class_requirement,
     save_subject_requirements,
@@ -133,6 +134,45 @@ class TimetableSetupTests(unittest.TestCase):
             "SELECT name,capacity FROM ds_timetable_rooms WHERE school_id=1 AND room_code='LAB1'"
         ).fetchone()
         self.assertEqual(tuple(row), ("Main Science Lab", 36))
+
+    def test_classroom_assignment_is_dedicated_and_can_be_replaced_or_released(self):
+        self.db.executescript("""
+            CREATE TABLE students (id INTEGER PRIMARY KEY, school_id INTEGER, class_id INTEGER);
+            INSERT INTO students VALUES(1,1,20);
+            INSERT INTO students VALUES(2,1,20);
+        """)
+        save_room(self.db, 1, "ROOM-A", "Grade 7 Classroom", "classroom", 30)
+        save_room(self.db, 1, "ROOM-B", "Grade 7 Alternate", "classroom", 35)
+        room_a = self.db.execute("SELECT id FROM ds_timetable_rooms WHERE room_code='ROOM-A'").fetchone()[0]
+        room_b = self.db.execute("SELECT id FROM ds_timetable_rooms WHERE room_code='ROOM-B'").fetchone()[0]
+        save_classroom_assignment(self.db, 1, 20, room_a)
+        row = self.db.execute("SELECT allocation_mode,assigned_class_id FROM ds_timetable_rooms WHERE id=?", (room_a,)).fetchone()
+        self.assertEqual(tuple(row), ("dedicated", 20))
+        save_classroom_assignment(self.db, 1, 20, room_b)
+        old = self.db.execute("SELECT allocation_mode,assigned_class_id FROM ds_timetable_rooms WHERE id=?", (room_a,)).fetchone()
+        new = self.db.execute("SELECT allocation_mode,assigned_class_id FROM ds_timetable_rooms WHERE id=?", (room_b,)).fetchone()
+        self.assertEqual(tuple(old), ("shared", None))
+        self.assertEqual(tuple(new), ("dedicated", 20))
+        save_classroom_assignment(self.db, 1, 20, None)
+        released = self.db.execute("SELECT allocation_mode,assigned_class_id FROM ds_timetable_rooms WHERE id=?", (room_b,)).fetchone()
+        self.assertEqual(tuple(released), ("shared", None))
+
+    def test_classroom_assignment_rejects_other_class_owner_and_insufficient_capacity(self):
+        self.db.executescript("""
+            CREATE TABLE students (id INTEGER PRIMARY KEY, school_id INTEGER, class_id INTEGER);
+            INSERT INTO classes VALUES(21,1,'Grade 8','Green');
+            INSERT INTO students VALUES(1,1,21);
+            INSERT INTO students VALUES(2,1,21);
+            INSERT INTO students VALUES(3,1,21);
+        """)
+        save_room(self.db, 1, "ROOM-A", "Small Room", "classroom", 2)
+        save_room(self.db, 1, "ROOM-B", "Dedicated Room", "classroom", 30, allocation_mode="dedicated", assigned_class_id=20)
+        room_a = self.db.execute("SELECT id FROM ds_timetable_rooms WHERE room_code='ROOM-A'").fetchone()[0]
+        room_b = self.db.execute("SELECT id FROM ds_timetable_rooms WHERE room_code='ROOM-B'").fetchone()[0]
+        with self.assertRaisesRegex(TimetableSetupError, "holds only"):
+            save_classroom_assignment(self.db, 1, 21, room_a)
+        with self.assertRaisesRegex(TimetableSetupError, "already dedicated"):
+            save_classroom_assignment(self.db, 1, 21, room_b)
 
     def test_teacher_availability_validates_school_and_profile(self):
         save_day(self.db, 1, self.profile_id, "MON", "Monday", 1)

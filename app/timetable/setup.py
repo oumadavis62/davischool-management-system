@@ -268,6 +268,58 @@ def save_room(connection: Any, school_id: int, room_code: str, name: str, room_t
     connection.commit()
 
 
+def save_classroom_assignment(connection: Any, school_id: int, class_id: int, room_id: int | None) -> None:
+    """Assign one dedicated classroom to a class, or release its current room."""
+    cur = connection.cursor()
+    class_row = cur.execute(
+        "SELECT id FROM classes WHERE id=? AND school_id=?",
+        (int(class_id), int(school_id)),
+    ).fetchone()
+    if not class_row:
+        raise TimetableSetupError("Select a class belonging to this school.")
+    if room_id is None:
+        cur.execute(
+            """UPDATE ds_timetable_rooms SET allocation_mode='shared',assigned_class_id=NULL
+               WHERE school_id=? AND assigned_class_id=? AND allocation_mode='dedicated'""",
+            (int(school_id), int(class_id)),
+        )
+        connection.commit()
+        return
+    room = cur.execute(
+        """SELECT id,room_type,is_active,capacity,allocation_mode,assigned_class_id
+           FROM ds_timetable_rooms WHERE id=? AND school_id=?""",
+        (int(room_id), int(school_id)),
+    ).fetchone()
+    if not room or not int(room["is_active"] or 0):
+        raise TimetableSetupError("Select an active classroom registered to this school.")
+    if str(room["room_type"] or "").lower() != "classroom":
+        raise TimetableSetupError("Only rooms registered as Classrooms can be permanently assigned to a class.")
+    owner = room["assigned_class_id"]
+    if str(room["allocation_mode"] or "shared").lower() == "dedicated" and owner is not None and int(owner) != int(class_id):
+        raise TimetableSetupError("That classroom is already dedicated to another class.")
+    enrolled = int(cur.execute(
+        "SELECT COUNT(*) FROM students WHERE school_id=? AND class_id=?",
+        (int(school_id), int(class_id)),
+    ).fetchone()[0] or 0)
+    if room["capacity"] is not None and int(room["capacity"]) < enrolled:
+        raise TimetableSetupError(
+            f"This class has {enrolled} learners, but the selected room holds only {int(room['capacity'])}. Choose a larger classroom."
+        )
+    # Keep a single primary classroom per class. Release its previous room
+    # before assigning the newly selected room, in the same transaction.
+    cur.execute(
+        """UPDATE ds_timetable_rooms SET allocation_mode='shared',assigned_class_id=NULL
+           WHERE school_id=? AND assigned_class_id=? AND allocation_mode='dedicated' AND id<>?""",
+        (int(school_id), int(class_id), int(room_id)),
+    )
+    cur.execute(
+        """UPDATE ds_timetable_rooms SET allocation_mode='dedicated',assigned_class_id=?
+           WHERE id=? AND school_id=? AND is_active=1""",
+        (int(class_id), int(room_id), int(school_id)),
+    )
+    connection.commit()
+
+
 def save_teacher_availability(connection: Any, school_id: int, profile_id: int, teacher_id: int, day_id: int, period_id: int, availability: str, reason: str = "") -> None:
     cur = connection.cursor()
     _profile(cur, school_id, profile_id)

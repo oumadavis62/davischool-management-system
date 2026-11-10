@@ -120,6 +120,7 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
                   <a class='tt-home-action tt-home-action-primary' href='{builder_href}'><span class='tt-home-action-icon'>▦</span><span><b>Open timetable builder</b><small>Create, adjust and arrange lessons</small></span><em>→</em></a>
                   <a class='tt-home-action' href='{auto_href}'><span class='tt-home-action-icon'>✳</span><span><b>Generate automatically</b><small>Build a schedule using your constraints</small></span><em>→</em></a>
                   <a class='tt-home-action' href='/app/timetable/constraints?profile_id={pid}'><span class='tt-home-action-icon'>⌁</span><span><b>Scheduling constraints</b><small>Set subject, teacher, class and time restrictions</small></span><em>→</em></a>
+                  <a class='tt-home-action' href='/app/timetable/room-allocation?profile_id={pid}'><span class='tt-home-action-icon'>▣</span><span><b>Allocate rooms to classes</b><small>Assign dedicated classrooms and manage capacity</small></span><em>→</em></a>
                   <a class='tt-home-action' href='{views_href}'><span class='tt-home-action-icon'>▤</span><span><b>View timetables</b><small>School, class, teacher and room views</small></span><em>→</em></a>
                   <a class='tt-home-action' href='{publish_href}'><span class='tt-home-action-icon'>⇧</span><span><b>Review and publish</b><small>Manage timetable release and revisions</small></span><em>→</em></a>
                 </section>
@@ -161,6 +162,120 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
           {profile_panel}
         </main>"""
         return module_page(request, "Smart Timetable", "timetable", body)
+
+    @app.get("/app/timetable/room-allocation", response_class=HTMLResponse)
+    def timetable_room_allocation_page(request: Request, profile_id: int = 0, message: str = "", error: int = 0):
+        school = school_for(request)
+        if not school:
+            return RedirectResponse("/", 303)
+        school_id = int(school["id"])
+        con = get_db()
+        try:
+            classes = con.execute(
+                """SELECT c.id,c.name,c.stream,COUNT(st.id) AS learner_count,
+                          rm.id AS room_id,rm.room_code,rm.name AS room_name,rm.capacity
+                   FROM classes c
+                   LEFT JOIN students st ON st.school_id=c.school_id AND st.class_id=c.id
+                   LEFT JOIN ds_timetable_rooms rm ON rm.school_id=c.school_id
+                        AND rm.assigned_class_id=c.id AND rm.allocation_mode='dedicated'
+                        AND rm.is_active=1 AND rm.room_type='classroom'
+                   WHERE c.school_id=?
+                   GROUP BY c.id,c.name,c.stream,rm.id,rm.room_code,rm.name,rm.capacity
+                   ORDER BY c.name,c.stream""",
+                (school_id,),
+            ).fetchall()
+            rooms = con.execute(
+                """SELECT id,room_code,name,capacity,assigned_class_id
+                   FROM ds_timetable_rooms
+                   WHERE school_id=? AND is_active=1 AND room_type='classroom'
+                   ORDER BY name""",
+                (school_id,),
+            ).fetchall()
+            assigned_count = sum(1 for row in classes if row["room_id"] is not None)
+            total_learners = sum(int(row["learner_count"] or 0) for row in classes)
+        finally:
+            con.close()
+        esc = lambda value: escape(str(value if value is not None else ""))
+        notice = ""
+        if message:
+            notice = f"<div class='ra-notice {'error' if error else 'success'}'>{esc(message)}</div>"
+        room_rows = []
+        for row in classes:
+            class_label = str(row["name"]) + ((" · " + str(row["stream"])) if row["stream"] else "")
+            options = ["<option value=''>No dedicated classroom</option>"]
+            for room in rooms:
+                current_owner = int(room["assigned_class_id"]) if room["assigned_class_id"] is not None else None
+                if current_owner not in (None, int(row["id"])):
+                    continue
+                selected = " selected" if row["room_id"] is not None and int(row["room_id"]) == int(room["id"]) else ""
+                capacity = f" · capacity {int(room['capacity'])}" if room["capacity"] is not None else ""
+                options.append(f"<option value='{int(room['id'])}'{selected}>{esc(room['room_code'])} — {esc(room['name'])}{capacity}</option>")
+            current = esc(row["room_name"] or "Not assigned")
+            capacity_text = esc(row["capacity"] if row["capacity"] is not None else "—")
+            learner_count = int(row["learner_count"] or 0)
+            room_rows.append(
+                f"<tr><td><b>{esc(class_label)}</b><small class='ra-sub'>{learner_count} learners</small></td>"
+                f"<td>{current}</td><td>{capacity_text}</td><td><form method='post' action='/app/timetable/room-allocation' class='ra-inline'>"
+                f"<input type='hidden' name='profile_id' value='{int(profile_id)}'><input type='hidden' name='class_id' value='{int(row['id'])}'>"
+                f"<select name='room_id' aria-label='Classroom for {esc(class_label)}'>{''.join(options)}</select>"
+                f"<button class='ra-save'>Save</button></form></td></tr>"
+            )
+        rows_html = "".join(room_rows) or "<tr><td colspan='4'>No classes found for this school.</td></tr>"
+        empty_rooms = "" if rooms else (
+            "<div class='ra-empty'><b>No classrooms registered yet.</b>"
+            "<p>Add your physical classrooms first, then return here to allocate them to classes.</p>"
+            "<a href='/app/timetable/setup?tab=setup'>Open Rooms and Facilities ↗</a></div>"
+        )
+        body = f"""
+        <main class='ra-page'>
+          <header class='ra-head'><div><span>SMART TIMETABLE · LEARNING SPACES</span><h1>Room Allocation</h1>
+          <p>Assign a dedicated classroom to each class. The automatic timetable generator will reserve that classroom for the assigned class and prevent other classes from using it.</p></div>
+          <a href='/app/timetable'>← Timetable workspace</a></header>
+          {notice}
+          <section class='ra-stats'><div><span>Classes</span><b>{len(classes)}</b></div><div><span>Assigned classrooms</span><b>{assigned_count}</b></div><div><span>Unassigned classes</span><b>{max(0,len(classes)-assigned_count)}</b></div><div><span>Learners covered</span><b>{total_learners}</b></div></section>
+          {empty_rooms}
+          <section class='ra-panel'><div class='ra-panel-head'><div><h2>Classroom assignments</h2><p>Choose one registered classroom for each class. Leave the selection blank to release its dedicated room.</p></div></div>
+          <div class='ra-table-wrap'><table><thead><tr><th>Class / Stream</th><th>Current classroom</th><th>Room capacity</th><th>Change allocation</th></tr></thead><tbody>{rows_html}</tbody></table></div></section>
+          <p class='ra-foot'>Only active rooms of type Classroom appear here. Laboratories, halls and other specialist spaces remain available for subject-specific room rules.</p>
+        </main>
+        <style>
+        .ra-page{{max-width:1450px;margin:0 auto;padding:22px;color:#234638}}.ra-page *{{box-sizing:border-box}}
+        .ra-head{{display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap;padding:23px 25px;border:1px solid #dce9de;border-radius:16px;background:linear-gradient(115deg,#e5f2e7,#f7faf7)}}
+        .ra-head span{{font-size:10px;letter-spacing:1.4px;font-weight:800;color:#398052}}.ra-head h1{{margin:6px 0;color:#204b34;font-size:26px}}.ra-head p{{max-width:760px;margin:0;color:#637b6a;font-size:12px;line-height:1.6}}
+        .ra-head>a,.ra-empty a{{color:#286443;font-size:12px;font-weight:800;text-decoration:none}}.ra-stats{{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin:14px 0}}
+        .ra-stats>div{{padding:14px 16px;background:#fff;border:1px solid #e1ece2;border-radius:12px}}.ra-stats span{{display:block;color:#718477;font-size:10px;font-weight:700}}.ra-stats b{{display:block;color:#286443;font-size:23px;margin-top:4px}}
+        .ra-panel{{background:#fff;border:1px solid #e1ece2;border-radius:15px;overflow:hidden}}.ra-panel-head{{padding:17px 20px;border-bottom:1px solid #e7eee8}}.ra-panel-head h2{{margin:0 0 5px;color:#254d36;font-size:16px}}.ra-panel-head p,.ra-foot{{margin:0;color:#718477;font-size:11px;line-height:1.6}}
+        .ra-table-wrap{{width:100%;overflow-x:auto}}.ra-table-wrap table{{width:100%;border-collapse:collapse;min-width:720px}}.ra-table-wrap th,.ra-table-wrap td{{padding:12px 14px;text-align:left;border-bottom:1px solid #edf2ed;font-size:12px}}.ra-table-wrap th{{background:#f7faf7;color:#607968;font-size:10px;text-transform:uppercase;letter-spacing:.5px}}.ra-sub{{display:block;color:#849287;font-size:10px;margin-top:3px}}
+        .ra-inline{{display:flex;align-items:center;gap:8px;min-width:280px}}.ra-inline select{{flex:1;min-width:0;padding:9px 10px;border:1px solid #d8e5da;border-radius:9px;background:#fff;color:#294b38;font-size:12px}}.ra-save{{padding:9px 14px;border:0;border-radius:9px;background:#287348;color:#fff;font-weight:800;cursor:pointer}}
+        .ra-notice{{margin:12px 0;padding:12px 15px;border-radius:10px;font-size:12px;font-weight:700}}.ra-notice.success{{background:#edf7ef;color:#24623d}}.ra-notice.error{{background:#fff1ef;color:#a23c32}}
+        .ra-empty{{margin:14px 0;padding:17px;border:1px dashed #b9d3bf;border-radius:12px;background:#f8fcf8}}.ra-empty p{{font-size:12px;color:#718477}}.ra-foot{{margin:12px 2px}}
+        @media(max-width:700px){{.ra-page{{padding:12px}}.ra-head{{padding:18px}}.ra-stats{{grid-template-columns:repeat(2,minmax(0,1fr))}}.ra-head h1{{font-size:22px}}}}
+        </style>"""
+        return module_page(request, "Room Allocation", "timetable", body)
+
+    @app.post("/app/timetable/room-allocation")
+    def save_timetable_room_allocation(request: Request, class_id: int = Form(...), room_id: str = Form(""), profile_id: int = Form(0)):
+        school = school_for(request)
+        if not school:
+            return RedirectResponse("/", 303)
+        con = get_db()
+        try:
+            from app.timetable.setup import save_classroom_assignment
+            save_classroom_assignment(
+                con, int(school["id"]), class_id,
+                int(room_id) if room_id.strip() else None,
+            )
+            message = "Classroom allocation saved." if room_id.strip() else "Dedicated classroom released; the class can use shared rooms."
+            return RedirectResponse(
+                f"/app/timetable/room-allocation?profile_id={profile_id}&message={quote(message)}", 303
+            )
+        except (TimetableSetupError, ValueError) as exc:
+            con.rollback()
+            return RedirectResponse(
+                f"/app/timetable/room-allocation?profile_id={profile_id}&error=1&message={quote(str(exc))}", 303
+            )
+        finally:
+            con.close()
 
     @app.get("/app/timetable/setup", response_class=HTMLResponse)
     def timetable_setup_page(request: Request, profile_id: int = 0, message: str = "", error: int = 0, class_id: int = 0, focus: str = "", tab: str = ""):
