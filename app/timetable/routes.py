@@ -749,7 +749,7 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
                   <select data-allocation-filter='subject' required><option value=''>Choose subject</option></select>
                   <small data-allocation-match>Choose any one filter first. The other fields will narrow to valid teacher allocations.</small>
                 </label>
-                <select name='allocation' data-allocation-source hidden required>
+                <select name='allocation' data-allocation-source hidden>
                   <option value=''>Select an allocated subject</option>{requirement_allocation_options}
                 </select>
                 <label>Weekly period target<input type='number' min='1' max='30' name='lessons_per_week' value='5' required></label>
@@ -807,7 +807,7 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
               if(event.target.closest('[data-req-add-open]')){{open();return;}}
               if(event.target.closest('[data-req-add-close]')||event.target===modal)close();
             }});
-            const addForm=modal.querySelector('.tt-req-add-form');addForm?.addEventListener('submit',event=>{{if(addForm.dataset.saving==='1'){{event.preventDefault();return;}}addForm.dataset.saving='1';const submit=addForm.querySelector('button[type=submit]');if(submit){{submit.disabled=true;submit.textContent='Saving weekly plan…';submit.style.opacity='.75';}}}});
+            const addForm=modal.querySelector('.tt-req-add-form');addForm?.addEventListener('submit',event=>{{const allocationSelect=addForm.querySelector('[name=allocation]'),matchNote=addForm.querySelector('[data-allocation-match]');if(!allocationSelect?.value){{event.preventDefault();if(matchNote)matchNote.textContent='Please narrow the filters until one valid class, teacher and subject allocation is matched.';return;}}if(addForm.dataset.saving==='1'){{event.preventDefault();return;}}addForm.dataset.saving='1';const submit=addForm.querySelector('button[type=submit]');if(submit){{submit.disabled=true;submit.textContent='Saving weekly plan…';submit.style.opacity='.75';}}}});
             root.addEventListener('keydown',event=>{{if(event.key==='Escape'){{const active=root.querySelector('.tt-req-manage-modal.is-open');if(active){{active.classList.remove('is-open');if(!root.querySelector('.tt-modal.is-open'))document.body.classList.remove('tt-modal-scroll-locked');}}else if(!modal.hidden)close();}}}});
             }};
             if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init,{{once:true}});else init();
