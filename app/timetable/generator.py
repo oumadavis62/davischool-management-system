@@ -780,6 +780,16 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
         by_task = defaultdict(list)
         rank_terms_by_task = defaultdict(list)
         objective_terms = []
+        diagnostic_assumptions = {}
+
+        def assumption_for(group_key, description):
+            literal = diagnostic_assumptions.get(group_key)
+            if literal is None:
+                literal = model.NewBoolVar("diagnose_" + group_key)
+                model.AddAssumption(literal)
+                diagnostic_assumptions[group_key] = (literal, description)
+            return literal
+
         for task_index, task in enumerate(tasks):
             class_ids = sorted({int(v) for v in task.get("class_ids", [task["class_id"]])})
             teacher_ids = sorted({int(v) for v in task.get("teacher_ids", [task["teacher_id"]])})
@@ -876,10 +886,11 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
                     if room_id is not None:
                         cost += int(room_id) % 7
                     objective_terms.append((var, cost))
-            if not by_task[task_index]:
-                model.AddBoolOr([])
-            else:
-                model.Add(sum(by_task[task_index]) == 1)
+            coverage_literal = assumption_for(
+                "lesson_coverage",
+                "Every required lesson occurrence must receive exactly one slot",
+            )
+            model.Add(sum(by_task[task_index]) == 1).OnlyEnforceIf(coverage_literal)
 
         # Break permutations of identical weekly occurrences. Their candidate
         # domains are interchangeable, so require later occurrences to use a
@@ -901,10 +912,18 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
                 next_rank = sum(rank * var for var, rank in rank_terms_by_task[next_index])
                 model.Add(previous_rank <= next_rank)
 
-        for group in (by_class_period, by_teacher_period, by_room_period, by_subject_day, by_schoolwide_block_period):
+        conflict_groups = (
+            (by_class_period, "class_clashes", "A class cannot have overlapping lessons"),
+            (by_teacher_period, "teacher_clashes", "A teacher cannot teach overlapping lessons"),
+            (by_room_period, "room_clashes", "A room cannot host overlapping lessons"),
+            (by_subject_day, "one_subject_per_day", "A class cannot repeat the same subject on one day"),
+            (by_schoolwide_block_period, "schoolwide_block_clashes", "Multi-period blocks cannot overlap school-wide"),
+        )
+        for group, group_key, description in conflict_groups:
+            literal = assumption_for(group_key, description)
             for values in group.values():
                 if len(values) > 1:
-                    model.Add(sum(values) <= 1)
+                    model.Add(sum(values) <= 1).OnlyEnforceIf(literal)
 
         # Different subjects taught by the same teacher to the same class
         # cannot occupy adjacent periods. Same-subject double/triple blocks
@@ -927,7 +946,11 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
                 for subject_id, current_vars in current_subjects.items():
                     for next_subject_id, next_vars in next_subjects.items():
                         if subject_id != next_subject_id:
-                            model.Add(sum(current_vars) + sum(next_vars) <= 1)
+                            literal = assumption_for(
+                                "teacher_subject_transition",
+                                "Different subjects for the same teacher/class need a free transition period",
+                            )
+                            model.Add(sum(current_vars) + sum(next_vars) <= 1).OnlyEnforceIf(literal)
 
         for key, values in by_subject_teacher_day.items():
             class_id, subject_id, teacher_id, day_id = key
@@ -935,21 +958,33 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
                         if int(task["class_id"]) == class_id and int(task["subject_id"]) == subject_id
                         and int(task["teacher_id"]) == teacher_id and task.get("max_lessons_per_day")), None)
             if cap is not None:
-                model.Add(sum(values) + int(fixed_subject_day_count.get(key, 0)) <= cap)
+                literal = assumption_for(
+                    "configured_subject_daily_cap",
+                    "Configured maximum lessons per subject/class/teacher per day",
+                )
+                model.Add(sum(values) + int(fixed_subject_day_count.get(key, 0)) <= cap).OnlyEnforceIf(literal)
 
         for class_id, values in by_class_week.items():
             limit = class_limits.get(class_id)
             if limit is not None and limit["max_lessons_per_week"] is not None:
-                model.Add(sum(values) + int(fixed_class_week.get(class_id, 0)) <= int(limit["max_lessons_per_week"]))
+                literal = assumption_for(
+                    "class_weekly_lesson_limit",
+                    "Configured maximum lessons per class per week",
+                )
+                model.Add(sum(values) + int(fixed_class_week.get(class_id, 0)) <= int(limit["max_lessons_per_week"])).OnlyEnforceIf(literal)
 
         for (class_id, day_id), values in by_class_day_periods.items():
             limit = class_limits.get(class_id)
             if limit is not None and limit["max_periods_per_day"] is not None:
+                literal = assumption_for(
+                    "class_daily_period_limit",
+                    "Configured maximum teaching periods per class per day",
+                )
                 model.Add(
                     sum(var * duration for var, duration in values)
                     + int(fixed_class_day_periods.get((class_id, day_id), 0))
                     <= int(limit["max_periods_per_day"])
-                )
+                ).OnlyEnforceIf(literal)
 
         # Discourage a class from studying the same subject in the same
         # period on multiple weekdays (e.g. Mathematics in Period 6 every day).
@@ -1029,17 +1064,18 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
                 objective_terms.append((deviation, 20))
 
         # Keep fallback availability as a last resort, not as an equal choice.
-        return model, variables, variable_meta, objective_terms
+        return model, variables, variable_meta, objective_terms, diagnostic_assumptions
 
     remaining_seconds = max(0.1, deadline - time.monotonic())
     strict_budget = max(0.1, remaining_seconds * 0.55)
-    model, variables, variable_meta, objective_terms = build_cp_model(False)
+    model, variables, variable_meta, objective_terms, diagnostic_assumptions = build_cp_model(False)
     solver = cp_model.CpSolver()
     solver.parameters.max_time_in_seconds = strict_budget
     solver.parameters.num_search_workers = max(1, min(8, __import__("os").cpu_count() or 1))
     solver.parameters.random_seed = 17
     solver.parameters.log_search_progress = False
     strict_status = solver.Solve(model)
+    failure_solver = solver
     strict_nodes = int(solver.NumBranches())
     strict_stop_reason = solver.StatusName(strict_status).lower()
     solution_values = None
@@ -1051,13 +1087,14 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
     else:
         remaining_seconds = max(0.1, deadline - time.monotonic())
         if remaining_seconds > 0.15:
-            model, variables, variable_meta, objective_terms = build_cp_model(True)
+            model, variables, variable_meta, objective_terms, diagnostic_assumptions = build_cp_model(True)
             fallback_solver = cp_model.CpSolver()
             fallback_solver.parameters.max_time_in_seconds = remaining_seconds
             fallback_solver.parameters.num_search_workers = max(1, min(8, __import__("os").cpu_count() or 1))
             fallback_solver.parameters.random_seed = 29
             fallback_solver.parameters.log_search_progress = False
             fallback_status = fallback_solver.Solve(model)
+            failure_solver = fallback_solver
             fallback_nodes = int(fallback_solver.NumBranches())
             fallback_stop_reason = fallback_solver.StatusName(fallback_status).lower()
             if fallback_status in (cp_model.OPTIMAL, cp_model.FEASIBLE):
@@ -1168,6 +1205,17 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
             "SELECT id,name FROM teachers WHERE school_id=?", (school_id,)
         ).fetchall()}
         requirement_diagnostics = []
+        assumption_core = []
+        if status_text == "INFEASIBLE":
+            try:
+                core_indices = set(failure_solver.SufficientAssumptionsForInfeasibility())
+                assumption_core = [
+                    {"rule": description, "group": group_key}
+                    for group_key, (literal, description) in diagnostic_assumptions.items()
+                    if literal.Index() in core_indices or -literal.Index() - 1 in core_indices
+                ]
+            except Exception:
+                assumption_core = []
         for task_index, task in enumerate(tasks):
             key = (int(task["class_id"]), int(task["subject_id"]), int(task["teacher_id"]))
             counts = rejection_by_requirement.get(key, {})
@@ -1228,12 +1276,15 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
                 + " Most constrained lessons: " + (" | ".join(diagnostic_lines) if diagnostic_lines else "No lesson-level rejection was recorded.")
                 + " Search: " + str(strict_nodes) + " strict nodes, " + str(fallback_nodes)
                 + " fallback nodes, " + str(round(time.monotonic() - search_started_at, 3)) + " seconds."
+                + (" Constraint groups in the infeasibility core: " + "; ".join(item["rule"] for item in assumption_core) + "." if assumption_core else "")
             ),
             "diagnostic_details": diagnostic_lines,
             "failure_cause": cause,
             "recommended_action": next_step,
             "failure_code": stop_reason,
             "most_constrained_lessons": requirement_diagnostics[:12],
+            "infeasibility_constraint_groups": assumption_core,
+            "diagnostic_method": "CP-SAT sufficient assumption core; core groups identify a sufficient conflicting set, not necessarily a unique or minimal explanation",
             "constraint_rejection_totals": rejection_counts,
             "candidate_slot_count_min": min((x["candidate_slots_before_conflicts"] for x in requirement_diagnostics), default=0),
             "candidate_slot_count_max": max((x["candidate_slots_before_conflicts"] for x in requirement_diagnostics), default=0),
