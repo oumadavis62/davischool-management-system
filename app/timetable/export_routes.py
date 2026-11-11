@@ -461,7 +461,7 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
             cell.alignment = Alignment(horizontal="center",vertical="center",wrap_text=True)
         layout=build_export_grid(result,view_type)
         timeline=layout["timeline"]
-        headers=["Day"]+(["Class / Stream"] if layout["show_class_column"] else [])+[str(item["label"])+"\n"+str(item["start_time"])+"–"+str(item["end_time"]) for _,_,item in timeline]
+        headers=["Day"]+([ "Class / Stream" ] if layout["show_class_column"] else [])+[((str(item["start_time"])+"–"+str(item["end_time"])) if kind=="break" else (str(item["label"])+"\\n"+str(item["start_time"])+"–"+str(item["end_time"]))) for _,kind,item in timeline]
         for col,value in enumerate(headers,1):
             c=sheet.cell(header_row,col,value); c.font=Font(bold=True,color="FFFFFF"); c.fill=PatternFill("solid",fgColor="17633B"); c.alignment=Alignment(horizontal="center",vertical="center",wrap_text=True)
         break_columns=set()
