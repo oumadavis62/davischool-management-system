@@ -70,7 +70,6 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
         fields = [("Principal", field_value(school, "principal", "")),
                   ("Phone", field_value(school, "phone", "")),
                   ("Email", field_value(school, "email", "")),
-                  ("Postal address", field_value(school, "postal_address", "")),
                   ("School type", field_value(school, "school_type", ""))]
         return [(label, str(value).strip()) for label, value in fields if str(value or "").strip()]
 
