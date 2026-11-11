@@ -170,8 +170,9 @@ def register_timetable_view_routes(app, get_db, get_school_obj, module_page):
                     if class_index == 0:
                         cells.append(f"<th class='tb-day-heading' rowspan='{len(day_class_rows)}'>{esc(day['day_name'])}</th>")
                     if show_class_column:
-                        class_name_html = f"<b class='tb-class-name'>{esc(class_row['class_name'])}</b>"
-                        stream_html = f"<span class='tb-stream-name'>{esc(class_row['stream'])}</span>" if class_row["stream"] else ""
+                        class_display = str(class_row.get("initials") or (class_row["class_name"] + ((" " + class_row["stream"]) if class_row["stream"] else "")))
+                        class_name_html = f"<b class='tb-class-name'>{esc(class_display)}</b>"
+                        stream_html = ""
                         cells.append(f"<th class='tb-class-heading'>{class_name_html}{stream_html}</th>")
                     merged_period_ids = set()
                     for timeline_position, (_, item_type, item) in enumerate(timeline):
