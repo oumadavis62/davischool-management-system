@@ -61,7 +61,7 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
         return RedirectResponse("/app/timetable/setup" + suffix, 303)
 
     @app.get("/app/timetable", response_class=HTMLResponse)
-    def timetable_home(request: Request, profile_id: int = 0):
+    def timetable_home(request: Request, profile_id: int = 0, message: str = "", error: int = 0):
         school = school_for(request)
         if not school:
             return RedirectResponse("/", 303)
@@ -144,6 +144,7 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
         """ if selected else "")
         else:
             profile_control = ""
+            profile_edit_modal = ""
             profile_panel = """
               <section class='tt-home-empty'>
                 <div class='tt-home-empty-icon'>▦</div><span class='tt-home-eyebrow'>GET STARTED</span>
@@ -151,6 +152,7 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
                 <p>Start by choosing the academic year and term. Then configure school days, lesson periods, rooms and teaching requirements before building your timetable.</p>
                 <a class='tt-home-primary' href='/app/timetable/setup'>Create timetable profile <span>→</span></a>
               </section>"""
+        notice = f"<div class='tt-home-notice {'error' if error else 'success'}'>{escape(message)}</div>" if message else ""
         profile_catalog_html = (
             "<section class='tt-home-catalog'><div><span class='tt-home-eyebrow'>ALL TIMETABLE PROGRAMMES</span><h3>Independent timetables</h3><p>Each programme has its own configuration, publishing status and revision history.</p></div><div class='tt-home-catalog-list'>"
             + "".join(
@@ -162,6 +164,7 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
         ) if profiles else ""
         body = f"""
         <style>
+           .tt-home-notice{{padding:10px 14px;border-radius:10px;margin:0 0 14px;font-size:12px;font-weight:700;background:#eaf5ec;color:#17633b}}.tt-home-notice.error{{background:#fff1f0;color:#a12828}}
           .tt-home-profile-modal{{width:min(560px,calc(100% - 28px));max-height:88vh;overflow:auto;border:1px solid #dce9df;border-radius:18px;padding:22px;background:#fff;color:#173d2b;box-shadow:0 22px 70px #102c1b40}}
           .tt-home-profile-modal::backdrop{{background:#102c1b70;backdrop-filter:blur(2px)}}
           .tt-home-profile-modal-head{{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:18px}}
@@ -184,6 +187,7 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
           .tt-home-profile{{display:flex;align-items:center;justify-content:flex-end;gap:12px;margin:18px 2px 14px}}.tt-home-profile label{{font-size:12px;color:#61766d;font-weight:700}}.tt-home-profile select{{min-width:250px;max-width:100%;padding:10px 13px;border:1px solid #dce7e0;border-radius:10px;background:#fff;color:#234b3b;font-weight:650}}
           .tt-home-profile-card,.tt-home-panel,.tt-home-empty{{background:#fff;border:1px solid #e3ece6;border-radius:18px;box-shadow:0 5px 18px rgba(24,67,47,.045)}}
           .tt-home-profile-card{{padding:23px 25px;margin-bottom:18px}}.tt-home-profile-top{{display:flex;align-items:center;justify-content:space-between;gap:16px}}.tt-home-profile-top h2{{font-size:22px;margin:6px 0;color:#183e30}}.tt-home-profile-top p{{font-size:12px;color:#72857a;margin:0}}.tt-home-profile-top p i{{display:inline-block;width:4px;height:4px;border-radius:50%;background:#a6b7ad;margin:0 8px 2px}}
+           .tt-home-outline{{background:#fff;cursor:pointer;font:inherit}}
           .tt-home-status{{font-size:10px;font-weight:800;letter-spacing:.7px;color:#18734e;background:#e8f5ed;padding:5px 9px;border-radius:20px}}.tt-home-outline{{text-decoration:none!important;border:1px solid #dce8e0;border-radius:9px;padding:9px 13px;color:#236348!important;font-size:12px;font-weight:750;white-space:nowrap}}
           .tt-home-metrics{{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-top:22px}}.tt-home-metrics div{{padding:13px 15px;background:#f5f9f6;border-radius:12px;display:flex;align-items:center;justify-content:space-between;gap:8px}}.tt-home-metrics span{{font-size:11px;color:#6c8175;font-weight:650}}.tt-home-metrics b{{font-size:22px;color:#1d5b40}}
           .tt-home-columns{{display:grid;grid-template-columns:minmax(0,1.08fr) minmax(0,.92fr);gap:20px;align-items:stretch}}.tt-home-panel{{padding:25px;min-width:0;border:1px solid #e4eaf0;border-radius:20px;box-shadow:0 8px 24px rgba(35,57,78,.045)}}.tt-home-panel:first-child{{background:#fff}}.tt-home-panel:last-child{{background:#f7f9fc;border-color:#e2e9f1}}.tt-home-panel-head{{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:18px}}.tt-home-panel h3{{font-size:19px;line-height:1.25;margin:6px 0 0;color:#20384f;letter-spacing:-.25px}}.tt-home-panel-head>a{{font-size:11px;color:#397895;text-decoration:none;font-weight:800;white-space:nowrap;padding:8px 11px;border:1px solid #dce8f0;border-radius:9px;background:#fff}}.tt-home-panel-head>a:hover{{background:#edf5f9;border-color:#c7dce8}}
@@ -197,6 +201,7 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
         <main class='tt-home'>
           <section class='tt-home-hero'><div class='tt-home-hero-copy'><span class='tt-home-eyebrow'>DAVISCHOOL · ACADEMIC OPERATIONS</span><h1>Smart Timetable</h1><p>Plan, organise and publish a balanced school timetable. Manage teaching requirements, build schedules and keep every class and teacher in sync.</p></div><div class='tt-home-hero-mark'>▦</div></section>
           {profile_control}
+          {notice}
           {profile_panel}
           {profile_catalog_html}
           {profile_edit_modal}
