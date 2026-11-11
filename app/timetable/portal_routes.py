@@ -12,6 +12,7 @@ from fastapi import Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
 from app.timetable.views import get_timetable_view
+from app.timetable.publishing import profile_display_name
 
 
 PORTAL_ROLES = {"teacher", "student", "parent"}
@@ -326,7 +327,7 @@ def register_timetable_portal_routes(app, get_db):
                 type_label = lambda value: value.replace("_", " ").title()
                 profile_labels = {
                     str(p["id"]): (
-                        str(p["name"]) + " · " + str(p["academic_year"])
+                        profile_display_name(p["name"]) + " · " + str(p["academic_year"])
                         + " · " + str(p["term"]) + " · "
                         + type_label(str(p["profile_type"] or "main"))
                     )
