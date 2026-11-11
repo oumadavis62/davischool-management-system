@@ -266,18 +266,14 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
         cover.setStyle(TableStyle([("ALIGN",(0,0),(-1,-1),"CENTER"),("VALIGN",(0,0),(-1,-1),"MIDDLE"),
                                    ("LEFTPADDING",(0,0),(-1,-1),2),("RIGHTPADDING",(0,0),(-1,-1),2)]))
         story = [cover]
-        meta_style = ParagraphStyle("TimetableCoverMeta", parent=styles["Normal"], alignment=TA_CENTER, fontSize=8, leading=11)
-        meta_cells = [[Paragraph("<b>Term:</b> " + pdf_text(result["profile"]["term"]), meta_style),
-                       Paragraph("<b>Year:</b> " + pdf_text(result["profile"]["academic_year"]), meta_style),
-                       Paragraph("<b>Status:</b> " + pdf_text(current_status), meta_style)]]
-        meta_table = Table(meta_cells, colWidths=[doc.width/3]*3)
-        meta_table.setStyle(TableStyle([("ALIGN",(0,0),(-1,-1),"CENTER"),
-                                        ("VALIGN",(0,0),(-1,-1),"MIDDLE"),
-                                        ("LEFTPADDING",(0,0),(-1,-1),12),
-                                        ("RIGHTPADDING",(0,0),(-1,-1),12),
-                                        ("TOPPADDING",(0,0),(-1,-1),8),
-                                        ("BOTTOMPADDING",(0,0),(-1,-1),10)]))
-        story.extend([meta_table, Spacer(1,10)])
+        meta_style = ParagraphStyle("TimetableCoverMeta", parent=styles["Normal"], alignment=TA_CENTER, fontSize=8, leading=10)
+        meta_line = Paragraph(
+            "<b>Term:</b> " + pdf_text(result["profile"]["term"]) +
+            " &nbsp;&nbsp;|&nbsp;&nbsp; <b>Year:</b> " + pdf_text(result["profile"]["academic_year"]) +
+            " &nbsp;&nbsp;|&nbsp;&nbsp; <b>Status:</b> " + pdf_text(current_status),
+            meta_style,
+        )
+        story.extend([meta_line, Spacer(1,6)])
         layout = build_export_grid(result, view_type)
         timeline = layout["timeline"]
         first_width = 30 if not layout["show_class_column"] else 30
