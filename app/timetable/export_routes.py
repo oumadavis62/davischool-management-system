@@ -398,6 +398,26 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                     timeline_cursor += cell.get("span", 1)
                 data.append(cells)
             table = Table(data, colWidths=widths, repeatRows=1)
+            if view_type == "class":
+                # Keep the cover details compact and stretch the timetable
+                # through the remaining landscape page instead of leaving
+                # unused space beneath naturally-sized lesson rows.
+                table.wrap(doc.width, doc.height)
+                natural_heights = list(table._rowHeights)
+                header_height = natural_heights[0] if natural_heights else 22
+                target_grid_height = max(header_height, doc.height - 82)
+                natural_grid_height = sum(natural_heights)
+                extra_per_row = max(
+                    0, (target_grid_height - natural_grid_height) / max(1, len(day_rows))
+                )
+                table = Table(
+                    data,
+                    colWidths=widths,
+                    rowHeights=[header_height] + [
+                        height + extra_per_row for height in natural_heights[1:]
+                    ],
+                    repeatRows=1,
+                )
             commands = [
                 ("BACKGROUND", (0,0), (-1,0), colors.HexColor("#17633b")),
                 ("TEXTCOLOR", (0,0), (-1,0), colors.white),
