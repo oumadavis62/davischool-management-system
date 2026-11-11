@@ -8,6 +8,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 
 from app.timetable.views import get_timetable_view
 from app.timetable.setup import TimetableSetupError
+from app.timetable.publishing import profile_display_name
 
 
 def register_timetable_view_routes(app, get_db, get_school_obj, module_page):
@@ -51,7 +52,7 @@ def register_timetable_view_routes(app, get_db, get_school_obj, module_page):
         pid = int(selected["id"]) if selected else 0
         notice = f"<div class='tv-alert'>{esc(message)}</div>" if message else ""
         profile_options = "".join(
-            f"<option value='{int(p['id'])}' {'selected' if selected and int(p['id'])==pid else ''}>{esc(p['academic_year'])} · {esc(p['term'])} — {esc(p['name'])}</option>"
+            f"<option value='{int(p['id'])}' {'selected' if selected and int(p['id'])==pid else ''}>{esc(p['academic_year'])} · {esc(p['term'])} — {esc(profile_display_name(p['name']))}</option>"
             for p in profiles
         )
         class_options = "<option value='0'>Choose class / stream</option>" + "".join(
