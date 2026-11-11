@@ -108,9 +108,24 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
             views_href = f"/app/timetable/views?profile_id={pid}"
             auto_href = f"/app/timetable/automatic?profile_id={pid}"
             publish_href = f"/app/timetable/publishing?profile_id={pid}"
+            profile_edit_modal = f"""
+              <dialog class='tt-home-profile-dialog' id='tt-home-profile-edit'>
+                <div class='tt-home-profile-dialog-head'><div><span class='tt-home-eyebrow'>EDIT EXISTING TIMETABLE</span><h2>Configure timetable profile</h2><p>Update this timetable's profile details. Its existing timetable configuration and lessons will be preserved.</p></div><button type='button' class='tt-home-dialog-close' aria-label='Close' data-close-profile>&times;</button></div>
+                <form method='post' action='/app/timetable/setup/profile/update' class='tt-home-profile-form'>
+                  <input type='hidden' name='profile_id' value='{pid}'>
+                  <label>Timetable type<select name='profile_type' required><option value='main' {'selected' if str(selected['profile_type'] or 'main')=='main' else ''}>Main School Timetable</option><option value='weekend' {'selected' if str(selected['profile_type'] or '')=='weekend' else ''}>Weekend Lessons</option><option value='remedial' {'selected' if str(selected['profile_type'] or '')=='remedial' else ''}>Weekday Remedials</option><option value='special' {'selected' if str(selected['profile_type'] or '')=='special' else ''}>Other / Special Timetable</option></select></label>
+                  <label>Profile name<input name='name' required maxlength='80' value='{esc(selected['name'])}'></label>
+                  <label>Academic year<input name='academic_year' required maxlength='20' value='{esc(selected['academic_year'])}'></label>
+                  <label>Term / semester<input name='term' required maxlength='40' value='{esc(selected['term'])}'></label>
+                  <label>Academic start date<input name='academic_start_date' type='date' value='{esc(selected['academic_start_date'] or '')}'></label>
+                  <label>Academic end date<input name='academic_end_date' type='date' value='{esc(selected['academic_end_date'] or '')}'></label>
+                  <div class='tt-home-profile-form-actions'><button type='button' class='tt-home-dialog-cancel' data-close-profile>Cancel</button><button type='submit' class='tt-home-dialog-save'>Save profile changes</button></div>
+                </form>
+              </dialog>
+            """
             profile_panel = f"""
               <section class='tt-home-profile-card'>
-                <div class='tt-home-profile-top'><div><span class='tt-home-eyebrow'>CURRENT TIMETABLE PROFILE</span><h2>{profile_name}</h2><p>{profile_meta} <i></i> <span class='tt-home-status'>{status}</span></p></div><div style='display:flex;gap:8px;flex-wrap:wrap'><a class='tt-home-outline' href='/app/timetable/setup#tt-profile-create-modal'>＋ Create new timetable</a><a class='tt-home-outline' href='{setup_href}'>Configure profile <span>↗</span></a></div></div>
+                <div class='tt-home-profile-top'><div><span class='tt-home-eyebrow'>CURRENT TIMETABLE PROFILE</span><h2>{profile_name}</h2><p>{profile_meta} <i></i> <span class='tt-home-status'>{status}</span></p></div><div style='display:flex;gap:8px;flex-wrap:wrap'><a class='tt-home-outline' href='/app/timetable/setup#tt-profile-create-modal'>＋ Create new timetable</a><button type='button' class='tt-home-outline' id='tt-home-edit-profile'>Configure profile</button></div></div>
                 <div class='tt-home-metrics'>
                   <div><span>School days</span><b>{stats['days']}</b></div><div><span>Lesson periods</span><b>{stats['periods']}</b></div><div><span>Active rooms</span><b>{stats['rooms']}</b></div><div><span>Scheduled lessons</span><b>{stats['lessons']}</b></div>
                 </div>
@@ -128,6 +143,7 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
               </div>"""
         else:
             profile_control = ""
+            profile_edit_modal = ""
             profile_panel = """
               <section class='tt-home-empty'>
                 <div class='tt-home-empty-icon'>▦</div><span class='tt-home-eyebrow'>GET STARTED</span>
@@ -156,6 +172,7 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
           .tt-home-hero-mark{{position:relative;z-index:1;width:94px;height:94px;border-radius:25px;background:#fff;border:1px solid #dce8f0;color:#3d7895;display:grid;place-items:center;font-size:42px;flex:none;box-shadow:0 8px 22px rgba(47,91,120,.08)}}
           .tt-home-profile{{display:flex;align-items:center;justify-content:flex-end;gap:12px;margin:18px 2px 14px}}.tt-home-profile label{{font-size:12px;color:#61766d;font-weight:700}}.tt-home-profile select{{min-width:250px;max-width:100%;padding:10px 13px;border:1px solid #dce7e0;border-radius:10px;background:#fff;color:#234b3b;font-weight:650}}
           .tt-home-profile-card,.tt-home-panel,.tt-home-empty{{background:#fff;border:1px solid #e3ece6;border-radius:18px;box-shadow:0 5px 18px rgba(24,67,47,.045)}}
+          .tt-home-profile-dialog{{width:min(620px,calc(100% - 28px));max-height:90vh;overflow:auto;border:0;border-radius:18px;padding:0;box-shadow:0 24px 70px rgba(15,39,29,.28);color:#214638}}.tt-home-profile-dialog::backdrop{{background:rgba(12,31,24,.55);backdrop-filter:blur(3px)}}.tt-home-profile-dialog[open]{{display:block}}.tt-home-profile-dialog-head{{display:flex;justify-content:space-between;gap:16px;padding:22px 24px 15px;background:linear-gradient(120deg,#edf6ef,#f8fbf8);border-bottom:1px solid #e1ece3}}.tt-home-profile-dialog-head h2{{margin:6px 0;font-size:21px;color:#1c5038}}.tt-home-profile-dialog-head p{{margin:0;font-size:12px;line-height:1.5;color:#718379}}.tt-home-dialog-close{{border:0;background:#fff;border-radius:9px;width:34px;height:34px;font-size:23px;color:#537263;cursor:pointer;flex:none}}.tt-home-profile-form{{padding:20px 24px 24px;display:grid;grid-template-columns:1fr 1fr;gap:14px}}.tt-home-profile-form label{{display:grid;gap:6px;font-size:11px;font-weight:750;color:#456555}}.tt-home-profile-form input,.tt-home-profile-form select{{width:100%;min-width:0;padding:11px 12px;border:1px solid #dce8df;border-radius:9px;background:#fff;color:#244b38;font:inherit;font-size:13px}}.tt-home-profile-form-actions{{grid-column:1/-1;display:flex;justify-content:flex-end;gap:9px;padding-top:7px}}.tt-home-dialog-cancel,.tt-home-dialog-save{{border:0;border-radius:9px;padding:11px 16px;font-size:12px;font-weight:800;cursor:pointer}}.tt-home-dialog-cancel{{background:#edf3ee;color:#456555}}.tt-home-dialog-save{{background:#176344;color:#fff}}@media(max-width:520px){{.tt-home-profile-form{{grid-template-columns:1fr;padding:17px}}.tt-home-profile-dialog-head{{padding:18px 17px}}.tt-home-profile-form-actions{{grid-column:1}}}}
           .tt-home-profile-card{{padding:23px 25px;margin-bottom:18px}}.tt-home-profile-top{{display:flex;align-items:center;justify-content:space-between;gap:16px}}.tt-home-profile-top h2{{font-size:22px;margin:6px 0;color:#183e30}}.tt-home-profile-top p{{font-size:12px;color:#72857a;margin:0}}.tt-home-profile-top p i{{display:inline-block;width:4px;height:4px;border-radius:50%;background:#a6b7ad;margin:0 8px 2px}}
           .tt-home-status{{font-size:10px;font-weight:800;letter-spacing:.7px;color:#18734e;background:#e8f5ed;padding:5px 9px;border-radius:20px}}.tt-home-outline{{text-decoration:none!important;border:1px solid #dce8e0;border-radius:9px;padding:9px 13px;color:#236348!important;font-size:12px;font-weight:750;white-space:nowrap}}
           .tt-home-metrics{{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-top:22px}}.tt-home-metrics div{{padding:13px 15px;background:#f5f9f6;border-radius:12px;display:flex;align-items:center;justify-content:space-between;gap:8px}}.tt-home-metrics span{{font-size:11px;color:#6c8175;font-weight:650}}.tt-home-metrics b{{font-size:22px;color:#1d5b40}}
@@ -171,8 +188,19 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
           <section class='tt-home-hero'><div class='tt-home-hero-copy'><span class='tt-home-eyebrow'>DAVISCHOOL · ACADEMIC OPERATIONS</span><h1>Smart Timetable</h1><p>Plan, organise and publish a balanced school timetable. Manage teaching requirements, build schedules and keep every class and teacher in sync.</p></div><div class='tt-home-hero-mark'>▦</div></section>
           {profile_control}
           {profile_panel}
+          {profile_edit_modal}
           {profile_catalog_html}
-        </main>"""
+        </main>
+        <script>
+        (function(){{
+          const dialog=document.getElementById('tt-home-profile-edit');
+          const openButton=document.getElementById('tt-home-edit-profile');
+          if(!dialog||!openButton)return;
+          openButton.addEventListener('click',()=>{{if(typeof dialog.showModal==='function')dialog.showModal();else dialog.setAttribute('open','');}});
+          dialog.querySelectorAll('[data-close-profile]').forEach(button=>button.addEventListener('click',()=>dialog.close()));
+          dialog.addEventListener('click',event=>{{if(event.target===dialog)dialog.close();}});
+        }})();
+        </script>"""
         return module_page(request, "Smart Timetable", "timetable", body)
 
     @app.get("/app/timetable/room-allocation", response_class=HTMLResponse)
@@ -1749,6 +1777,79 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
             return redirect_setup(profile_id, str(exc), True)
         finally:
             con.close()
+
+    @app.post("/app/timetable/setup/profile/update")
+    def update_timetable_profile(request: Request, profile_id: int = Form(...),
+        name: str = Form(...), academic_year: str = Form(...), term: str = Form(...),
+        academic_start_date: str = Form(""), academic_end_date: str = Form(""),
+        profile_type: str = Form("main")):
+        school = school_for(request)
+        if not school:
+            return RedirectResponse("/", 303)
+        school_id = int(school["id"])
+        name, academic_year, term = name.strip(), academic_year.strip(), term.strip()
+        profile_type = (profile_type or "main").strip().lower()
+        start_date, end_date = (academic_start_date or "").strip(), (academic_end_date or "").strip()
+        try:
+            if not name or not academic_year or not term:
+                raise TimetableSetupError("Profile name, academic year and term are required.")
+            if len(name) > 80 or len(academic_year) > 20 or len(term) > 40:
+                raise TimetableSetupError("One or more profile fields exceed the allowed length.")
+            if profile_type not in {"main", "weekend", "remedial", "special"}:
+                raise TimetableSetupError("Choose a valid timetable programme type.")
+            if start_date or end_date:
+                from datetime import date
+                try:
+                    parsed_start, parsed_end = date.fromisoformat(start_date), date.fromisoformat(end_date)
+                except ValueError:
+                    raise TimetableSetupError("Enter valid academic start and end dates.")
+                if parsed_end <= parsed_start:
+                    raise TimetableSetupError("Academic end date must be after the start date.")
+            con = get_db()
+            try:
+                cur = con.cursor()
+                current = cur.execute(
+                    "SELECT id FROM ds_timetable_profiles WHERE id=? AND school_id=?",
+                    (profile_id, school_id),
+                ).fetchone()
+                if not current:
+                    raise TimetableSetupError("The selected timetable profile could not be found.")
+                if profile_type == "main":
+                    duplicate = cur.execute(
+                        """SELECT id FROM ds_timetable_profiles
+                           WHERE school_id=? AND academic_year=? AND term=? AND profile_type='main'
+                             AND status<>'archived' AND id<>? LIMIT 1""",
+                        (school_id, academic_year, term, profile_id),
+                    ).fetchone()
+                else:
+                    duplicate = cur.execute(
+                        """SELECT id FROM ds_timetable_profiles
+                           WHERE school_id=? AND academic_year=? AND term=? AND profile_type=?
+                             AND name=? AND status<>'archived' AND id<>? LIMIT 1""",
+                        (school_id, academic_year, term, profile_type, name, profile_id),
+                    ).fetchone()
+                if duplicate:
+                    raise TimetableSetupError("Another timetable profile already uses this name, programme type, academic year and term.")
+                cur.execute(
+                    """UPDATE ds_timetable_profiles
+                       SET name=?,academic_year=?,term=?,profile_type=?,academic_start_date=?,
+                           academic_end_date=?,updated_at=CURRENT_TIMESTAMP
+                       WHERE id=? AND school_id=?""",
+                    (name, academic_year, term, profile_type, start_date or None,
+                     end_date or None, profile_id, school_id),
+                )
+                con.commit()
+            finally:
+                con.close()
+            return RedirectResponse(
+                f"/app/timetable?profile_id={profile_id}&message=" + quote("Timetable profile updated."),
+                303,
+            )
+        except TimetableSetupError as exc:
+            return RedirectResponse(
+                f"/app/timetable?profile_id={profile_id}&error=1&message=" + quote(str(exc)),
+                303,
+            )
 
     # Compatibility endpoint: older cached setup pages submitted to the page URL.
     # Keep this alias so profile creation cannot fail with 405 on stale markup.
