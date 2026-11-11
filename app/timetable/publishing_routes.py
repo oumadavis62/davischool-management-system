@@ -108,7 +108,7 @@ def register_timetable_publishing_routes(app, get_db, get_school_obj, module_pag
             action_html = "<button type='button' class='pub-btn' data-open='pub-action-dialog'>Create editable revision</button>"
             action_submit_html = f"""<button type='button' class='pub-btn' data-create-revision='{pid}'>Create revision</button>"""
         version_rows = "".join(
-            f"<tr><td>{esc(v['label'])}</td><td>{esc(v['profile_name'])}</td><td>{esc(v['created_at'])}</td><td>{esc(v['created_by'])}</td></tr>"
+            f"<tr><td>Revision</td><td>{esc(v['label'])}</td><td>{esc(v['profile_name'])}</td><td>{esc(v['created_at'])}</td><td>{esc(v['created_by'])}</td></tr>"
             for v in versions
         ) or "<tr><td colspan='5' class='pub-muted'>No published versions yet.</td></tr>"
         version_options = "".join(
@@ -169,7 +169,7 @@ def register_timetable_publishing_routes(app, get_db, get_school_obj, module_pag
           {notice}
           <section class='pub-card'><div class='pub-card-head'><div><span class='pub-kicker'>ACTIVE WORKSPACE</span><h3>{esc(selected['name'])}</h3><p>{esc(selected['academic_year'])} · {esc(selected['term'])} · {esc(str(selected['profile_type'] or 'main').replace('_',' ').title())}</p></div><span class='pub-state {'good' if status=='published' else 'bad' if status=='pending_approval' else ''}'>{esc(status.replace('_',' ').upper())}</span></div><div class='pub-profile-line'><span>Current profile selected</span><button type='button' class='pub-btn secondary' data-open='pub-compare-dialog' {'disabled' if len(versions)<2 else ''}>Compare versions</button></div></section>
           {readiness_html}
-          <section class='pub-card'><div class='pub-card-head'><div><span class='pub-kicker'>VERSION CONTROL</span><h3>Published timetable history</h3></div><span class='pub-state'>{len(versions)} saved version{'s' if len(versions)!=1 else ''}</span></div><div class='pub-table-scroll'><table><tr><th>Version</th><th>Profile</th><th>Published at</th><th>Published by</th></tr>{version_rows}</table></div></section>
+          <section class='pub-card'><div class='pub-card-head'><div><span class='pub-kicker'>VERSION CONTROL</span><h3>Published timetable history</h3></div><span class='pub-state'>{len(versions)} saved version{'s' if len(versions)!=1 else ''}</span></div><div class='pub-table-scroll'><table><tr><th>Revision</th><th>Version</th><th>Profile</th><th>Published at</th><th>Published by</th></tr>{version_rows}</table></div></section>
         </div>{profile_modal}{compare_modal}{action_modal}
         """
         return module_page(request,"Publishing & Versions","timetable",body)
