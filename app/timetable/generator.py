@@ -1235,6 +1235,61 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
                 "blocked_by_existing_shared_sessions": int(blocked_candidate_counts.get(task_index, 0)),
                 "rejections": counts,
             })
+        # Aggregate demand at class/subject level. The one-subject-per-day
+        # rule applies across all teachers, so occurrence-level candidate
+        # counts alone can hide a simple weekly-capacity contradiction.
+        subject_day_diagnostics = []
+        grouped_subject_tasks = {}
+        for task in tasks:
+            group_key = (int(task["class_id"]), int(task["subject_id"]))
+            grouped_subject_tasks.setdefault(group_key, []).append(task)
+        instructional_day_ids = {int(day["id"]) for day in days}
+        for (class_id, subject_id), subject_tasks in grouped_subject_tasks.items():
+            occupied_days = {
+                int(day_id)
+                for fixed_class_id, fixed_subject_id, day_id in fixed_subject_days
+                if int(fixed_class_id) == class_id and int(fixed_subject_id) == subject_id
+                and int(day_id) in instructional_day_ids
+            }
+            remaining_days = max(0, len(instructional_day_ids) - len(occupied_days))
+            required_occurrences = len(subject_tasks)
+            daily_limits = sorted({
+                int(task["max_lessons_per_day"])
+                for task in subject_tasks
+                if task.get("max_lessons_per_day") is not None
+            })
+            capacity_conflict = required_occurrences > remaining_days
+            subject_day_diagnostics.append({
+                "class": class_names.get(class_id, "Class ID " + str(class_id)),
+                "class_id": class_id,
+                "subject": subject_names.get(subject_id, "Subject ID " + str(subject_id)),
+                "subject_id": subject_id,
+                "unscheduled_occurrences": required_occurrences,
+                "instructional_days": len(instructional_day_ids),
+                "days_already_occupied_by_fixed_same_subject": len(occupied_days),
+                "remaining_days_for_subject": remaining_days,
+                "one_subject_per_class_per_day_capacity": remaining_days,
+                "configured_teacher_daily_limits": daily_limits,
+                "exceeds_one_per_day_capacity": capacity_conflict,
+                "teachers": sorted({
+                    teacher_names.get(int(task["teacher_id"]), "Teacher ID " + str(task["teacher_id"]))
+                    for task in subject_tasks
+                }),
+            })
+        subject_day_diagnostics.sort(
+            key=lambda item: (
+                not item["exceeds_one_per_day_capacity"],
+                -(item["unscheduled_occurrences"] - item["remaining_days_for_subject"]),
+                item["class"], item["subject"],
+            )
+        )
+        capacity_warning_lines = [
+            item["class"] + " / " + item["subject"] + ": "
+            + str(item["unscheduled_occurrences"]) + " unscheduled occurrence(s) across "
+            + str(item["remaining_days_for_subject"]) + " remaining day(s)"
+            + (" — exceeds the one-subject-per-class-per-day limit" if item["exceeds_one_per_day_capacity"] else "")
+            for item in subject_day_diagnostics[:8]
+        ]
         requirement_diagnostics.sort(
             key=lambda item: (item["candidate_slots_before_conflicts"], -sum(item["rejections"].values()))
         )
@@ -1277,9 +1332,14 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
                 + " Most constrained lessons: " + (" | ".join(diagnostic_lines) if diagnostic_lines else "No lesson-level rejection was recorded.")
                 + " Search: " + str(strict_nodes) + " strict nodes, " + str(fallback_nodes)
                 + " fallback nodes, " + str(round(time.monotonic() - search_started_at, 3)) + " seconds."
+                + (" Subject/day capacity checks: " + " | ".join(capacity_warning_lines) + "." if capacity_warning_lines else "")
                 + (" Constraint groups in the infeasibility core: " + "; ".join(item["rule"] for item in assumption_core) + "." if assumption_core else "")
             ),
             "diagnostic_details": diagnostic_lines,
+            "subject_day_capacity_diagnostics": subject_day_diagnostics,
+            "subject_day_capacity_warnings": [
+                item for item in subject_day_diagnostics if item["exceeds_one_per_day_capacity"]
+            ],
             "failure_cause": cause,
             "recommended_action": next_step,
             "failure_code": stop_reason,
