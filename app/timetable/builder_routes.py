@@ -385,7 +385,7 @@ def register_timetable_builder_routes(app, get_db, get_school_obj, module_page):
         headers = ["<th class='tb-day-heading'>Day</th>", "<th class='tb-class-heading'>Class / Stream</th>"]
         for _, item_type, item in timeline:
             if item_type == "break":
-                headers.append(f"<th class='tb-break-heading'><b>{esc(item['label'])}</b><span>{esc(item['start_time'])}–{esc(item['end_time'])}</span></th>")
+                headers.append(f"<th class='tb-break-heading' aria-label='{esc(item['label'])}'>{esc(item['start_time'])}–{esc(item['end_time'])}</th>")
             else:
                 headers.append(f"<th class='tb-period-heading'><b>{esc(item['label'])}</b><span>{esc(item['start_time'])}–{esc(item['end_time'])}</span></th>")
         timeline_period_positions = {
@@ -395,7 +395,7 @@ def register_timetable_builder_routes(app, get_db, get_school_obj, module_page):
         }
         rows = []
         manage_modals = []
-        for day in days:
+        for day_index, day in enumerate(days):
             day_class_rows = class_rows or [{"class_id": 0, "class_name": "—", "stream": ""}]
             for class_index, class_row in enumerate(day_class_rows):
                 cells = []
@@ -409,10 +409,11 @@ def register_timetable_builder_routes(app, get_db, get_school_obj, module_page):
                 merged_period_ids = set()
                 for timeline_position, (_, item_type, item) in enumerate(timeline):
                     if item_type == "break":
-                        # A break belongs to the whole school day, not to each
-                        # class row. Render one vertically merged cell per day.
-                        if class_index == 0:
-                            cells.append(f"<td class='tb-break-cell' rowspan='{len(day_class_rows)}'><span>{''.join('<i>' + ('&nbsp;' if ch.isspace() else esc(ch)) + '</i>' for ch in str(item['label']))}</span></td>")
+                        # Match Timetable Views: each break is one continuous
+                        # vertical label spanning every class row across the full week.
+                        if day_index == 0 and class_index == 0:
+                            break_rowspan = len(days) * len(day_class_rows)
+                            cells.append(f"<td class='tb-break-cell tb-week-break' rowspan='{break_rowspan}'><span>{''.join('<i>' + ('&nbsp;' if ch.isspace() else esc(ch)) + '</i>' for ch in str(item['label']))}</span></td>")
                         continue
                     period = item
                     if int(period["id"]) in merged_period_ids:
