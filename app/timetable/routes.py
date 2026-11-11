@@ -84,6 +84,7 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
         con.close()
 
         esc = lambda value: escape(str(value if value is not None else ""))
+        home_tab_id = str(request.scope.get("davischool_tab_id") or request.query_params.get("ds_tab") or "")
         if selected:
             pid = int(selected["id"])
             profile_options = "".join(
@@ -130,8 +131,9 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
         profile_edit_modal = (f"""
           <dialog class='tt-home-profile-modal' id='tt-home-profile-edit-modal'>
             <div class='tt-home-profile-modal-head'><div><span class='tt-home-eyebrow'>TIMETABLE PROFILE</span><h3>Edit timetable profile</h3><p>Update the details of the selected timetable.</p></div><button type='button' data-close-profile-edit aria-label='Close'>×</button></div>
-            <form method='post' action='/app/timetable/setup/profile/update' class='tt-home-profile-form'>
+            <form method='post' data-native-post='true' action='/app/timetable/setup/profile/update' class='tt-home-profile-form'>
               <input type='hidden' name='profile_id' value='{pid}'>
+              <input type='hidden' name='ds_tab' value='{escape(home_tab_id)}'>
               <label>Timetable type<select name='profile_type' required><option value='main' {'selected' if str(selected['profile_type'] or 'main')=='main' else ''}>Main School Timetable</option><option value='weekend' {'selected' if str(selected['profile_type'] or '')=='weekend' else ''}>Weekend Lessons</option><option value='remedial' {'selected' if str(selected['profile_type'] or '')=='remedial' else ''}>Weekday Remedials</option><option value='special' {'selected' if str(selected['profile_type'] or '')=='special' else ''}>Other / Special Timetable</option></select></label>
               <label>Profile name<input name='name' required maxlength='80' value='{profile_name}'></label>
               <label>Academic year<input name='academic_year' required maxlength='20' value='{esc(selected['academic_year'])}'></label>
@@ -1863,15 +1865,19 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
             con.close()
 
     @app.post("/app/timetable/setup/profile/update")
-    def update_timetable_profile(request: Request, profile_id: int = Form(...), name: str = Form(...), academic_year: str = Form(...), term: str = Form(...), academic_start_date: str = Form(""), academic_end_date: str = Form(""), profile_type: str = Form("main")):
+    def update_timetable_profile(request: Request, profile_id: int = Form(...), name: str = Form(...), academic_year: str = Form(...), term: str = Form(...), academic_start_date: str = Form(""), academic_end_date: str = Form(""), profile_type: str = Form("main"), ds_tab: str = Form("")):
         school = school_for(request)
         if not school: return RedirectResponse("/", 303)
         con = get_db()
         try:
             update_profile(con, int(school["id"]), profile_id, name, academic_year, term, academic_start_date, academic_end_date, profile_type)
-            return RedirectResponse(f"/app/timetable?profile_id={profile_id}&message=Timetable%20profile%20updated", 303)
+            tab_id = str(request.scope.get("davischool_tab_id") or ds_tab or "")
+            tab_query = "&ds_tab=" + quote(tab_id, safe="") if tab_id else ""
+            return RedirectResponse(f"/app/timetable?profile_id={profile_id}&message=Timetable%20profile%20updated{tab_query}", 303)
         except TimetableSetupError as exc:
-            return RedirectResponse(f"/app/timetable?profile_id={profile_id}&error=1&message={quote(str(exc))}", 303)
+            tab_id = str(request.scope.get("davischool_tab_id") or ds_tab or "")
+            tab_query = "&ds_tab=" + quote(tab_id, safe="") if tab_id else ""
+            return RedirectResponse(f"/app/timetable?profile_id={profile_id}&error=1&message={quote(str(exc))}{tab_query}", 303)
         finally:
             con.close()
 
