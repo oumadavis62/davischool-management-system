@@ -106,7 +106,7 @@ def get_timetable_view(connection: Any, school_id: int, profile_id: int, view_ty
     # Normalize database rows to mappings: the view renderer uses .get()
     # for optional lesson fields, which sqlite3.Row does not implement.
     lessons = [dict(row) for row in lessons]
-    advanced_sessions = _load_advanced_sessions(cur, school_id, profile_id, view_type, target_id)
+    advanced_sessions = _load_advanced_sessions(connection, cur, school_id, profile_id, view_type, target_id)
     weekend_sessions = [row for row in advanced_sessions if row["is_weekend"]]
     remedial_sessions = [row for row in advanced_sessions if row["is_remedial"]]
     weekday_remedials = [row for row in remedial_sessions if not row["is_weekend"]]
@@ -148,7 +148,7 @@ def get_timetable_view(connection: Any, school_id: int, profile_id: int, view_ty
     }
 
 
-def _load_advanced_sessions(cur, school_id: int, profile_id: int, view_type: str, target_id: int):
+def _load_advanced_sessions(connection, cur, school_id: int, profile_id: int, view_type: str, target_id: int):
     """Load normalized dated/weekly sessions for consolidated remedial/weekend sheets."""
     from app.timetable.advanced_setup import expand_calendar_occurrences
 
@@ -240,7 +240,7 @@ def _load_advanced_sessions(cur, school_id: int, profile_id: int, view_type: str
     rotation_labels = {}
     if dated:
         occurrences = expand_calendar_occurrences(
-            cur.connection, school_id, profile_id, min(dated), max(dated), include_closed=True
+            connection, school_id, profile_id, min(dated), max(dated), include_closed=True
         )
         for occurrence in occurrences:
             rotations = occurrence.get("rotations", [])
