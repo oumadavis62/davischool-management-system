@@ -295,7 +295,10 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
             slot_width = 28
             timeline_widths = [12 if kind == "break" else slot_width for _, kind, _ in timeline]
         first_day_rows = layout["rows"][:max(1, layout["rows"][0]["day_rowspan"])]
-        rows_per_day = max(1, len(first_day_rows))
+        # A class timetable is rendered as one continuous table so each
+        # break label can span the full set of instructional days.
+        rows_per_day = (len(layout["rows"]) if view_type == "class"
+                        else max(1, len(first_day_rows)))
         widths = [first_width] + ([class_width] if layout["show_class_column"] else []) + timeline_widths
 
         # Render each day as its own full-width table. This keeps each day's
