@@ -535,8 +535,8 @@ def update_profile(connection: Any, school_id: int, profile_id: int, name: str, 
     current = cur.execute("SELECT id,status,revision_of_profile_id FROM ds_timetable_profiles WHERE id=? AND school_id=?", (int(profile_id), int(school_id))).fetchone()
     if not current:
         raise TimetableSetupError("The selected timetable profile could not be found.")
-    if str(current["status"] or "draft").lower() not in {"draft", "published"}:
-        raise TimetableSetupError("Only a draft or active published timetable can be edited here.")
+    if str(current["status"] or "draft").lower() not in {"draft", "pending_approval", "published"}:
+        raise TimetableSetupError("Only a current timetable profile can be edited here.")
     root_id = int(current["revision_of_profile_id"] or current["id"])
     if profile_type == "main":
         duplicate = cur.execute("""SELECT id FROM ds_timetable_profiles WHERE school_id=? AND academic_year=? AND term=? AND profile_type='main' AND status IN ('draft','pending_approval','published') AND COALESCE(revision_of_profile_id,id)<>? LIMIT 1""", (int(school_id), academic_year, term, root_id)).fetchone()
