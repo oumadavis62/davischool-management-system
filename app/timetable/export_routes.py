@@ -5,6 +5,7 @@ from io import BytesIO
 from html import escape
 import logging
 import re
+import base64
 from xml.sax.saxutils import escape as xml_escape
 
 from fastapi import Request
@@ -58,6 +59,25 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
         }:
             return ""
         return room_name
+
+    def school_logo_data(school):
+        value = str(field_value(school, "logo_data", "") or "").strip()
+        if not value:
+            return ""
+        return value if value.startswith("data:image/") else "data:image/png;base64," + value
+
+    def school_details(school):
+        fields = [("Principal", field_value(school, "principal", "")),
+                  ("Phone", field_value(school, "phone", "")),
+                  ("Email", field_value(school, "email", "")),
+                  ("Postal address", field_value(school, "postal_address", "")),
+                  ("School type", field_value(school, "school_type", ""))]
+        return [(label, str(value).strip()) for label, value in fields if str(value or "").strip()]
+
+    def status_label(profile):
+        status = str(field_value(profile, "status", "draft") or "draft").strip().lower()
+        return {"draft":"Draft", "published":"Published", "pending_approval":"Pending Approval",
+                "pending approval":"Pending Approval", "archived":"Archived"}.get(status, status.replace("_", " ").title())
 
     def teacher_color_hex(value):
         color = str(value or "").strip()
@@ -166,8 +186,11 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
             weekend_html = "<section class='extra-section extra-weekend'><h3>Weekend lessons &amp; remedials</h3>" + print_session_table(result["weekend_sessions"], True) + "</section>"
 
         school_name=escape(str(field_value(school,"name","School")))
-        title=escape(str(result["title"]))
-        meta=escape(str(result["profile"]["academic_year"]) + " · " + str(result["profile"]["term"]))
+        title=escape("MASTER TIMETABLE" if view_type == "school" else str(result["title"]))
+        logo_src=school_logo_data(school)
+        logo_img=("<img style='width:60px;height:60px;object-fit:contain' src='" + escape(logo_src, quote=True) + "' alt='School logo'>") if logo_src else ""
+        school_details_html=" · ".join(escape(label + ": " + value) for label,value in school_details(school))
+        meta=escape(str(result["profile"]["academic_year"]) + " · " + str(result["profile"]["term"]) + " · " + status_label(result["profile"]))
         header_html = "<th>" + headers[0] + "</th>" + (("<th>" + headers[1] + "</th>") if layout["show_class_column"] else "") + "".join("<th class='" + ("break-header" if kind == "break" else "period-header") + "'>" + (str(item["start_time"]) + "–" + str(item["end_time"]) if kind == "break" else str(item["label"]) + "<br>" + str(item["start_time"]) + "–" + str(item["end_time"])) + "</th>" for _, kind, item in timeline)
         html=f"""<!doctype html><html><head><meta charset="utf-8"><title>{title}</title>
         <style>
@@ -181,7 +204,9 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
         .extra-section{{margin-top:18px;break-inside:avoid}}.extra-section h3{{font-size:12px;color:#1d563b;margin:0 0 8px}}.session-table{{width:100%;border-collapse:collapse;table-layout:fixed;min-width:0;font-size:8px}}.session-table th{{background:#17633b;color:#fff;padding:5px}}.session-table td{{padding:5px;border:1px solid #dce7de;text-align:left}}.empty{{color:#64748b;font-size:9px}}
         @media print{{body{{margin:0}}.actions{{display:none}}tr{{break-inside:avoid}}table{{min-width:0}}.extra-remedial-separate,.extra-weekend{{break-before:page}}}}
         </style></head><body><div class="actions"><button onclick="window.print()">Print timetable</button></div>
-        <h1>{school_name}</h1><h2>{title}</h2><p>{meta}</p><table><thead><tr>{header_html}</tr></thead><tbody>{"".join(body_rows)}</tbody></table>
+        <div style="display:grid;grid-template-columns:68px 1fr 68px;align-items:center;gap:8px;margin-bottom:4px"><div>{logo_img}</div><div><h1>{school_name}</h1><h2>{title}</h2></div><div style="text-align:right">{logo_img}</div></div>
+        <p style="font-size:8px;color:#405b49">{school_details_html}</p><p style="font-size:9px;font-weight:bold"><u>{meta}</u></p>
+        <table><thead><tr>{header_html}</tr></thead><tbody>{"".join(body_rows)}</tbody></table>
         {dated_html}{weekday_html}{weekend_html}
         <script>window.addEventListener("load",()=>setTimeout(()=>window.print(),250));</script></body></html>"""
         return HTMLResponse(html)
@@ -204,7 +229,7 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
         from reportlab.lib.pagesizes import A4, landscape
         from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
         from reportlab.lib.enums import TA_CENTER
-        from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, KeepInFrame
+        from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, KeepInFrame, Image as ReportLabImage
 
         buffer = BytesIO()
         doc = SimpleDocTemplate(buffer, pagesize=landscape(A4), leftMargin=18, rightMargin=18, topMargin=18, bottomMargin=18)
@@ -218,17 +243,31 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
         def pdf_text(value):
             return xml_escape(str(value).encode("latin-1", "replace").decode("latin-1"))
         school_name = pdf_text(str(school["name"] or "School"))
-        address = pdf_text(str(field_value(school, "address", field_value(school, "location", "")) or ""))
-        story = [Paragraph(school_name, school_style)]
-        if address:
-            story.append(Paragraph(address, styles["Normal"]))
         profile_meta = str(result["profile"]["academic_year"]) + " | " + str(result["profile"]["term"])
-        story.extend([
-            Spacer(1,5),
-            Paragraph(pdf_text(result["title"]).upper(), title_style),
-            Paragraph(pdf_text(profile_meta), styles["Normal"]),
-            Spacer(1,10),
-        ])
+        current_status = status_label(result["profile"])
+        logo_cell = ""
+        logo_src = school_logo_data(school)
+        if logo_src:
+            try:
+                encoded = logo_src.split(",", 1)[1] if "," in logo_src else logo_src
+                logo_cell = ReportLabImage(BytesIO(base64.b64decode(encoded)), width=52, height=52, kind="proportional")
+            except Exception:
+                logo_cell = ""
+        cover_title = "MASTER TIMETABLE" if view_type == "school" else str(result["title"]).upper()
+        cover_center = [Paragraph("<b>" + school_name + "</b>", school_style),
+                        Paragraph("<b>" + pdf_text(cover_title) + "</b>", title_style)]
+        cover = Table([[logo_cell, cover_center, logo_cell]], colWidths=[60, doc.width-120, 60])
+        cover.setStyle(TableStyle([("ALIGN",(0,0),(-1,-1),"CENTER"),("VALIGN",(0,0),(-1,-1),"MIDDLE"),
+                                   ("LEFTPADDING",(0,0),(-1,-1),2),("RIGHTPADDING",(0,0),(-1,-1),2)]))
+        story = [cover]
+        details = "   |   ".join(pdf_text(label + ": " + value) for label,value in school_details(school))
+        if details:
+            details_style = ParagraphStyle("SchoolDetails", parent=styles["Normal"], alignment=TA_CENTER, fontSize=7, leading=9)
+            story.append(Paragraph(details, details_style))
+        meta_style = ParagraphStyle("TimetableCoverMeta", parent=styles["Normal"], alignment=TA_CENTER, fontSize=8, leading=10)
+        story.extend([Paragraph("<u>" + pdf_text(profile_meta) + " | " + pdf_text(current_status) +
+                                " | " + str(len(result["lessons"])) + " scheduled lessons</u>", meta_style),
+                      Spacer(1,10)])
         layout = build_export_grid(result, view_type)
         timeline = layout["timeline"]
         first_width = 30 if not layout["show_class_column"] else 30
