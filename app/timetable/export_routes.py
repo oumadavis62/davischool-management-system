@@ -49,6 +49,16 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
         safe = re.sub(r"[^A-Za-z0-9_-]+", "-", raw).strip("-")
         return (safe or "DaviSchool-Timetable")[:90]
 
+    def allocated_room_name(lesson):
+        """Return a room label only for a real, explicitly allocated room."""
+        room_id = lesson.get("room_id")
+        room_name = str(lesson.get("room_name") or "").strip()
+        if not room_id or not room_name or room_name.casefold() in {
+            "room not assigned", "not assigned", "unassigned", "—", "-"
+        }:
+            return ""
+        return room_name
+
     def teacher_color_hex(value):
         color = str(value or "").strip()
         return color.upper() if re.fullmatch(r"#[0-9A-Fa-f]{6}", color) else "#2563EB"
@@ -112,7 +122,7 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                         if not teacher_initials:
                             name_parts = [part for part in str(lesson.get("teacher_name") or "").split() if part]
                             teacher_initials = "".join(part[0] for part in (name_parts[:1] + (name_parts[-1:] if len(name_parts) > 1 else []))).upper()[:4] or "—"
-                        allocated_room = str(lesson.get("room_name") or "").strip()
+                        allocated_room = allocated_room_name(lesson)
                         room_detail = "" if layout["room_view"] or not allocated_room else "<small class='room-detail'>⌂ " + escape(allocated_room) + "</small>"
                         card_color = str(lesson.get("teacher_color") or "").strip()
                         if not re.fullmatch(r"#[0-9A-Fa-f]{6}", card_color):
@@ -261,7 +271,7 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                         if not teacher_initials:
                             name_parts = [part for part in str(lesson.get("teacher_name") or "").split() if part]
                             teacher_initials = "".join(part[0] for part in (name_parts[:1] + (name_parts[-1:] if len(name_parts) > 1 else []))).upper()[:4] or "—"
-                        allocated_room = str(lesson.get("room_name") or "").strip()
+                        allocated_room = allocated_room_name(lesson)
                         room_text = "" if layout["room_view"] or not allocated_room else pdf_text(allocated_room)
                         card_color=str(lesson.get("teacher_color") or "").strip()
                         if not re.fullmatch(r"#[0-9A-Fa-f]{6}",card_color):
@@ -484,7 +494,7 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                             name_parts=[part for part in str(lesson.get("teacher_name") or "").split() if part]
                             teacher_initials="".join(part[0] for part in (name_parts[:1]+(name_parts[-1:] if len(name_parts)>1 else []))).upper()[:4] or "—"
                         detail=str(max(1,int(lesson.get("duration_periods") or 1)))+"P\n"+str(lesson.get("subject_initial") or "").strip().upper()+"\n"
-                        allocated_room=str(lesson.get("room_name") or "").strip()
+                        allocated_room=allocated_room_name(lesson)
                         if not layout["room_view"] and allocated_room: detail+="⌂ "+allocated_room+"\n"
                         detail+=teacher_initials
                         values.append(detail)
