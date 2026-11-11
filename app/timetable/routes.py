@@ -154,7 +154,7 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
         profile_catalog_html = (
             "<section class='tt-home-catalog'><div><span class='tt-home-eyebrow'>ALL TIMETABLE PROGRAMMES</span><h3>Independent timetables</h3><p>Each programme has its own configuration, publishing status and revision history.</p></div><div class='tt-home-catalog-list'>"
             + "".join(
-                "<a href='/app/timetable?profile_id=" + str(int(p["id"])) + "'><span><b>" + esc(p["name"]) + "</b><small>"
+                "<a href='/app/timetable?profile_id=" + str(int(p["id"])) + "'><span><b>" + esc(profile_display_name(p["name"])) + "</b><small>"
                 + esc(p["academic_year"]) + " · " + esc(p["term"]) + " · " + esc(str(p["profile_type"] or "main").replace("_", " ").title())
                 + "</small></span><em>" + esc(str(p["status"]).replace("_", " ").title()) + "</em></a>"
                 for p in profiles
