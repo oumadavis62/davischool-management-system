@@ -97,7 +97,7 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
         for row in layout["rows"]:
             cells = []
             if row["day_first"]:
-                cells.append(f"<th rowspan='{row['day_rowspan']}' class='day'>{escape(str(row['day']['day_name']))}</th>")
+                cells.append(f"<th rowspan='{row['day_rowspan']}' class='day'>{escape(str(row['day'].get('day_code') or row['day']['day_name']))}</th>")
             if layout["show_class_column"]:
                 cl=row["class"]
                 cells.append("<th class='class'>" + escape(cl["class_name"] + ((" " + cl["stream"]) if cl["stream"] else "")) + "</th>")
@@ -176,7 +176,7 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
         table{{width:100%;border-collapse:collapse;table-layout:fixed;min-width:900px}}th,td{{border:1px solid #c7d9ca;padding:4px;text-align:center;vertical-align:middle;overflow-wrap:anywhere}}
         thead th{{background:#347b50;color:white;font-size:9px;padding:7px 3px}}th.day{{background:#edf5ee;color:#315b3e;width:38px;text-align:center;vertical-align:middle}}th.class{{background:#f5f9f5;color:#315b3e;width:48px}}
         td.slot{{background:#fff}}.lesson{{position:relative;min-height:66px;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;background:color-mix(in srgb,var(--teacher-color) 17%,white);border:1px solid color-mix(in srgb,var(--teacher-color) 48%,white);border-left:4px solid var(--teacher-color);border-radius:6px;padding:13px 5px 5px;margin:2px;font-size:9px;line-height:1.2}}
-        .lesson .duration-label{{position:absolute;top:3px;right:5px;font-size:8px;font-weight:bold;background:#d5e9d9;border-radius:8px;padding:2px 4px}}.lesson .subject-initials{{display:block;text-align:center;font-size:12px;font-weight:900;letter-spacing:.4px}}.lesson .room-detail{{display:block;color:#55705d;font-size:8px;margin-top:4px;max-width:100%;overflow-wrap:anywhere}}.lesson .teacher-initials{{align-self:flex-end;margin-top:auto;background:#245b39;color:#fff;border-radius:4px;padding:2px 5px;font-size:8px;font-weight:900}}td.break{{background:#f1ead8;color:#75551d;vertical-align:middle;text-align:center;min-width:24px;padding:0;position:relative}}td.break>span{{display:flex;flex-direction:column;justify-content:center;align-items:center;min-height:100%;height:100%;font-size:18px;font-weight:950;line-height:1}}td.break>span i{{display:block;font-style:normal;line-height:1}}td.free{{background:#fbfdfb}}td.continued{{background:#f6faf6;color:#7b9480;font-size:8px}}
+        .lesson .duration-label{{position:absolute;top:3px;right:5px;font-size:8px;font-weight:bold;background:#d5e9d9;border-radius:8px;padding:2px 4px}}.lesson .subject-initials{{display:block;text-align:center;font-size:12px;font-weight:900;letter-spacing:.4px}}.lesson .room-detail{{display:block;color:#55705d;font-size:8px;margin-top:4px;max-width:100%;overflow-wrap:anywhere}}.lesson .teacher-initials{{align-self:flex-end;margin-top:auto;background:#245b39;color:#fff;border-radius:4px;padding:2px 5px;font-size:8px;font-weight:900}}th.break-header{{width:90%}}td.break{{width:90%;background:#f1ead8;color:#75551d;vertical-align:middle;text-align:center;min-width:24px;padding:0;position:relative}}td.break>span{{display:flex;flex-direction:column;justify-content:center;align-items:center;min-height:100%;height:100%;font-size:18px;font-weight:950;line-height:1}}td.break>span i{{display:block;font-style:normal;line-height:1}}td.free{{background:#fbfdfb}}td.continued{{background:#f6faf6;color:#7b9480;font-size:8px}}
         .actions{{text-align:center;margin-bottom:10px}}button{{padding:8px 15px;background:#17633b;color:#fff;border:0;border-radius:7px}}
         .extra-section{{margin-top:18px;break-inside:avoid}}.extra-section h3{{font-size:12px;color:#1d563b;margin:0 0 8px}}.session-table{{width:100%;border-collapse:collapse;table-layout:fixed;min-width:0;font-size:8px}}.session-table th{{background:#17633b;color:#fff;padding:5px}}.session-table td{{padding:5px;border:1px solid #dce7de;text-align:left}}.empty{{color:#64748b;font-size:9px}}
         @media print{{body{{margin:0}}.actions{{display:none}}tr{{break-inside:avoid}}table{{min-width:0}}.extra-remedial-separate,.extra-weekend{{break-before:page}}}}
@@ -233,10 +233,11 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
         timeline = layout["timeline"]
         first_width = 30 if not layout["show_class_column"] else 30
         class_width = 52 if layout["show_class_column"] else 0
-        slot_width = max(1, (doc.width - first_width - class_width) / max(1, len(timeline)))
+        timeline_weight = sum(0.9 if kind == "break" else 1.0 for _, kind, _ in timeline) or 1
+        slot_width = max(1, (doc.width - first_width - class_width) / timeline_weight)
         first_day_rows = layout["rows"][:max(1, layout["rows"][0]["day_rowspan"])]
         rows_per_day = max(1, len(first_day_rows))
-        widths = [first_width] + ([class_width] if layout["show_class_column"] else []) + [slot_width] * len(timeline)
+        widths = [first_width] + ([class_width] if layout["show_class_column"] else []) + [slot_width * (0.9 if kind == "break" else 1.0) for _, kind, _ in timeline]
 
         # Render each day as its own full-width table. This keeps each day's
         # merged break column intact while allowing the timetable to continue
@@ -253,7 +254,7 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                 row_index = day_row_index + 1
                 cells = []
                 if row["day_first"]:
-                    cells.append(Paragraph("<b>" + pdf_text(row["day"]["day_name"]) + "</b>", day_style))
+                    cells.append(Paragraph("<b>" + pdf_text(row["day"].get("day_code") or row["day"].get("day_code") or row["day"]["day_name"]) + "</b>", day_style))
                     if row["day_rowspan"] > 1:
                         span_commands.append(("SPAN", (0, row_index), (0, row_index + row["day_rowspan"] - 1)))
                 else:
@@ -538,7 +539,7 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
         if layout["show_class_column"]:
             sheet.column_dimensions["B"].width = 14
         for col in range(2+(1 if layout["show_class_column"] else 0),last_col+1):
-            sheet.column_dimensions[get_column_letter(col)].width = 22
+            sheet.column_dimensions[get_column_letter(col)].width = 19.8 if timeline[col - (2 if layout["show_class_column"] else 1) - 1][1] == "break" else 22
         sheet.freeze_panes = "B6"
         sheet.sheet_view.showGridLines = False
         sheet.auto_filter.ref = f"A{header_row}:{get_column_letter(last_col)}{row_index-1}"
