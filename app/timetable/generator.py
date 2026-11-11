@@ -926,31 +926,9 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
                 if len(values) > 1:
                     model.Add(sum(values) <= 1).OnlyEnforceIf(literal)
 
-        # A free period between different subjects taught by the same teacher
-        # to the same class is a preference, not a feasibility rule. Making it
-        # hard can make otherwise valid weekly timetables impossible to solve.
-        # Penalise adjacent subject changes during best-effort optimisation,
-        # while preserving the actual class/teacher/room clash constraints.
-        teacher_class_period_subjects = defaultdict(lambda: defaultdict(list))
-        for (class_id, teacher_id, day_id, period_no, subject_id), values in by_teacher_class_period_subject.items():
-            teacher_class_period_subjects[(class_id, teacher_id, day_id, period_no)][subject_id].extend(values)
-        for class_id, teacher_id, day_id, period_no in list(teacher_class_period_subjects):
-            current_subjects = teacher_class_period_subjects[(class_id, teacher_id, day_id, period_no)]
-            next_subjects = teacher_class_period_subjects.get((class_id, teacher_id, day_id, period_no + 1), {})
-            for subject_id, current_vars in current_subjects.items():
-                for next_subject_id, next_vars in next_subjects.items():
-                    if subject_id == next_subject_id:
-                        continue
-                    for current_var in current_vars:
-                        for next_var in next_vars:
-                            adjacent_pair = model.NewBoolVar(
-                                "teacher{}_class{}_day{}_period{}_subject{}_to_{}".format(
-                                    teacher_id, class_id, day_id, period_no, subject_id, next_subject_id
-                                )
-                            )
-                            model.AddBoolAnd([current_var, next_var]).OnlyEnforceIf(adjacent_pair)
-                            model.AddBoolOr([current_var.Not(), next_var.Not(), adjacent_pair])
-                            objective_terms.append((adjacent_pair, 80))
+        # No extra transition gap is imposed between different subjects
+        # taught by the same teacher to the same class; normal teacher clash
+        # constraints already prevent simultaneous teaching.
 
         for key, values in by_subject_teacher_day.items():
             class_id, subject_id, teacher_id, day_id = key
