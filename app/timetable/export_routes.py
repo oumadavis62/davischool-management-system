@@ -236,6 +236,7 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
         for _, kind, item in timeline:
             label = (pdf_text(str(item["start_time"])) + "–" + pdf_text(str(item["end_time"]))) if kind == "break" else ("<b>" + pdf_text(str(item["label"])) + "</b><br/>" + pdf_text(str(item["start_time"])) + "–" + pdf_text(str(item["end_time"])))
             data[0].append(Paragraph(label, header_style))
+        span_commands=[]
         for row_index, row in enumerate(layout["rows"], start=1):
             cells=[]
             # Avoid vertically merged cells in the PDF: ReportLab cannot split
@@ -314,7 +315,7 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
             ("VALIGN",(0,0),(-1,-1),"MIDDLE"),
             ("LEFTPADDING",(0,0),(-1,-1),3),("RIGHTPADDING",(0,0),(-1,-1),3),
             ("TOPPADDING",(0,0),(-1,-1),4),("BOTTOMPADDING",(0,0),(-1,-1),4),
-        ]
+        ]+span_commands
         for col,(_,kind,_) in enumerate(timeline,start=1+(1 if layout["show_class_column"] else 0)):
             if kind=="break":
                 commands += [("BACKGROUND",(col,0),(col,-1),colors.HexColor("#f1ead8")),("TEXTCOLOR",(col,0),(col,-1),colors.HexColor("#75551d"))]
