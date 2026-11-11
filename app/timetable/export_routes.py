@@ -231,103 +231,124 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
         timeline = layout["timeline"]
         first_width = 42 if not layout["show_class_column"] else 76
         class_width = 65 if layout["show_class_column"] else 0
-        slot_width = max(1, (doc.width - 12 - first_width - class_width) / max(1, len(timeline)))
-        data = [[Paragraph("Day", header_style)] + ([Paragraph("Class / Stream",header_style)] if layout["show_class_column"] else [])]
-        for _, kind, item in timeline:
-            label = "" if kind == "break" else ("<b>" + pdf_text(str(item["label"])) + "</b><br/>" + pdf_text(str(item["start_time"])) + "–" + pdf_text(str(item["end_time"])))
-            data[0].append(Paragraph(label, header_style))
-        span_commands=[]
-        for row_index, row in enumerate(layout["rows"], start=1):
-            cells=[]
-            if row["day_first"]:
-                cells.append(Paragraph("<b>"+pdf_text(row["day"]["day_name"])+"</b>",cell_style))
-                if row["day_rowspan"]>1:
-                    span_commands.append(("SPAN",(0,row_index),(0,row_index+row["day_rowspan"]-1)))
-            else:
-                cells.append("")
-            if layout["show_class_column"]:
-                cl=row["class"]
-                cells.append(Paragraph("<b>"+pdf_text(cl["class_name"] + ((" "+cl["stream"]) if cl["stream"] else ""))+"</b>",cell_style))
-            for cell in row["cells"]:
-                if cell["kind"]=="break_placeholder":
-                    cells.append("")
-                elif cell["kind"]=="break":
-                    b=cell["item"]
-                    break_label="<br/>".join(pdf_text(ch) for ch in str(b["label"]))
-                    break_style=ParagraphStyle("ExportBreak",parent=cell_style,alignment=TA_CENTER,fontSize=10,leading=11,textColor=colors.HexColor("#75551d"))
-                    cells.append(Paragraph("<b>"+break_label+"</b>",break_style))
-                    if cell["rowspan"]>1:
-                        col=len(cells)-1
-                        span_commands.append(("SPAN",(col,row_index),(col,row_index+cell["rowspan"]-1)))
-                elif cell["kind"]=="free":
-                    cells.append(Paragraph("—",cell_style))
-                elif cell["kind"]=="continued":
-                    cells.append(Paragraph("<br/>".join("↳ "+pdf_text(str(x.get("subject_initial") or "").strip().upper() or "—")+" continues" for x in cell["lessons"]),cell_style))
+        slot_width = max(1, (doc.width - first_width - class_width) / max(1, len(timeline)))
+        first_day_rows = layout["rows"][:max(1, layout["rows"][0]["day_rowspan"])]
+        rows_per_day = max(1, len(first_day_rows))
+        break_templates = {
+            cell_index: cell
+            for cell_index, cell in enumerate(first_day_rows[0]["cells"])
+            if cell["kind"] == "break"
+        }
+        widths = [first_width] + ([class_width] if layout["show_class_column"] else []) + [slot_width] * len(timeline)
+
+        # Render each day as its own full-width table. This keeps each day's
+        # merged break column intact while allowing the timetable to continue
+        # onto further landscape pages without shrinking the whole grid.
+        from reportlab.platypus import PageBreak
+        for day_start in range(0, len(layout["rows"]), rows_per_day):
+            day_rows = layout["rows"][day_start:day_start + rows_per_day]
+            data = [[Paragraph("Day", header_style)] + ([Paragraph("Class / Stream", header_style)] if layout["show_class_column"] else [])]
+            for _, kind, item in timeline:
+                label = "" if kind == "break" else ("<b>" + pdf_text(str(item["label"])) + "</b><br/>" + pdf_text(str(item["start_time"])) + "–" + pdf_text(str(item["end_time"])))
+                data[0].append(Paragraph(label, header_style))
+            span_commands = []
+            for day_row_index, row in enumerate(day_rows):
+                row_index = day_row_index + 1
+                cells = []
+                if row["day_first"]:
+                    cells.append(Paragraph("<b>" + pdf_text(row["day"]["day_name"]) + "</b>", cell_style))
+                    if row["day_rowspan"] > 1:
+                        span_commands.append(("SPAN", (0, row_index), (0, row_index + row["day_rowspan"] - 1)))
                 else:
-                    card_tables=[]
-                    card_width=max(1,slot_width*cell["span"]-8)
-                    for lesson in cell["lessons"]:
-                        subject_initial = pdf_text(str(lesson.get("subject_initial") or "").strip().upper() or "—")
-                        teacher_initials = str(lesson.get("teacher_initials") or "").strip().upper()
-                        if not teacher_initials:
-                            name_parts = [part for part in str(lesson.get("teacher_name") or "").split() if part]
-                            teacher_initials = "".join(part[0] for part in (name_parts[:1] + (name_parts[-1:] if len(name_parts) > 1 else []))).upper()[:4] or "—"
-                        allocated_room = allocated_room_name(lesson)
-                        room_text = "" if layout["room_view"] or not allocated_room else pdf_text(allocated_room)
-                        card_color=str(lesson.get("teacher_color") or "").strip()
-                        if not re.fullmatch(r"#[0-9A-Fa-f]{6}",card_color):
-                            card_color="#2563EB"
-                        accent=colors.HexColor(card_color)
-                        tint=colors.Color(1-(1-accent.red)*0.17,1-(1-accent.green)*0.17,1-(1-accent.blue)*0.17)
-                        top_style=ParagraphStyle("ExportDuration",parent=cell_style,alignment=2,fontSize=5,leading=6)
-                        subject_style=ParagraphStyle("ExportSubject",parent=cell_style,alignment=TA_CENTER,fontSize=9,leading=11)
-                        room_style=ParagraphStyle("ExportRoom",parent=cell_style,alignment=TA_CENTER,fontSize=5,leading=6,textColor=colors.HexColor("#55705d"))
-                        teacher_style=ParagraphStyle("ExportTeacher",parent=cell_style,alignment=2,fontSize=5,leading=6,textColor=colors.white)
-                        card_rows=[
-                            [Paragraph(str(max(1,int(lesson.get("duration_periods") or 1)))+"P",top_style)],
-                            [Paragraph("<b>"+subject_initial+"</b>",subject_style)],
-                        ]
-                        if room_text:
-                            card_rows.append([Paragraph("⌂ "+room_text,room_style)])
-                        card_rows.append([Paragraph("<font backColor='#245b39' color='white'><b>"+pdf_text(teacher_initials)+"</b></font>",teacher_style)])
-                        card=Table(card_rows,colWidths=[card_width])
-                        card.setStyle(TableStyle([
-                            ("BACKGROUND",(0,0),(-1,-1),tint),
-                            ("BOX",(0,0),(-1,-1),0.45,accent),
-                            ("LINEBEFORE",(0,0),(0,-1),3,accent),
-                            ("LEFTPADDING",(0,0),(-1,-1),3),("RIGHTPADDING",(0,0),(-1,-1),3),
-                            ("TOPPADDING",(0,0),(-1,-1),2),("BOTTOMPADDING",(0,0),(-1,-1),2),
-                        ]))
-                        card_tables.append(card)
-                    if len(card_tables)==1:
-                        cells.append(card_tables[0])
+                    cells.append("")
+                if layout["show_class_column"]:
+                    cl = row["class"]
+                    cells.append(Paragraph("<b>" + pdf_text(cl["class_name"] + ((" " + cl["stream"]) if cl["stream"] else "")) + "</b>", cell_style))
+                for cell_index, original_cell in enumerate(row["cells"]):
+                    cell = original_cell
+                    if cell["kind"] == "break_placeholder":
+                        if day_row_index == 0 and cell_index in break_templates:
+                            cell = dict(break_templates[cell_index], rowspan=len(day_rows))
+                        else:
+                            cells.append("")
+                            continue
+                    if cell["kind"] == "break":
+                        b = cell["item"]
+                        break_label = "<br/>".join(pdf_text(ch) for ch in str(b["label"]))
+                        break_style = ParagraphStyle("ExportBreak", parent=cell_style, alignment=TA_CENTER, fontSize=10, leading=11, textColor=colors.HexColor("#75551d"))
+                        cells.append(Paragraph("<b>" + break_label + "</b>", break_style))
+                        if cell["rowspan"] > 1:
+                            col = len(cells) - 1
+                            span_commands.append(("SPAN", (col, row_index), (col, row_index + cell["rowspan"] - 1)))
+                    elif cell["kind"] == "free":
+                        cells.append(Paragraph("—", cell_style))
+                    elif cell["kind"] == "continued":
+                        cells.append(Paragraph("<br/>".join("↳ " + pdf_text(str(x.get("subject_initial") or "").strip().upper() or "—") + " continues" for x in cell["lessons"]), cell_style))
                     else:
-                        stack=Table([[card] for card in card_tables],colWidths=[card_width])
-                        stack.setStyle(TableStyle([("LEFTPADDING",(0,0),(-1,-1),0),("RIGHTPADDING",(0,0),(-1,-1),0),("TOPPADDING",(0,0),(-1,-1),1),("BOTTOMPADDING",(0,0),(-1,-1),1)]))
-                        cells.append(stack)
-                    if cell["span"]>1:
-                        col=len(cells)-1
-                        span_commands.append(("SPAN",(col,row_index),(col+cell["span"]-1,row_index)))
-                        cells.extend([""] * (cell["span"]-1))
-            data.append(cells)
-        widths=[first_width]+([class_width] if layout["show_class_column"] else [])+[slot_width]*len(timeline)
-        table=Table(data,colWidths=widths,repeatRows=1)
-        commands=[
-            ("BACKGROUND",(0,0),(-1,0),colors.HexColor("#17633b")),
-            ("TEXTCOLOR",(0,0),(-1,0),colors.white),
-            ("GRID",(0,0),(-1,-1),0.35,colors.HexColor("#cbd8ce")),
-            ("BACKGROUND",(0,1),(0,-1),colors.HexColor("#eef5ef")),
-            ("VALIGN",(0,0),(-1,-1),"MIDDLE"),
-            ("LEFTPADDING",(0,0),(-1,-1),3),("RIGHTPADDING",(0,0),(-1,-1),3),
-            ("TOPPADDING",(0,0),(-1,-1),4),("BOTTOMPADDING",(0,0),(-1,-1),4),
-        ]+span_commands
-        for col,(_,kind,_) in enumerate(timeline,start=1+(1 if layout["show_class_column"] else 0)):
-            if kind=="break":
-                commands += [("BACKGROUND",(col,0),(col,-1),colors.HexColor("#f1ead8")),("TEXTCOLOR",(col,0),(col,-1),colors.HexColor("#75551d"))]
-        table.setStyle(TableStyle(commands))
-        # Keep the merged timetable grid together so ReportLab never tries
-        # to split a vertically merged day or break cell across PDF pages.
-        story.append(KeepInFrame(doc.width, doc.height - 34, [table], mode="shrink", hAlign="LEFT", vAlign="TOP"))
+                        card_tables = []
+                        card_width = max(1, slot_width * cell["span"] - 8)
+                        for lesson in cell["lessons"]:
+                            subject_initial = pdf_text(str(lesson.get("subject_initial") or "").strip().upper() or "—")
+                            teacher_initials = str(lesson.get("teacher_initials") or "").strip().upper()
+                            if not teacher_initials:
+                                name_parts = [part for part in str(lesson.get("teacher_name") or "").split() if part]
+                                teacher_initials = "".join(part[0] for part in (name_parts[:1] + (name_parts[-1:] if len(name_parts) > 1 else []))).upper()[:4] or "—"
+                            allocated_room = allocated_room_name(lesson)
+                            room_text = "" if layout["room_view"] or not allocated_room else pdf_text(allocated_room)
+                            card_color = str(lesson.get("teacher_color") or "").strip()
+                            if not re.fullmatch(r"#[0-9A-Fa-f]{6}", card_color):
+                                card_color = "#2563EB"
+                            accent = colors.HexColor(card_color)
+                            tint = colors.Color(1-(1-accent.red)*0.17, 1-(1-accent.green)*0.17, 1-(1-accent.blue)*0.17)
+                            top_style = ParagraphStyle("ExportDuration", parent=cell_style, alignment=2, fontSize=5, leading=6)
+                            subject_style = ParagraphStyle("ExportSubject", parent=cell_style, alignment=TA_CENTER, fontSize=9, leading=11)
+                            room_style = ParagraphStyle("ExportRoom", parent=cell_style, alignment=TA_CENTER, fontSize=5, leading=6, textColor=colors.HexColor("#55705d"))
+                            teacher_style = ParagraphStyle("ExportTeacher", parent=cell_style, alignment=2, fontSize=5, leading=6, textColor=colors.white)
+                            card_rows = [
+                                [Paragraph(str(max(1, int(lesson.get("duration_periods") or 1))) + "P", top_style)],
+                                [Paragraph("<b>" + subject_initial + "</b>", subject_style)],
+                            ]
+                            if room_text:
+                                card_rows.append([Paragraph("⌂ " + room_text, room_style)])
+                            card_rows.append([Paragraph("<font backColor='#245b39' color='white'><b>" + pdf_text(teacher_initials) + "</b></font>", teacher_style)])
+                            card = Table(card_rows, colWidths=[card_width])
+                            card.setStyle(TableStyle([
+                                ("BACKGROUND", (0,0), (-1,-1), tint),
+                                ("BOX", (0,0), (-1,-1), 0.45, accent),
+                                ("LINEBEFORE", (0,0), (0,-1), 3, accent),
+                                ("LEFTPADDING", (0,0), (-1,-1), 3), ("RIGHTPADDING", (0,0), (-1,-1), 3),
+                                ("TOPPADDING", (0,0), (-1,-1), 2), ("BOTTOMPADDING", (0,0), (-1,-1), 2),
+                            ]))
+                            card_tables.append(card)
+                        if len(card_tables) == 1:
+                            cells.append(card_tables[0])
+                        else:
+                            stack = Table([[card] for card in card_tables], colWidths=[card_width])
+                            stack.setStyle(TableStyle([("LEFTPADDING",(0,0),(-1,-1),0),("RIGHTPADDING",(0,0),(-1,-1),0),("TOPPADDING",(0,0),(-1,-1),1),("BOTTOMPADDING",(0,0),(-1,-1),1)]))
+                            cells.append(stack)
+                        if cell["span"] > 1:
+                            col = len(cells) - 1
+                            span_commands.append(("SPAN", (col, row_index), (col + cell["span"] - 1, row_index)))
+                            cells.extend([""] * (cell["span"] - 1))
+                data.append(cells)
+            table = Table(data, colWidths=widths, repeatRows=1)
+            commands = [
+                ("BACKGROUND", (0,0), (-1,0), colors.HexColor("#17633b")),
+                ("TEXTCOLOR", (0,0), (-1,0), colors.white),
+                ("GRID", (0,0), (-1,-1), 0.35, colors.HexColor("#cbd8ce")),
+                ("BACKGROUND", (0,1), (0,-1), colors.HexColor("#eef5ef")),
+                ("VALIGN", (0,0), (-1,-1), "MIDDLE"),
+                ("LEFTPADDING", (0,0), (-1,-1), 3), ("RIGHTPADDING", (0,0), (-1,-1), 3),
+                ("TOPPADDING", (0,0), (-1,-1), 4), ("BOTTOMPADDING", (0,0), (-1,-1), 4),
+            ] + span_commands
+            for col, (_, kind, _) in enumerate(timeline, start=1 + (1 if layout["show_class_column"] else 0)):
+                if kind == "break":
+                    commands += [("BACKGROUND", (col,0), (col,-1), colors.HexColor("#f1ead8")), ("TEXTCOLOR", (col,0), (col,-1), colors.HexColor("#75551d"))]
+            table.setStyle(TableStyle(commands))
+            story.append(table)
+            if day_start + rows_per_day < len(layout["rows"]):
+                story.append(Spacer(1, 5))
+
 
         if result.get("dated_instructional_sessions"):
             from reportlab.platypus import PageBreak
