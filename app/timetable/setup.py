@@ -115,7 +115,7 @@ def save_day(connection: Any, school_id: int, profile_id: int, day_code: str, da
     connection.commit()
 
 
-def save_period(connection: Any, school_id: int, profile_id: int, period_no: int, label: str, start_time: str, end_time: str, period_type: str = "lesson") -> None:
+def save_period(connection: Any, school_id: int, profile_id: int, period_no: int, label: str, start_time: str, end_time: str, period_type: str = "lesson", period_id: int | None = None) -> None:
     cur = connection.cursor()
     _profile(cur, school_id, profile_id)
     start, end = _time_range(start_time, end_time)
@@ -124,34 +124,50 @@ def save_period(connection: Any, school_id: int, profile_id: int, period_no: int
         raise TimetableSetupError("Period number must be 1–30 and its label is required.")
     if period_type not in ("lesson", "study", "assembly"):
         raise TimetableSetupError("Choose a valid period type.")
+
+    existing = None
+    if period_id is not None:
+        existing = cur.execute(
+            "SELECT id FROM ds_timetable_periods WHERE id=? AND school_id=? AND profile_id=?",
+            (int(period_id), school_id, profile_id),
+        ).fetchone()
+        if not existing:
+            raise TimetableSetupError("The period being edited no longer exists in this timetable profile. Refresh and try again.")
+
+    duplicate = cur.execute(
+        """SELECT id FROM ds_timetable_periods
+           WHERE school_id=? AND profile_id=? AND period_no=? AND id<>?
+           LIMIT 1""",
+        (school_id, profile_id, number, int(existing["id"]) if existing else -1),
+    ).fetchone()
+    if duplicate:
+        raise TimetableSetupError("That period number is already assigned. Choose a different number.")
+
     overlap = cur.execute(
         """SELECT id FROM ds_timetable_periods
-           WHERE school_id=? AND profile_id=? AND period_no<>?
+           WHERE school_id=? AND profile_id=? AND id<>?
              AND start_time < ? AND end_time > ? LIMIT 1""",
-        (school_id, profile_id, number, end, start),
+        (school_id, profile_id, int(existing["id"]) if existing else -1, end, start),
     ).fetchone()
     if overlap:
         raise TimetableSetupError("This period overlaps another configured period.")
-    existing = cur.execute(
-        "SELECT id FROM ds_timetable_periods WHERE school_id=? AND profile_id=? AND period_no=?",
-        (school_id, profile_id, number),
-    ).fetchone()
-    values = (label, start, end, period_type, (int(end[:2])*60+int(end[3:]))-(int(start[:2])*60+int(start[3:])))
+
+    duration = (int(end[:2])*60+int(end[3:]))-(int(start[:2])*60+int(start[3:]))
     if existing:
         cur.execute(
-            """UPDATE ds_timetable_periods SET label=?,start_time=?,end_time=?,period_type=?,duration_minutes=?
-               WHERE id=? AND school_id=?""",
-            values + (existing["id"], school_id),
+            """UPDATE ds_timetable_periods
+               SET period_no=?,label=?,start_time=?,end_time=?,period_type=?,duration_minutes=?
+               WHERE id=? AND school_id=? AND profile_id=?""",
+            (number, label, start, end, period_type, duration, existing["id"], school_id, profile_id),
         )
     else:
         cur.execute(
             """INSERT INTO ds_timetable_periods
                (school_id,profile_id,period_no,label,start_time,end_time,period_type,duration_minutes)
                VALUES(?,?,?,?,?,?,?,?)""",
-            (school_id, profile_id, number) + values,
+            (school_id, profile_id, number, label, start, end, period_type, duration),
         )
     connection.commit()
-
 
 def save_break(connection: Any, school_id: int, profile_id: int, break_no: int, label: str, start_time: str, end_time: str, applies_to: str = "all") -> None:
     cur = connection.cursor()
