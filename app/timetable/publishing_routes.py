@@ -11,6 +11,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from app.timetable.setup import TimetableSetupError
 from app.timetable.publishing import (
     profile_display_name,
+    revision_display_label,
     validate_timetable_for_publication,
     submit_for_approval,
     publish_timetable,
@@ -109,11 +110,11 @@ def register_timetable_publishing_routes(app, get_db, get_school_obj, module_pag
             action_html = "<button type='button' class='pub-btn' data-open='pub-action-dialog'>Create editable revision</button>"
             action_submit_html = f"""<button type='button' class='pub-btn' data-create-revision='{pid}'>Create revision</button>"""
         version_rows = "".join(
-            f"<tr><td>{esc(v['label'])}</td><td>{esc(profile_display_name(v['profile_name']))}</td><td>Revision</td><td>{esc(v['created_at'])}</td><td>{esc(v['created_by'])}</td></tr>"
+            f"<tr><td>{esc(revision_display_label(v['label']))}</td><td>{esc(profile_display_name(v['profile_name']))}</td><td>Revision</td><td>{esc(v['created_at'])}</td><td>{esc(v['created_by'])}</td></tr>"
             for v in versions
         ) or "<tr><td colspan='5' class='pub-muted'>No published versions yet.</td></tr>"
         version_options = "".join(
-            f"<option value='{int(v['id'])}'>{esc(v['label'])} · {esc(profile_display_name(v['profile_name']))} · {esc(v['created_at'])}</option>"
+            f"<option value='{int(v['id'])}'>{esc(revision_display_label(v['label']))} · {esc(profile_display_name(v['profile_name']))} · {esc(v['created_at'])}</option>"
             for v in versions
         )
         compare_html = ""
