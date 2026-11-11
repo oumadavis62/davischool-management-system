@@ -102,7 +102,7 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                 elif cell["kind"] == "continued":
                     labels=[]
                     for lesson in cell["lessons"]:
-                        labels.append("↳ " + escape(str(lesson["subject_name"])) + " continues")
+                        labels.append("↳ " + escape(str(lesson.get("subject_initial") or "").strip().upper() or "—") + " continues")
                     cells.append("<td class='continued'>" + "<br>".join(labels) + "</td>")
                 else:
                     cards=[]
@@ -250,7 +250,7 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                 elif cell["kind"]=="free":
                     cells.append(Paragraph("—",cell_style))
                 elif cell["kind"]=="continued":
-                    cells.append(Paragraph("<br/>".join("↳ "+pdf_text(x["subject_name"])+" continues" for x in cell["lessons"]),cell_style))
+                    cells.append(Paragraph("<br/>".join("↳ "+pdf_text(str(x.get("subject_initial") or "").strip().upper() or "—")+" continues" for x in cell["lessons"]),cell_style))
                 else:
                     card_tables=[]
                     card_width=max(1,slot_width*cell["span"]-8)
@@ -473,7 +473,7 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                     target.alignment=Alignment(horizontal="center",vertical="center",wrap_text=True,textRotation=255)
                     if cell["rowspan"]>1: sheet.merge_cells(start_row=row_index,start_column=col,end_row=row_index+cell["rowspan"]-1,end_column=col)
                 elif cell["kind"]=="continued":
-                    target.value="\n".join("↳ "+x["subject_name"]+" continues" for x in cell["lessons"])
+                    target.value="\n".join("↳ "+str(x.get("subject_initial") or "").strip().upper()+" continues" for x in cell["lessons"])
                 elif cell["kind"]=="lesson":
                     values=[]
                     for lesson in cell["lessons"]:
