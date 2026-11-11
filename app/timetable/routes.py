@@ -60,7 +60,7 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
         return RedirectResponse("/app/timetable/setup" + suffix, 303)
 
     @app.get("/app/timetable", response_class=HTMLResponse)
-    def timetable_home(request: Request, profile_id: int = 0):
+    def timetable_home(request: Request, profile_id: int = 0, message: str = "", error: int = 0):
         school = school_for(request)
         if not school:
             return RedirectResponse("/", 303)
@@ -83,6 +83,7 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
         con.close()
 
         esc = lambda value: escape(str(value if value is not None else ""))
+        home_notice = f\"<div class='tt-home-notice {'error' if error else 'success'}'>{esc(message)}</div>\" if message else \"\"
         if selected:
             pid = int(selected["id"])
             profile_options = "".join(
@@ -171,6 +172,7 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
           .tt-home-hero p{{margin:0;color:#64788a;font-size:13px;max-width:560px;line-height:1.65}}
           .tt-home-hero-mark{{position:relative;z-index:1;width:94px;height:94px;border-radius:25px;background:#fff;border:1px solid #dce8f0;color:#3d7895;display:grid;place-items:center;font-size:42px;flex:none;box-shadow:0 8px 22px rgba(47,91,120,.08)}}
           .tt-home-profile{{display:flex;align-items:center;justify-content:flex-end;gap:12px;margin:18px 2px 14px}}.tt-home-profile label{{font-size:12px;color:#61766d;font-weight:700}}.tt-home-profile select{{min-width:250px;max-width:100%;padding:10px 13px;border:1px solid #dce7e0;border-radius:10px;background:#fff;color:#234b3b;font-weight:650}}
+          .tt-home-notice{{padding:12px 15px;margin:14px 0;border-radius:10px;background:#eaf5ed;color:#176344;font-size:12px;font-weight:700}}.tt-home-notice.error{{background:#fff0ed;color:#a33b2e}}
           .tt-home-profile-card,.tt-home-panel,.tt-home-empty{{background:#fff;border:1px solid #e3ece6;border-radius:18px;box-shadow:0 5px 18px rgba(24,67,47,.045)}}
           .tt-home-profile-dialog{{width:min(620px,calc(100% - 28px));max-height:90vh;overflow:auto;border:0;border-radius:18px;padding:0;box-shadow:0 24px 70px rgba(15,39,29,.28);color:#214638}}.tt-home-profile-dialog::backdrop{{background:rgba(12,31,24,.55);backdrop-filter:blur(3px)}}.tt-home-profile-dialog[open]{{display:block}}.tt-home-profile-dialog-head{{display:flex;justify-content:space-between;gap:16px;padding:22px 24px 15px;background:linear-gradient(120deg,#edf6ef,#f8fbf8);border-bottom:1px solid #e1ece3}}.tt-home-profile-dialog-head h2{{margin:6px 0;font-size:21px;color:#1c5038}}.tt-home-profile-dialog-head p{{margin:0;font-size:12px;line-height:1.5;color:#718379}}.tt-home-dialog-close{{border:0;background:#fff;border-radius:9px;width:34px;height:34px;font-size:23px;color:#537263;cursor:pointer;flex:none}}.tt-home-profile-form{{padding:20px 24px 24px;display:grid;grid-template-columns:1fr 1fr;gap:14px}}.tt-home-profile-form label{{display:grid;gap:6px;font-size:11px;font-weight:750;color:#456555}}.tt-home-profile-form input,.tt-home-profile-form select{{width:100%;min-width:0;padding:11px 12px;border:1px solid #dce8df;border-radius:9px;background:#fff;color:#244b38;font:inherit;font-size:13px}}.tt-home-profile-form-actions{{grid-column:1/-1;display:flex;justify-content:flex-end;gap:9px;padding-top:7px}}.tt-home-dialog-cancel,.tt-home-dialog-save{{border:0;border-radius:9px;padding:11px 16px;font-size:12px;font-weight:800;cursor:pointer}}.tt-home-dialog-cancel{{background:#edf3ee;color:#456555}}.tt-home-dialog-save{{background:#176344;color:#fff}}@media(max-width:520px){{.tt-home-profile-form{{grid-template-columns:1fr;padding:17px}}.tt-home-profile-dialog-head{{padding:18px 17px}}.tt-home-profile-form-actions{{grid-column:1}}}}
           .tt-home-profile-card{{padding:23px 25px;margin-bottom:18px}}.tt-home-profile-top{{display:flex;align-items:center;justify-content:space-between;gap:16px}}.tt-home-profile-top h2{{font-size:22px;margin:6px 0;color:#183e30}}.tt-home-profile-top p{{font-size:12px;color:#72857a;margin:0}}.tt-home-profile-top p i{{display:inline-block;width:4px;height:4px;border-radius:50%;background:#a6b7ad;margin:0 8px 2px}}
@@ -186,6 +188,7 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
         </style>
         <main class='tt-home'>
           <section class='tt-home-hero'><div class='tt-home-hero-copy'><span class='tt-home-eyebrow'>DAVISCHOOL · ACADEMIC OPERATIONS</span><h1>Smart Timetable</h1><p>Plan, organise and publish a balanced school timetable. Manage teaching requirements, build schedules and keep every class and teacher in sync.</p></div><div class='tt-home-hero-mark'>▦</div></section>
+          {home_notice}
           {profile_control}
           {profile_panel}
           {profile_edit_modal}
