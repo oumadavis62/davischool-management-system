@@ -9,7 +9,7 @@ from __future__ import annotations
 from typing import Any
 
 
-SCHEMA_VERSION = "005"
+SCHEMA_VERSION = "006"
 
 
 _TABLES = (
@@ -126,6 +126,7 @@ _TABLES = (
         class_id INTEGER NOT NULL,
         max_lessons_per_week INTEGER,
         max_periods_per_day INTEGER,
+        initials TEXT NOT NULL DEFAULT '',
         notes TEXT,
         updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
         UNIQUE (school_id, profile_id, class_id)
@@ -499,6 +500,11 @@ def ensure_timetable_schema(connection: Any) -> None:
     cursor = connection.cursor()
     for statement in _TABLES:
         cursor.execute(statement)
+    # Additive compatibility for existing class-label configuration.
+    cursor.execute("SELECT * FROM ds_timetable_class_limits LIMIT 0")
+    class_limit_columns = {str(col.name if hasattr(col, "name") else col[0]).lower() for col in (cursor.description or [])}
+    if "initials" not in class_limit_columns:
+        cursor.execute("ALTER TABLE ds_timetable_class_limits ADD COLUMN initials TEXT NOT NULL DEFAULT ''")
     # Additive compatibility for profiles created by the first foundation
     # release before term date fields were introduced.
     cursor.execute("SELECT * FROM ds_timetable_scheduling_requirements LIMIT 0")
