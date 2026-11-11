@@ -380,13 +380,13 @@ def register_timetable_view_routes(app, get_db, get_school_obj, module_page):
         /* Strongly separate the Day and Class / Stream columns in every view. */
         .tv-wrap .tb-grid thead th.tb-day-heading,
         .tv-wrap .tb-grid tbody th.tb-day-heading {{
-            border-right:3px solid #527b5d!important;
-            box-shadow:inset -1px 0 0 #315b3e,inset 0 -3px 0 #6f9b78;
+            border-right:2px solid #6f9b78!important;
+            
         }}
         .tv-wrap .tb-grid thead th.tb-class-heading,
         .tv-wrap .tb-grid tbody th.tb-class-heading {{
-            border-right:3px solid #527b5d!important;
-            box-shadow:inset -1px 0 0 #315b3e;
+            border-right:2px solid #6f9b78!important;
+            
         }}
         </style>
         <div class='tv-wrap'><div class='tv-hero'><div><span class='tv-kicker'>DAVISCHOOL · TIMETABLE VIEWS</span><h2>Timetable Views</h2><p>Inspect the published or draft timetable by school, class, teacher or room.</p></div></div>{notice}
