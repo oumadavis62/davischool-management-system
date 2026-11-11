@@ -370,13 +370,13 @@ def register_timetable_view_routes(app, get_db, get_school_obj, module_page):
         /* Specialized timetables only: reduce break columns by 60% (34px -> 14px). Main timetable widths remain unchanged. */
         .tv-wrap .tb-grid-compact thead th.tb-break-heading,
         .tv-wrap .tb-grid-compact .tb-break-heading,
-        .tv-wrap .tb-grid-compact .tb-break-cell {
+        .tv-wrap .tb-grid-compact .tb-break-cell {{
             width:14px!important;
             min-width:14px!important;
             max-width:14px!important;
             padding-left:0!important;
             padding-right:0!important;
-        }
+        }}
         /* Strongly separate the Day and Class / Stream columns in every view. */
         .tv-wrap .tb-grid thead th.tb-day-heading,
         .tv-wrap .tb-grid tbody th.tb-day-heading {{
