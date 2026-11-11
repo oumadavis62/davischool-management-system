@@ -152,7 +152,8 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                         )
                         cards.append("<div class='lesson' style='--teacher-color:" + card_color + "'>" + detail + "</div>")
                     cells.append(f"<td class='slot' colspan='{cell['span']}'>" + "".join(cards) + "</td>")
-            body_rows.append("<tr>" + "".join(cells) + "</tr>")
+            row_height = " height='" + str(round(100 / max(1, len(layout["rows"])), 4)) + "%'" if view_type in ("class", "teacher", "room") else ""
+            body_rows.append("<tr" + row_height + ">" + "".join(cells) + "</tr>")
         def print_session_table(items, include_rotation=False):
             if not items:
                 return "<p class='empty'>No sessions scheduled in this section.</p>"
@@ -202,7 +203,12 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
         h1,h2,p{{text-align:center;margin:3px}}h1{{font-size:17px}}h2{{font-size:13px}}p{{color:#647b6a;margin-bottom:12px}}
         table{{width:100%;border-collapse:collapse;table-layout:fixed;min-width:900px}}th,td{{border:1px solid #c7d9ca;padding:4px;text-align:center;vertical-align:middle;overflow-wrap:anywhere}}
         thead th{{background:#347b50;color:white;font-size:9px;padding:7px 3px}}th.day{{background:#edf5ee;color:#315b3e;width:38px;text-align:center;vertical-align:middle}}th.class{{background:#f5f9f5;color:#315b3e;width:48px}}
-        table.specialized-timetable{{width:auto;min-width:0}}table.specialized-timetable{{width:max-content;max-width:100%;table-layout:auto}}table.specialized-timetable th.period-header,table.specialized-timetable td.slot{{width:28px;min-width:28px}}table.specialized-timetable th.break-header,table.specialized-timetable td.break{{width:12px;min-width:12px;max-width:12px}}table.specialized-timetable td.break>span{{font-size:11px}}body.individual-sheet table.specialized-timetable{{width:100%;max-width:100%;table-layout:fixed}}body.individual-sheet table.specialized-timetable th.period-header,body.individual-sheet table.specialized-timetable td.slot{{width:auto;min-width:0}}body.individual-sheet table.specialized-timetable th.break-header,body.individual-sheet table.specialized-timetable td.break{{width:auto;min-width:0;max-width:none}}body.individual-sheet .lesson{{min-height:44px;padding-top:10px}}
+        table.specialized-timetable{{width:auto;min-width:0}}table.specialized-timetable{{width:max-content;max-width:100%;table-layout:auto}}table.specialized-timetable th.period-header,table.specialized-timetable td.slot{{width:28px;min-width:28px}}table.specialized-timetable th.break-header,table.specialized-timetable td.break{{width:12px;min-width:12px;max-width:12px}}table.specialized-timetable td.break>span{{font-size:11px}}body.individual-sheet table.specialized-timetable{{width:100%;max-width:100%;table-layout:fixed}}body.individual-sheet table.specialized-timetable th.period-header,body.individual-sheet table.specialized-timetable td.slot{{width:auto;min-width:0}}body.individual-sheet table.specialized-timetable th.break-header,body.individual-sheet table.specialized-timetable td.break{{width:auto;min-width:0;max-width:none}}body.individual-sheet table.specialized-timetable{{height:100%;border-collapse:collapse}}
+        body.individual-sheet table.specialized-timetable tbody tr{{height:1px}}
+        body.individual-sheet table.specialized-timetable td.slot{{display:flex;align-items:stretch;padding:0;vertical-align:stretch}}
+        body.individual-sheet .lesson{{position:relative;box-sizing:border-box;flex:1 1 0;width:100%;height:100%;min-height:0;margin:0;border-radius:0;padding:13px 5px 5px}}
+        body.individual-sheet .lesson+.lesson{{border-left-width:3px}}
+        body.individual-sheet table.specialized-timetable td.slot{{height:100%}}
         td.slot{{background:#fff}}.lesson{{position:relative;min-height:66px;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;background:color-mix(in srgb,var(--teacher-color) 17%,white);border:1px solid color-mix(in srgb,var(--teacher-color) 48%,white);border-left:4px solid var(--teacher-color);border-radius:6px;padding:13px 5px 5px;margin:2px;font-size:9px;line-height:1.2}}
         .lesson .duration-label{{position:absolute;top:3px;right:5px;font-size:8px;font-weight:bold;background:#d5e9d9;border-radius:8px;padding:2px 4px}}.lesson .subject-initials{{display:block;text-align:center;font-size:12px;font-weight:900;letter-spacing:.4px}}.lesson .room-detail{{display:block;color:#55705d;font-size:8px;margin-top:4px;max-width:100%;overflow-wrap:anywhere}}.lesson .teacher-initials{{align-self:flex-end;margin-top:auto;background:#245b39;color:#fff;border-radius:4px;padding:2px 5px;font-size:8px;font-weight:900}}th.break-header{{width:90%}}td.break{{width:90%;background:#f1ead8;color:#75551d;vertical-align:middle;text-align:center;min-width:24px;padding:0;position:relative}}td.break>span{{display:flex;flex-direction:column;justify-content:center;align-items:center;min-height:100%;height:100%;font-size:18px;font-weight:950;line-height:1}}td.break>span i{{display:block;font-style:normal;line-height:1}}td.free{{background:#fbfdfb}}td.continued{{background:#f6faf6;color:#7b9480;font-size:8px}}
         .actions{{text-align:center;margin-bottom:10px}}button{{padding:8px 15px;background:#17633b;color:#fff;border:0;border-radius:7px}}
@@ -282,6 +288,7 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
         story.extend([meta_line, Spacer(1,6)])
         layout = build_export_grid(result, view_type)
         timeline = layout["timeline"]
+        individual_row_height = max(24, (doc.height - 82 - 22) / max(1, len(layout["rows"]))) if view_type in ("class", "teacher", "room") else 58
         first_width = 30 if not layout["show_class_column"] else 30
         class_width = 52 if layout["show_class_column"] else 0
         if view_type == "school":
@@ -379,7 +386,12 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                             if room_text:
                                 card_rows.append([Paragraph("⌂ " + room_text, room_style)])
                             card_rows.append([Paragraph("<font backColor='#245b39' color='white'><b>" + pdf_text(teacher_initials) + "</b></font>", teacher_style)])
-                            card = Table(card_rows, colWidths=[card_width])
+                            card = Table(
+                                card_rows,
+                                colWidths=[card_width],
+                                rowHeights=[max(5, (individual_row_height - 8) / len(card_rows))] * len(card_rows)
+                                if view_type in ("class", "teacher", "room") else None,
+                            )
                             card.setStyle(TableStyle([
                                 ("BACKGROUND", (0,0), (-1,-1), tint),
                                 ("BOX", (0,0), (-1,-1), 0.45, accent),
@@ -409,16 +421,11 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                 natural_heights = list(table._rowHeights)
                 header_height = natural_heights[0] if natural_heights else 22
                 target_grid_height = max(header_height, doc.height - 82)
-                natural_grid_height = sum(natural_heights)
-                extra_per_row = max(
-                    0, (target_grid_height - natural_grid_height) / max(1, len(day_rows))
-                )
+                equal_data_row_height = max(24, (target_grid_height - header_height) / max(1, len(day_rows)))
                 table = Table(
                     data,
                     colWidths=widths,
-                    rowHeights=[header_height] + [
-                        height + extra_per_row for height in natural_heights[1:]
-                    ],
+                    rowHeights=[header_height] + [equal_data_row_height] * len(day_rows),
                     repeatRows=1,
                 )
             commands = [
