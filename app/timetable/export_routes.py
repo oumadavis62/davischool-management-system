@@ -174,7 +174,7 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
         @page{{size:A4 landscape;margin:7mm}}*{{box-sizing:border-box;-webkit-print-color-adjust:exact;print-color-adjust:exact}}body{{font:10px Arial,sans-serif;color:#234638;margin:12px}}
         h1,h2,p{{text-align:center;margin:3px}}h1{{font-size:17px}}h2{{font-size:13px}}p{{color:#647b6a;margin-bottom:12px}}
         table{{width:100%;border-collapse:collapse;table-layout:fixed;min-width:900px}}th,td{{border:1px solid #c7d9ca;padding:4px;text-align:center;vertical-align:middle;overflow-wrap:anywhere}}
-        thead th{{background:#347b50;color:white;font-size:9px;padding:7px 3px}}th.day{{background:#edf5ee;color:#315b3e;width:65px}}th.class{{background:#f5f9f5;color:#315b3e;width:65px}}
+        thead th{{background:#347b50;color:white;font-size:9px;padding:7px 3px}}th.day{{background:#edf5ee;color:#315b3e;width:38px;text-align:center;vertical-align:middle}}th.class{{background:#f5f9f5;color:#315b3e;width:48px}}
         td.slot{{background:#fff}}.lesson{{position:relative;min-height:66px;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;background:color-mix(in srgb,var(--teacher-color) 17%,white);border:1px solid color-mix(in srgb,var(--teacher-color) 48%,white);border-left:4px solid var(--teacher-color);border-radius:6px;padding:13px 5px 5px;margin:2px;font-size:9px;line-height:1.2}}
         .lesson .duration-label{{position:absolute;top:3px;right:5px;font-size:8px;font-weight:bold;background:#d5e9d9;border-radius:8px;padding:2px 4px}}.lesson .subject-initials{{display:block;text-align:center;font-size:12px;font-weight:900;letter-spacing:.4px}}.lesson .room-detail{{display:block;color:#55705d;font-size:8px;margin-top:4px;max-width:100%;overflow-wrap:anywhere}}.lesson .teacher-initials{{align-self:flex-end;margin-top:auto;background:#245b39;color:#fff;border-radius:4px;padding:2px 5px;font-size:8px;font-weight:900}}td.break{{background:#f1ead8;color:#75551d;vertical-align:middle;text-align:center;min-width:24px;padding:0;position:relative}}td.break>span{{display:flex;flex-direction:column;justify-content:center;align-items:center;min-height:100%;height:100%;font-size:18px;font-weight:950;line-height:1}}td.break>span i{{display:block;font-style:normal;line-height:1}}td.free{{background:#fbfdfb}}td.continued{{background:#f6faf6;color:#7b9480;font-size:8px}}
         .actions{{text-align:center;margin-bottom:10px}}button{{padding:8px 15px;background:#17633b;color:#fff;border:0;border-radius:7px}}
@@ -212,6 +212,7 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
         school_style = ParagraphStyle("DaviSchoolName", parent=styles["Title"], alignment=TA_CENTER, fontSize=16, leading=19, textColor=colors.HexColor("#174a31"))
         title_style = ParagraphStyle("TimetableTitle", parent=styles["Heading2"], alignment=TA_CENTER, fontSize=11, leading=14, textColor=colors.HexColor("#315b3e"))
         cell_style = ParagraphStyle("TimetableCell", parent=styles["BodyText"], fontSize=5.5, leading=6.5)
+        day_style = ParagraphStyle("TimetableDay", parent=cell_style, alignment=TA_CENTER)
         header_style = ParagraphStyle("TimetableHeader", parent=styles["BodyText"], fontSize=6, leading=7, textColor=colors.white, alignment=TA_CENTER)
         def pdf_text(value):
             return xml_escape(str(value).encode("latin-1", "replace").decode("latin-1"))
@@ -229,8 +230,8 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
         ])
         layout = build_export_grid(result, view_type)
         timeline = layout["timeline"]
-        first_width = 42 if not layout["show_class_column"] else 76
-        class_width = 65 if layout["show_class_column"] else 0
+        first_width = 30 if not layout["show_class_column"] else 30
+        class_width = 52 if layout["show_class_column"] else 0
         slot_width = max(1, (doc.width - first_width - class_width) / max(1, len(timeline)))
         first_day_rows = layout["rows"][:max(1, layout["rows"][0]["day_rowspan"])]
         rows_per_day = max(1, len(first_day_rows))
@@ -256,7 +257,7 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                 row_index = day_row_index + 1
                 cells = []
                 if row["day_first"]:
-                    cells.append(Paragraph("<b>" + pdf_text(row["day"]["day_name"]) + "</b>", cell_style))
+                    cells.append(Paragraph("<b>" + pdf_text(row["day"]["day_name"]) + "</b>", day_style))
                     if row["day_rowspan"] > 1:
                         span_commands.append(("SPAN", (0, row_index), (0, row_index + row["day_rowspan"] - 1)))
                 else:
@@ -495,7 +496,8 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
         for row in layout["rows"]:
             col=1
             if row["day_first"]:
-                sheet.cell(row_index,col,row["day"]["day_name"])
+                day_cell = sheet.cell(row_index,col,row["day"]["day_name"])
+                day_cell.alignment = Alignment(horizontal="center",vertical="center",wrap_text=True)
                 if row["day_rowspan"]>1: sheet.merge_cells(start_row=row_index,start_column=col,end_row=row_index+row["day_rowspan"]-1,end_column=col)
             col+=1
             if layout["show_class_column"]:
@@ -535,8 +537,10 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
             sheet.row_dimensions[row_index].height=58
             row_index+=1
         last_col=1+(1 if layout["show_class_column"] else 0)+len(timeline)
-        sheet.column_dimensions["A"].width = 16
-        for col in range(2,last_col+1):
+        sheet.column_dimensions["A"].width = 9
+        if layout["show_class_column"]:
+            sheet.column_dimensions["B"].width = 14
+        for col in range(2+(1 if layout["show_class_column"] else 0),last_col+1):
             sheet.column_dimensions[get_column_letter(col)].width = 22
         sheet.freeze_panes = "B6"
         sheet.sheet_view.showGridLines = False
