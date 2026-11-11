@@ -576,10 +576,10 @@ def get_db():
 
     if not LOCAL_DEVELOPMENT:
         raise RuntimeError(
-            "DaviSchool production database is not configured: DATABASE_URL is missing. "
+            "D-School production database is not configured: DATABASE_URL is missing. "
             "Refusing to fall back to local SQLite because local SQLite is not persistent "
             "across normal hosting deployments/restarts. Set DATABASE_URL to the persistent "
-            "PostgreSQL database used by DaviSchool."
+            "PostgreSQL database used by D-School."
         )
 
     con = sqlite3.connect(DB_PATH, timeout=30)
