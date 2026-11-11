@@ -112,7 +112,8 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                         if not teacher_initials:
                             name_parts = [part for part in str(lesson.get("teacher_name") or "").split() if part]
                             teacher_initials = "".join(part[0] for part in (name_parts[:1] + (name_parts[-1:] if len(name_parts) > 1 else []))).upper()[:4] or "—"
-                        room_detail = "" if layout["room_view"] else "<small class='room-detail'>⌂ " + escape(str(lesson.get("room_name") or "Room not assigned")) + "</small>"
+                        allocated_room = str(lesson.get("room_name") or "").strip()
+                        room_detail = "" if layout["room_view"] or not allocated_room else "<small class='room-detail'>⌂ " + escape(allocated_room) + "</small>"
                         card_color = str(lesson.get("teacher_color") or "").strip()
                         if not re.fullmatch(r"#[0-9A-Fa-f]{6}", card_color):
                             card_color = "#2563EB"
@@ -260,7 +261,8 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                         if not teacher_initials:
                             name_parts = [part for part in str(lesson.get("teacher_name") or "").split() if part]
                             teacher_initials = "".join(part[0] for part in (name_parts[:1] + (name_parts[-1:] if len(name_parts) > 1 else []))).upper()[:4] or "—"
-                        room_text = "" if layout["room_view"] else pdf_text(str(lesson.get("room_name") or "Room not assigned"))
+                        allocated_room = str(lesson.get("room_name") or "").strip()
+                        room_text = "" if layout["room_view"] or not allocated_room else pdf_text(allocated_room)
                         card_color=str(lesson.get("teacher_color") or "").strip()
                         if not re.fullmatch(r"#[0-9A-Fa-f]{6}",card_color):
                             card_color="#2563EB"
@@ -482,7 +484,8 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                             name_parts=[part for part in str(lesson.get("teacher_name") or "").split() if part]
                             teacher_initials="".join(part[0] for part in (name_parts[:1]+(name_parts[-1:] if len(name_parts)>1 else []))).upper()[:4] or "—"
                         detail=str(max(1,int(lesson.get("duration_periods") or 1)))+"P\n"+str(lesson.get("subject_initial") or "").strip().upper()+"\n"
-                        if not layout["room_view"]: detail+="⌂ "+str(lesson.get("room_name") or "Room not assigned")+"\n"
+                        allocated_room=str(lesson.get("room_name") or "").strip()
+                        if not layout["room_view"] and allocated_room: detail+="⌂ "+allocated_room+"\n"
                         detail+=teacher_initials
                         values.append(detail)
                     target.value="\n\n".join(values)
