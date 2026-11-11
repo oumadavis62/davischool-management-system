@@ -112,7 +112,7 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
             profile_edit_modal = f"""
               <dialog class='tt-home-profile-dialog' id='tt-home-profile-edit'>
                 <div class='tt-home-profile-dialog-head'><div><span class='tt-home-eyebrow'>EDIT EXISTING TIMETABLE</span><h2>Configure timetable profile</h2><p>Update this timetable's profile details. Its existing timetable configuration and lessons will be preserved.</p></div><button type='button' class='tt-home-dialog-close' aria-label='Close' data-close-profile>&times;</button></div>
-                <form method='post' action='/app/timetable/setup/profile/update' class='tt-home-profile-form'>
+                <form method='post' data-native-post='true' action='/app/timetable/setup/profile/update' class='tt-home-profile-form'>
                   <input type='hidden' name='profile_id' value='{pid}'>
                   <label>Timetable type<select name='profile_type' required><option value='main' {'selected' if str(selected['profile_type'] or 'main')=='main' else ''}>Main School Timetable</option><option value='weekend' {'selected' if str(selected['profile_type'] or '')=='weekend' else ''}>Weekend Lessons</option><option value='remedial' {'selected' if str(selected['profile_type'] or '')=='remedial' else ''}>Weekday Remedials</option><option value='special' {'selected' if str(selected['profile_type'] or '')=='special' else ''}>Other / Special Timetable</option></select></label>
                   <label>Profile name<input name='name' required maxlength='80' value='{esc(selected['name'])}'></label>
@@ -1800,7 +1800,9 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
                 raise TimetableSetupError("One or more profile fields exceed the allowed length.")
             if profile_type not in {"main", "weekend", "remedial", "special"}:
                 raise TimetableSetupError("Choose a valid timetable programme type.")
-            if start_date or end_date:
+            if bool(start_date) != bool(end_date):
+                raise TimetableSetupError("Enter both academic start and end dates, or leave both blank.")
+            if start_date and end_date:
                 from datetime import date
                 try:
                     parsed_start, parsed_end = date.fromisoformat(start_date), date.fromisoformat(end_date)
@@ -1851,6 +1853,12 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
         except TimetableSetupError as exc:
             return RedirectResponse(
                 f"/app/timetable?profile_id={profile_id}&error=1&message=" + quote(str(exc)),
+                303,
+            )
+        except Exception:
+            logger.exception("Failed to update timetable profile %s", profile_id)
+            return RedirectResponse(
+                f"/app/timetable?profile_id={profile_id}&error=1&message=" + quote("The timetable profile could not be saved. Please try again."),
                 303,
             )
 
