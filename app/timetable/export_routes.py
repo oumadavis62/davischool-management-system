@@ -107,19 +107,21 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                 else:
                     cards=[]
                     for lesson in cell["lessons"]:
-                        subject=escape(str(lesson["subject_name"]))
-                        initials=escape(str(lesson.get("subject_initial") or subject[:3]).upper())
-                        detail=f"<b>{initials}</b> · {subject}<small>{int(lesson['duration_periods'] or 1)} period(s)</small>"
-                        if layout["resource_view"]:
-                            cl=escape(str(lesson["class_name"]) + ((" " + str(lesson["stream"])) if lesson["stream"] else ""))
-                            detail += f"<small>{cl}</small>"
-                        if view_type != "teacher":
-                            detail += f"<small>{escape(str(lesson['teacher_name']))}</small>"
-                        if not layout["room_view"] and lesson.get("room_name"):
-                            detail += f"<small>⌂ {escape(str(lesson['room_name']))}</small>"
+                        subject_initial = escape(str(lesson.get("subject_initial") or "").strip().upper() or "—")
+                        teacher_initials = str(lesson.get("teacher_initials") or "").strip().upper()
+                        if not teacher_initials:
+                            name_parts = [part for part in str(lesson.get("teacher_name") or "").split() if part]
+                            teacher_initials = "".join(part[0] for part in (name_parts[:1] + (name_parts[-1:] if len(name_parts) > 1 else []))).upper()[:4] or "—"
+                        room_detail = "" if layout["room_view"] else "<small class='room-detail'>⌂ " + escape(str(lesson.get("room_name") or "Room not assigned")) + "</small>"
                         card_color = str(lesson.get("teacher_color") or "").strip()
                         if not re.fullmatch(r"#[0-9A-Fa-f]{6}", card_color):
                             card_color = "#2563EB"
+                        detail = (
+                            "<span class='duration-label'>" + str(max(1, int(lesson.get("duration_periods") or 1))) + "P</span>"
+                            "<b class='subject-initials'>" + subject_initial + "</b>"
+                            + room_detail
+                            + "<span class='teacher-initials'>" + escape(teacher_initials) + "</span>"
+                        )
                         cards.append("<div class='lesson' style='--teacher-color:" + card_color + "'>" + detail + "</div>")
                     cells.append(f"<td class='slot' colspan='{cell['span']}'>" + "".join(cards) + "</td>")
             body_rows.append("<tr>" + "".join(cells) + "</tr>")
@@ -162,8 +164,8 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
         h1,h2,p{{text-align:center;margin:3px}}h1{{font-size:17px}}h2{{font-size:13px}}p{{color:#647b6a;margin-bottom:12px}}
         table{{width:100%;border-collapse:collapse;table-layout:fixed;min-width:900px}}th,td{{border:1px solid #c7d9ca;padding:4px;text-align:center;vertical-align:middle;overflow-wrap:anywhere}}
         thead th{{background:#347b50;color:white;font-size:9px;padding:7px 3px}}th.day{{background:#edf5ee;color:#315b3e;width:65px}}th.class{{background:#f5f9f5;color:#315b3e;width:65px}}
-        td.slot{{background:#fff}}.lesson{{background:color-mix(in srgb,var(--teacher-color) 17%,white);border:1px solid color-mix(in srgb,var(--teacher-color) 48%,white);border-left:4px solid var(--teacher-color);border-radius:6px;padding:5px;margin:2px;font-size:9px;line-height:1.35}}
-        .lesson small{{display:block;color:#55705d;font-size:8px;margin-top:2px}}td.free{{background:#fbfdfb}}td.continued{{background:#f6faf6;color:#7b9480;font-size:8px}}
+        td.slot{{background:#fff}}.lesson{{position:relative;min-height:66px;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;background:color-mix(in srgb,var(--teacher-color) 17%,white);border:1px solid color-mix(in srgb,var(--teacher-color) 48%,white);border-left:4px solid var(--teacher-color);border-radius:6px;padding:13px 5px 5px;margin:2px;font-size:9px;line-height:1.2}}
+        .lesson .duration-label{{position:absolute;top:3px;right:5px;font-size:8px;font-weight:bold;background:#d5e9d9;border-radius:8px;padding:2px 4px}}.lesson .subject-initials{{display:block;text-align:center;font-size:12px;font-weight:900;letter-spacing:.4px}}.lesson .room-detail{{display:block;color:#55705d;font-size:8px;margin-top:4px;max-width:100%;overflow-wrap:anywhere}}.lesson .teacher-initials{{align-self:flex-end;margin-top:auto;background:#245b39;color:#fff;border-radius:4px;padding:2px 5px;font-size:8px;font-weight:900}}td.break{{writing-mode:vertical-rl;text-orientation:mixed;vertical-align:middle;text-align:center;min-width:24px}}td.break b{{display:block;letter-spacing:.08em}}td.free{{background:#fbfdfb}}td.continued{{background:#f6faf6;color:#7b9480;font-size:8px}}
         td.break{{background:#f1ead8;color:#75551d;font-weight:bold}}.actions{{text-align:center;margin-bottom:10px}}button{{padding:8px 15px;background:#17633b;color:#fff;border:0;border-radius:7px}}
         .extra-section{{margin-top:18px;break-inside:avoid}}.extra-section h3{{font-size:12px;color:#1d563b;margin:0 0 8px}}.session-table{{width:100%;border-collapse:collapse;table-layout:fixed;min-width:0;font-size:8px}}.session-table th{{background:#17633b;color:#fff;padding:5px}}.session-table td{{padding:5px;border:1px solid #dce7de;text-align:left}}.empty{{color:#64748b;font-size:9px}}
         @media print{{body{{margin:0}}.actions{{display:none}}tr{{break-inside:avoid}}table{{min-width:0}}.extra-remedial-separate,.extra-weekend{{break-before:page}}}}
@@ -240,7 +242,8 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                     cells.append("")
                 elif cell["kind"]=="break":
                     b=cell["item"]
-                    cells.append(Paragraph("<b>"+pdf_text(b["label"])+"</b><br/>"+pdf_text(b["start_time"]+"–"+b["end_time"]),cell_style))
+                    break_label="<br/>".join(pdf_text(ch) for ch in str(b["label"]))
+                    cells.append(Paragraph("<b>"+break_label+"</b><br/>"+pdf_text(b["start_time"]+"–"+b["end_time"]),cell_style))
                     if cell["rowspan"]>1:
                         col=len(cells)-1
                         span_commands.append(("SPAN",(col,row_index),(col,row_index+cell["rowspan"]-1)))
@@ -252,23 +255,35 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                     card_tables=[]
                     card_width=max(1,slot_width*cell["span"]-8)
                     for lesson in cell["lessons"]:
-                        class_label=str(lesson["class_name"])+((" "+str(lesson["stream"])) if lesson["stream"] else "")
-                        detail="<b>"+pdf_text(lesson["subject_name"])+"</b><br/>"+pdf_text(str(lesson["duration_periods"])+" period(s)")
-                        if layout["resource_view"]: detail += "<br/>"+pdf_text(class_label)
-                        if view_type!="teacher": detail += "<br/>"+pdf_text(lesson["teacher_name"])
-                        if not layout["room_view"] and lesson.get("room_name"): detail += "<br/>"+pdf_text(lesson["room_name"])
+                        subject_initial = pdf_text(str(lesson.get("subject_initial") or "").strip().upper() or "—")
+                        teacher_initials = str(lesson.get("teacher_initials") or "").strip().upper()
+                        if not teacher_initials:
+                            name_parts = [part for part in str(lesson.get("teacher_name") or "").split() if part]
+                            teacher_initials = "".join(part[0] for part in (name_parts[:1] + (name_parts[-1:] if len(name_parts) > 1 else []))).upper()[:4] or "—"
+                        room_text = "" if layout["room_view"] else pdf_text(str(lesson.get("room_name") or "Room not assigned"))
                         card_color=str(lesson.get("teacher_color") or "").strip()
                         if not re.fullmatch(r"#[0-9A-Fa-f]{6}",card_color):
                             card_color="#2563EB"
                         accent=colors.HexColor(card_color)
                         tint=colors.Color(1-(1-accent.red)*0.17,1-(1-accent.green)*0.17,1-(1-accent.blue)*0.17)
-                        card=Table([[Paragraph(detail,cell_style)]],colWidths=[card_width])
+                        top_style=ParagraphStyle("ExportDuration",parent=cell_style,alignment=2,fontSize=5,leading=6)
+                        subject_style=ParagraphStyle("ExportSubject",parent=cell_style,alignment=TA_CENTER,fontSize=9,leading=11)
+                        room_style=ParagraphStyle("ExportRoom",parent=cell_style,alignment=TA_CENTER,fontSize=5,leading=6,textColor=colors.HexColor("#55705d"))
+                        teacher_style=ParagraphStyle("ExportTeacher",parent=cell_style,alignment=2,fontSize=5,leading=6,textColor=colors.white)
+                        card_rows=[
+                            [Paragraph(str(max(1,int(lesson.get("duration_periods") or 1)))+"P",top_style)],
+                            [Paragraph("<b>"+subject_initial+"</b>",subject_style)],
+                        ]
+                        if room_text:
+                            card_rows.append([Paragraph("⌂ "+room_text,room_style)])
+                        card_rows.append([Paragraph("<font backColor='#245b39' color='white'><b>"+pdf_text(teacher_initials)+"</b></font>",teacher_style)])
+                        card=Table(card_rows,colWidths=[card_width])
                         card.setStyle(TableStyle([
                             ("BACKGROUND",(0,0),(-1,-1),tint),
                             ("BOX",(0,0),(-1,-1),0.45,accent),
                             ("LINEBEFORE",(0,0),(0,-1),3,accent),
-                            ("LEFTPADDING",(0,0),(-1,-1),5),("RIGHTPADDING",(0,0),(-1,-1),3),
-                            ("TOPPADDING",(0,0),(-1,-1),4),("BOTTOMPADDING",(0,0),(-1,-1),4),
+                            ("LEFTPADDING",(0,0),(-1,-1),3),("RIGHTPADDING",(0,0),(-1,-1),3),
+                            ("TOPPADDING",(0,0),(-1,-1),2),("BOTTOMPADDING",(0,0),(-1,-1),2),
                         ]))
                         card_tables.append(card)
                     if len(card_tables)==1:
@@ -453,19 +468,22 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                     continue
                 target=sheet.cell(row_index,col)
                 if cell["kind"]=="break":
-                    b=cell["item"]; target.value=b["label"]+"\n"+b["start_time"]+"–"+b["end_time"]
+                    b=cell["item"]; target.value="\n".join(str(ch) for ch in str(b["label"]))+"\n"+b["start_time"]+"–"+b["end_time"]
                     target.fill=PatternFill("solid",fgColor="F1EAD8"); target.font=Font(bold=True,color="75551D")
+                    target.alignment=Alignment(horizontal="center",vertical="center",wrap_text=True,textRotation=255)
                     if cell["rowspan"]>1: sheet.merge_cells(start_row=row_index,start_column=col,end_row=row_index+cell["rowspan"]-1,end_column=col)
                 elif cell["kind"]=="continued":
                     target.value="\n".join("↳ "+x["subject_name"]+" continues" for x in cell["lessons"])
                 elif cell["kind"]=="lesson":
                     values=[]
                     for lesson in cell["lessons"]:
-                        cl=str(lesson["class_name"])+((" "+str(lesson["stream"])) if lesson["stream"] else "")
-                        detail=str(lesson["subject_name"])+" ("+str(lesson["duration_periods"])+"P)"
-                        if layout["resource_view"]: detail+="\n"+cl
-                        if view_type!="teacher": detail+="\n"+str(lesson["teacher_name"])
-                        if not layout["room_view"] and lesson.get("room_name"): detail+="\n"+str(lesson["room_name"])
+                        teacher_initials=str(lesson.get("teacher_initials") or "").strip().upper()
+                        if not teacher_initials:
+                            name_parts=[part for part in str(lesson.get("teacher_name") or "").split() if part]
+                            teacher_initials="".join(part[0] for part in (name_parts[:1]+(name_parts[-1:] if len(name_parts)>1 else []))).upper()[:4] or "—"
+                        detail=str(max(1,int(lesson.get("duration_periods") or 1)))+"P\n"+str(lesson.get("subject_initial") or "").strip().upper()+"\n"
+                        if not layout["room_view"]: detail+="⌂ "+str(lesson.get("room_name") or "Room not assigned")+"\n"
+                        detail+=teacher_initials
                         values.append(detail)
                     target.value="\n\n".join(values)
                     lesson_colors={teacher_color_hex(lesson.get("teacher_color")) for lesson in cell["lessons"]}
