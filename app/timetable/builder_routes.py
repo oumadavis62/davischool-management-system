@@ -701,13 +701,13 @@ def register_timetable_builder_routes(app, get_db, get_school_obj, module_page):
         /* Strongly separate the Day and Class / Stream columns from timetable cells. */
         .tb-grid thead th.tb-day-heading,
         .tb-grid tbody th.tb-day-heading {{
-            border-right:3px solid #527b5d!important;
-            box-shadow:inset -1px 0 0 #315b3e,inset 0 -3px 0 #6f9b78;
+            border-right:2px solid #6f9b78!important;
+            
         }}
         .tb-grid thead th.tb-class-heading,
         .tb-grid tbody th.tb-class-heading {{
-            border-right:3px solid #527b5d!important;
-            box-shadow:inset -1px 0 0 #315b3e;
+            border-right:2px solid #6f9b78!important;
+            
         }}
         </style>
         <div class='tb-wrap'><header class='tb-hero'><div><span class='tb-kicker'>DAVISCHOOL · TIMETABLE WORKSPACE</span><h2>Manual Timetable Builder</h2><p>Drag to move · Select a tool for other actions.</p></div></header>{notice}<div class='tb-toolbar'>{profile_selector}<div class='tb-profile-context'><strong>{esc(selected['name'])}</strong><span>{esc(selected['academic_year'])} · {esc(selected['term'])}</span></div></div><nav class='tb-toolbar' aria-label='Builder tools'>{builder_tool_buttons}</nav>{grid}{builder_modals}</div>
