@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 import json
+import re
 from typing import Any
 
 from app.timetable.setup import TimetableSetupError
@@ -760,7 +761,7 @@ def create_revision(connection: Any, school_id: int, source_profile_id: int, act
     ).fetchone()["max_no"]
     revision_no = int(max_revision or 1) + 1
     now = _now()
-    name = str(source["name"] or "Timetable").split(" · Revision ")[0] + " · Revision"
+    name = str(source["name"] or "Timetable").split(" · Revision", 1)[0] + " · Revision"
     cur.execute(
         """INSERT INTO ds_timetable_profiles
            (school_id,name,academic_year,term,profile_type,status,week_start,week_end,academic_start_date,academic_end_date,
@@ -966,3 +967,7 @@ def profile_display_name(value: Any) -> str:
     name = str(value or "")
     marker = " · Revision "
     return name.split(marker, 1)[0] + " · Revision" if marker in name else name
+
+def revision_display_label(value: Any) -> str:
+    """Hide the internal revision sequence in a user-facing version label."""
+    return re.sub(r"^Revision\\s+\\d+", "Revision", str(value or ""))
