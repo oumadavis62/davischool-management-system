@@ -1251,6 +1251,16 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
                 if int(fixed_class_id) == class_id and int(fixed_subject_id) == subject_id
                 and int(day_id) in instructional_day_ids
             }
+            occupied_days.update(
+                int(session["day_id"])
+                for session in existing_sessions
+                if session.get("day_id") is not None
+                and session.get("schedule_layer") == "instructional"
+                and session.get("subject_id") is not None
+                and int(session["subject_id"]) == subject_id
+                and class_id in session.get("classes", set())
+                and int(session["day_id"]) in instructional_day_ids
+            )
             remaining_days = max(0, len(instructional_day_ids) - len(occupied_days))
             required_occurrences = len(subject_tasks)
             daily_limits = sorted({
