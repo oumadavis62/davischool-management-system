@@ -108,7 +108,10 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                             detail += f"<small>{escape(str(lesson['teacher_name']))}</small>"
                         if not layout["room_view"] and lesson.get("room_name"):
                             detail += f"<small>⌂ {escape(str(lesson['room_name']))}</small>"
-                        cards.append("<div class='lesson'>" + detail + "</div>")
+                        card_color = str(lesson.get("teacher_color") or "").strip()
+                        if not re.fullmatch(r"#[0-9A-Fa-f]{6}", card_color):
+                            card_color = "#2563EB"
+                        cards.append("<div class='lesson' style='--teacher-color:" + card_color + "'>" + detail + "</div>")
                     cells.append(f"<td class='slot' colspan='{cell['span']}'>" + "".join(cards) + "</td>")
             body_rows.append("<tr>" + "".join(cells) + "</tr>")
         school_name=escape(str(field_value(school,"name","School")))
@@ -121,7 +124,7 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
         h1,h2,p{{text-align:center;margin:3px}}h1{{font-size:17px}}h2{{font-size:13px}}p{{color:#647b6a;margin-bottom:12px}}
         table{{width:100%;border-collapse:collapse;table-layout:fixed;min-width:900px}}th,td{{border:1px solid #c7d9ca;padding:4px;text-align:center;vertical-align:middle;overflow-wrap:anywhere}}
         thead th{{background:#347b50;color:white;font-size:9px;padding:7px 3px}}th.day{{background:#edf5ee;color:#315b3e;width:65px}}th.class{{background:#f5f9f5;color:#315b3e;width:65px}}
-        td.slot{{background:#fff}}.lesson{{background:#e5f1e7;border:1px solid #b7d1bc;border-left:4px solid #347b50;border-radius:6px;padding:5px;margin:2px;font-size:9px;line-height:1.35}}
+        td.slot{{background:#fff}}.lesson{{background:color-mix(in srgb,var(--teacher-color) 17%,white);border:1px solid color-mix(in srgb,var(--teacher-color) 48%,white);border-left:4px solid var(--teacher-color);border-radius:6px;padding:5px;margin:2px;font-size:9px;line-height:1.35}}
         .lesson small{{display:block;color:#55705d;font-size:8px;margin-top:2px}}td.free{{background:#fbfdfb}}td.continued{{background:#f6faf6;color:#7b9480;font-size:8px}}
         td.break{{background:#f1ead8;color:#75551d;font-weight:bold}}.actions{{text-align:center;margin-bottom:10px}}button{{padding:8px 15px;background:#17633b;color:#fff;border:0;border-radius:7px}}
         @media print{{body{{margin:0}}.actions{{display:none}}tr{{break-inside:avoid}}table{{min-width:0}}}}
