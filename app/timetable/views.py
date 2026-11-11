@@ -103,6 +103,9 @@ def get_timetable_view(connection: Any, school_id: int, profile_id: int, view_ty
         " ORDER BY d.day_order,p.period_no,c.name,s.name",
         tuple(params),
     ).fetchall()
+    # Normalize database rows to mappings: the view renderer uses .get()
+    # for optional lesson fields, which sqlite3.Row does not implement.
+    lessons = [dict(row) for row in lessons]
     advanced_sessions = _load_advanced_sessions(cur, school_id, profile_id, view_type, target_id)
     weekend_sessions = [row for row in advanced_sessions if row["is_weekend"]]
     remedial_sessions = [row for row in advanced_sessions if row["is_remedial"]]
