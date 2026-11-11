@@ -83,7 +83,15 @@ def register_timetable_publishing_routes(app, get_db, get_school_obj, module_pag
         pid = int(selected["id"]) if selected else 0
         notice = f"<div class='pub-alert {'error' if error else 'success'}'>{esc(message)}</div>" if message else ""
         profile_options = "".join(
-            f"<option value='{int(p['id'])}' {'selected' if selected and int(p['id'])==pid else ''}>{esc(p['academic_year'])} · {esc(p['term'])} — {esc(profile_display_name(p['name']))} · {esc(str(p['profile_type']) or 'main').replace('_',' ').title())} ({esc(p['status'])})</option>"
+            "<option value='{}' {}>{} · {} — {} · {} ({})</option>".format(
+                int(p["id"]),
+                "selected" if selected and int(p["id"]) == pid else "",
+                esc(p["academic_year"]),
+                esc(p["term"]),
+                esc(profile_display_name(p["name"])),
+                esc(str(p["profile_type"] or "main").replace("_", " ").title()),
+                esc(p["status"]),
+            )
             for p in profiles
         )
         if not selected:
