@@ -168,7 +168,7 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
         school_name=escape(str(field_value(school,"name","School")))
         title=escape(str(result["title"]))
         meta=escape(str(result["profile"]["academic_year"]) + " · " + str(result["profile"]["term"]))
-        header_html="".join("<th>"+h+"</th>" for h in headers)
+        header_html = "<th>" + headers[0] + "</th>" + (("<th>" + headers[1] + "</th>") if layout["show_class_column"] else "") + "".join("<th class='break-header'>" + (str(item["start_time"]) + "–" + str(item["end_time"]) if kind == "break" else str(item["label"]) + "<br>" + str(item["start_time"]) + "–" + str(item["end_time"])) + "</th>" for _, kind, item in timeline)
         html=f"""<!doctype html><html><head><meta charset="utf-8"><title>{title}</title>
         <style>
         @page{{size:A4 landscape;margin:7mm}}*{{box-sizing:border-box;-webkit-print-color-adjust:exact;print-color-adjust:exact}}body{{font:10px Arial,sans-serif;color:#234638;margin:12px}}
@@ -254,7 +254,7 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                 row_index = day_row_index + 1
                 cells = []
                 if row["day_first"]:
-                    cells.append(Paragraph("<b>" + pdf_text(row["day"].get("day_code") or row["day"].get("day_code") or row["day"]["day_name"]) + "</b>", day_style))
+                    cells.append(Paragraph("<b>" + pdf_text(row["day"].get("day_code") or row["day"]["day_name"]) + "</b>", day_style))
                     if row["day_rowspan"] > 1:
                         span_commands.append(("SPAN", (0, row_index), (0, row_index + row["day_rowspan"] - 1)))
                 else:
