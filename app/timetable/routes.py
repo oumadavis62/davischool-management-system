@@ -83,7 +83,7 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
         con.close()
 
         esc = lambda value: escape(str(value if value is not None else ""))
-        home_notice = f\"<div class='tt-home-notice {'error' if error else 'success'}'>{esc(message)}</div>\" if message else \"\"
+        home_notice = f"<div class='tt-home-notice {'error' if error else 'success'}'>{esc(message)}</div>" if message else ""
         if selected:
             pid = int(selected["id"])
             profile_options = "".join(
