@@ -202,13 +202,13 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
         h1,h2,p{{text-align:center;margin:3px}}h1{{font-size:17px}}h2{{font-size:13px}}p{{color:#647b6a;margin-bottom:12px}}
         table{{width:100%;border-collapse:collapse;table-layout:fixed;min-width:900px}}th,td{{border:1px solid #c7d9ca;padding:4px;text-align:center;vertical-align:middle;overflow-wrap:anywhere}}
         thead th{{background:#347b50;color:white;font-size:9px;padding:7px 3px}}th.day{{background:#edf5ee;color:#315b3e;width:38px;text-align:center;vertical-align:middle}}th.class{{background:#f5f9f5;color:#315b3e;width:48px}}
-        table.specialized-timetable{{width:auto;min-width:0}}table.specialized-timetable{{width:max-content;max-width:100%;table-layout:auto}}table.specialized-timetable th.period-header,table.specialized-timetable td.slot{{width:28px;min-width:28px}}table.specialized-timetable th.break-header,table.specialized-timetable td.break{{width:12px;min-width:12px;max-width:12px}}table.specialized-timetable td.break>span{{font-size:11px}}
+        table.specialized-timetable{{width:auto;min-width:0}}table.specialized-timetable{{width:max-content;max-width:100%;table-layout:auto}}table.specialized-timetable th.period-header,table.specialized-timetable td.slot{{width:28px;min-width:28px}}table.specialized-timetable th.break-header,table.specialized-timetable td.break{{width:12px;min-width:12px;max-width:12px}}table.specialized-timetable td.break>span{{font-size:11px}}body.class-sheet table.specialized-timetable{{width:100%;max-width:100%;table-layout:fixed}}body.class-sheet table.specialized-timetable th.period-header,body.class-sheet table.specialized-timetable td.slot{{width:auto;min-width:0}}body.class-sheet table.specialized-timetable th.break-header,body.class-sheet table.specialized-timetable td.break{{width:auto;min-width:0;max-width:none}}body.class-sheet .lesson{{min-height:44px;padding-top:10px}}
         td.slot{{background:#fff}}.lesson{{position:relative;min-height:66px;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;background:color-mix(in srgb,var(--teacher-color) 17%,white);border:1px solid color-mix(in srgb,var(--teacher-color) 48%,white);border-left:4px solid var(--teacher-color);border-radius:6px;padding:13px 5px 5px;margin:2px;font-size:9px;line-height:1.2}}
         .lesson .duration-label{{position:absolute;top:3px;right:5px;font-size:8px;font-weight:bold;background:#d5e9d9;border-radius:8px;padding:2px 4px}}.lesson .subject-initials{{display:block;text-align:center;font-size:12px;font-weight:900;letter-spacing:.4px}}.lesson .room-detail{{display:block;color:#55705d;font-size:8px;margin-top:4px;max-width:100%;overflow-wrap:anywhere}}.lesson .teacher-initials{{align-self:flex-end;margin-top:auto;background:#245b39;color:#fff;border-radius:4px;padding:2px 5px;font-size:8px;font-weight:900}}th.break-header{{width:90%}}td.break{{width:90%;background:#f1ead8;color:#75551d;vertical-align:middle;text-align:center;min-width:24px;padding:0;position:relative}}td.break>span{{display:flex;flex-direction:column;justify-content:center;align-items:center;min-height:100%;height:100%;font-size:18px;font-weight:950;line-height:1}}td.break>span i{{display:block;font-style:normal;line-height:1}}td.free{{background:#fbfdfb}}td.continued{{background:#f6faf6;color:#7b9480;font-size:8px}}
         .actions{{text-align:center;margin-bottom:10px}}button{{padding:8px 15px;background:#17633b;color:#fff;border:0;border-radius:7px}}
         .extra-section{{margin-top:18px;break-inside:avoid}}.extra-section h3{{font-size:12px;color:#1d563b;margin:0 0 8px}}.session-table{{width:100%;border-collapse:collapse;table-layout:fixed;min-width:0;font-size:8px}}.session-table th{{background:#17633b;color:#fff;padding:5px}}.session-table td{{padding:5px;border:1px solid #dce7de;text-align:left}}.empty{{color:#64748b;font-size:9px}}
         @media print{{body{{margin:0}}.actions{{display:none}}tr{{break-inside:avoid}}table{{min-width:0}}.extra-remedial-separate,.extra-weekend{{break-before:page}}}}
-        </style></head><body><div class="actions"><button onclick="window.print()">Print timetable</button></div>
+        </style></head><body class="{'class-sheet' if view_type == 'class' else ''}"><div class="actions"><button onclick="window.print()">Print timetable</button></div>
         <div style="display:grid;grid-template-columns:68px 1fr 68px;align-items:center;gap:8px;margin-bottom:4px"><div>{logo_img}</div><div><h1 style="text-decoration:underline">{school_name}</h1><p style="font-size:8px;color:#405b49;margin:3px 0">{school_details_html}</p><h2 style="text-decoration:underline">{title}</h2></div><div style="text-align:right">{logo_img}</div></div>
         <p style="font-size:9px;font-weight:500;text-align:center;margin:10px 0 14px">{meta_html}</p>
         <table class="{timetable_table_class}"><thead><tr>{header_html}</tr></thead><tbody>{"".join(body_rows)}</tbody></table>
@@ -285,9 +285,13 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
             timeline_weight = sum(0.9 if kind == "break" else 1.0 for _, kind, _ in timeline) or 1
             slot_width = max(1, (doc.width - first_width - class_width) / timeline_weight)
             timeline_widths = [slot_width * (0.9 if kind == "break" else 1.0) for _, kind, _ in timeline]
+        elif view_type == "class":
+            # Individual class sheets fill one A4 landscape page.
+            timeline_weight = sum(0.55 if kind == "break" else 1.0 for _, kind, _ in timeline) or 1
+            slot_width = max(1, (doc.width - first_width) / timeline_weight)
+            timeline_widths = [slot_width * (0.55 if kind == "break" else 1.0) for _, kind, _ in timeline]
         else:
-            # Specialized exports use compact fixed-width period and break
-            # columns; they do not need to stretch across the landscape page.
+            # Teacher and room exports retain their compact specialized layout.
             slot_width = 28
             timeline_widths = [12 if kind == "break" else slot_width for _, kind, _ in timeline]
         first_day_rows = layout["rows"][:max(1, layout["rows"][0]["day_rowspan"])]
@@ -408,6 +412,9 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
             if day_start + rows_per_day < len(layout["rows"]):
                 story.append(Spacer(1, 5))
 
+        if view_type == "class":
+            # Keep cover, metadata, and every weekday table together.
+            story = [KeepInFrame(doc.width, doc.height, story, mode="shrink", hAlign="CENTER", vAlign="TOP")]
 
         if result.get("dated_instructional_sessions"):
             from reportlab.platypus import PageBreak
@@ -697,6 +704,10 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                 ws.page_setup.fitToHeight = 1
                 ws.sheet_properties.pageSetUpPr.autoPageBreaks = False
                 ws.print_area = "A1:J" + str(ws.max_row)
+            elif view_type == "class" and ws is sheet:
+                ws.page_setup.fitToHeight = 1
+                ws.sheet_properties.pageSetUpPr.autoPageBreaks = False
+                ws.print_area = "A1:" + get_column_letter(last_col) + str(row_index - 1)
             else:
                 ws.page_setup.fitToHeight = 0
 
