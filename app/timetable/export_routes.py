@@ -603,6 +603,71 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
         lesson_color_cells=[]
         row_index=header_row+1
         for row in layout["rows"]:
+            if view_type == "teacher":
+                top_row = row_index
+                bottom_row = row_index + 1
+                day_cell = sheet.cell(top_row, 1, row["day"]["day_name"])
+                day_cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+                day_cell.font = Font(bold=True)
+                sheet.merge_cells(start_row=top_row, start_column=1, end_row=bottom_row, end_column=1)
+                col = 2
+                for cell in row["cells"]:
+                    if cell["kind"] == "break_placeholder":
+                        col += 1
+                        continue
+                    top_cell = sheet.cell(top_row, col)
+                    bottom_cell = sheet.cell(bottom_row, col)
+                    if cell["kind"] == "break":
+                        br = cell["item"]
+                        top_cell.value = "\n".join(str(ch) for ch in str(br["label"]))
+                        top_cell.fill = PatternFill("solid", fgColor="F1EAD8")
+                        top_cell.font = Font(bold=True, color="75551D")
+                        top_cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+                        if cell["rowspan"] > 1:
+                            sheet.merge_cells(start_row=top_row, start_column=col, end_row=top_row + (2 * cell["rowspan"]) - 1, end_column=col)
+                        break_columns.add(col)
+                    elif cell["kind"] == "lesson":
+                        subject_lines = []
+                        class_lines = []
+                        for lesson in cell["lessons"]:
+                            subject = str(lesson.get("subject_initial") or "").strip().upper() or "—"
+                            duration = max(1, int(lesson.get("duration_periods") or 1))
+                            subject_line = subject + "  " + str(duration) + "P"
+                            allocated_room = allocated_room_name(lesson)
+                            if allocated_room:
+                                subject_line += "\n⌂ " + allocated_room
+                            subject_lines.append(subject_line)
+                            class_label = str(lesson.get("timetable_class_initials") or (str(lesson.get("class_name") or "").strip() + ((" " + str(lesson.get("stream") or "").strip()) if str(lesson.get("stream") or "").strip() else ""))).strip() or "—"
+                            class_lines.append(class_label)
+                        top_cell.value = "\n\n".join(subject_lines)
+                        bottom_cell.value = "\n".join(class_lines)
+                        top_cell.alignment = Alignment(horizontal="left", vertical="center", wrap_text=True)
+                        bottom_cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+                        top_cell.font = Font(bold=True, size=10, color="234638")
+                        bottom_cell.font = Font(bold=True, size=11, color="234638")
+                        lesson_colors = {teacher_color_hex(lesson.get("teacher_color")) for lesson in cell["lessons"]}
+                        if len(lesson_colors) == 1:
+                            accent = next(iter(lesson_colors))
+                            lesson_color_cells.append((top_row, col, accent))
+                            lesson_color_cells.append((bottom_row, col, accent))
+                        if cell["span"] > 1:
+                            sheet.merge_cells(start_row=top_row, start_column=col, end_row=top_row, end_column=col + cell["span"] - 1)
+                            sheet.merge_cells(start_row=bottom_row, start_column=col, end_row=bottom_row, end_column=col + cell["span"] - 1)
+                    elif cell["kind"] == "continued":
+                        top_cell.value = "\n".join("↳ " + str(item.get("subject_initial") or "").strip().upper() + " continues" for item in cell["lessons"])
+                        top_cell.alignment = Alignment(horizontal="left", vertical="center", wrap_text=True)
+                        if cell["span"] > 1:
+                            sheet.merge_cells(start_row=top_row, start_column=col, end_row=top_row, end_column=col + cell["span"] - 1)
+                            sheet.merge_cells(start_row=bottom_row, start_column=col, end_row=bottom_row, end_column=col + cell["span"] - 1)
+                        else:
+                            sheet.merge_cells(start_row=top_row, start_column=col, end_row=bottom_row, end_column=col)
+                    else:
+                        sheet.merge_cells(start_row=top_row, start_column=col, end_row=bottom_row, end_column=col)
+                    col += cell.get("span", 1)
+                sheet.row_dimensions[top_row].height = 29
+                sheet.row_dimensions[bottom_row].height = 29
+                row_index += 2
+                continue
             col=1
             if row["day_first"]:
                 day_cell = sheet.cell(row_index,col,row["day"]["day_name"])
