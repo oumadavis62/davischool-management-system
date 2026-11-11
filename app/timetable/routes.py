@@ -128,22 +128,22 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
                   <a class='tt-home-action' href='{publish_href}'><span class='tt-home-action-icon'>⇧</span><span><b>Review and publish</b><small>Manage timetable release and revisions</small></span><em>→</em></a>
                 </section>
               </div>"""
-        profile_edit_modal = (f"""
-          <dialog class='tt-home-profile-modal' id='tt-home-profile-edit-modal'>
-            <div class='tt-home-profile-modal-head'><div><span class='tt-home-eyebrow'>TIMETABLE PROFILE</span><h3>Edit timetable profile</h3><p>Update the details of the selected timetable.</p></div><button type='button' data-close-profile-edit aria-label='Close'>×</button></div>
-            <form method='post' data-native-post='true' action='/app/timetable/setup/profile/update' class='tt-home-profile-form'>
-              <input type='hidden' name='profile_id' value='{pid}'>
-              <input type='hidden' name='ds_tab' value='{escape(home_tab_id)}'>
-              <label>Timetable type<select name='profile_type' required><option value='main' {'selected' if str(selected['profile_type'] or 'main')=='main' else ''}>Main School Timetable</option><option value='weekend' {'selected' if str(selected['profile_type'] or '')=='weekend' else ''}>Weekend Lessons</option><option value='remedial' {'selected' if str(selected['profile_type'] or '')=='remedial' else ''}>Weekday Remedials</option><option value='special' {'selected' if str(selected['profile_type'] or '')=='special' else ''}>Other / Special Timetable</option></select></label>
-              <label>Profile name<input name='name' required maxlength='80' value='{profile_name}'></label>
-              <label>Academic year<input name='academic_year' required maxlength='20' value='{esc(selected['academic_year'])}'></label>
-              <label>Term / semester<input name='term' required maxlength='40' value='{esc(selected['term'])}'></label>
-              <label>Academic start date<input name='academic_start_date' type='date' value='{esc(selected['academic_start_date'] or '')}'></label>
-              <label>Academic end date<input name='academic_end_date' type='date' value='{esc(selected['academic_end_date'] or '')}'></label>
-              <div class='tt-home-profile-modal-actions'><button type='button' class='tt-home-profile-cancel' data-close-profile-edit>Cancel</button><button type='submit' class='tt-home-profile-save'>Save changes</button></div>
-            </form>
-          </dialog>
-        """ if selected else "")
+            profile_edit_modal = (f"""
+              <dialog class='tt-home-profile-modal' id='tt-home-profile-edit-modal'>
+                <div class='tt-home-profile-modal-head'><div><span class='tt-home-eyebrow'>TIMETABLE PROFILE</span><h3>Edit timetable profile</h3><p>Update the details of the selected timetable.</p></div><button type='button' data-close-profile-edit aria-label='Close'>×</button></div>
+                <form method='post' data-native-post='true' action='/app/timetable/setup/profile/update' class='tt-home-profile-form'>
+                  <input type='hidden' name='profile_id' value='{pid}'>
+                  <input type='hidden' name='ds_tab' value='{escape(home_tab_id)}'>
+                  <label>Timetable type<select name='profile_type' required><option value='main' {'selected' if str(selected['profile_type'] or 'main')=='main' else ''}>Main School Timetable</option><option value='weekend' {'selected' if str(selected['profile_type'] or '')=='weekend' else ''}>Weekend Lessons</option><option value='remedial' {'selected' if str(selected['profile_type'] or '')=='remedial' else ''}>Weekday Remedials</option><option value='special' {'selected' if str(selected['profile_type'] or '')=='special' else ''}>Other / Special Timetable</option></select></label>
+                  <label>Profile name<input name='name' required maxlength='80' value='{profile_name}'></label>
+                  <label>Academic year<input name='academic_year' required maxlength='20' value='{esc(selected['academic_year'])}'></label>
+                  <label>Term / semester<input name='term' required maxlength='40' value='{esc(selected['term'])}'></label>
+                  <label>Academic start date<input name='academic_start_date' type='date' value='{esc(selected['academic_start_date'] or '')}'></label>
+                  <label>Academic end date<input name='academic_end_date' type='date' value='{esc(selected['academic_end_date'] or '')}'></label>
+                  <div class='tt-home-profile-modal-actions'><button type='button' class='tt-home-profile-cancel' data-close-profile-edit>Cancel</button><button type='submit' class='tt-home-profile-save'>Save changes</button></div>
+                </form>
+              </dialog>
+            """ if selected else "")
         else:
             profile_control = ""
             profile_edit_modal = ""
