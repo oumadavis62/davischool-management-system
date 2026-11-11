@@ -201,7 +201,7 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
           @media(max-width:480px){{.tt-home-hero-mark{{display:none}}.tt-home-profile{{align-items:stretch;flex-direction:column;gap:7px}}.tt-home-profile select{{width:100%;min-width:0}}.tt-home-profile-card,.tt-home-panel{{padding:18px 16px}}.tt-home-profile-top{{align-items:flex-start;flex-direction:column}}.tt-home-metrics div{{padding:11px}}.tt-home-metrics span{{font-size:10px}}.tt-home-empty{{padding:38px 18px}}.tt-home-panel-head{{align-items:flex-start;flex-direction:column;gap:9px}}.tt-home-progress{{padding:12px 10px}}.tt-home-action{{min-height:96px;padding:13px 11px}}.tt-home-actions{{grid-template-columns:1fr}}.tt-home-actions>.tt-home-eyebrow,.tt-home-actions>h3,.tt-home-action-primary{{grid-column:1}}}}
         </style>
         <main class='tt-home'>
-          <section class='tt-home-hero'><div class='tt-home-hero-copy'><span class='tt-home-eyebrow'>DAVISCHOOL · ACADEMIC OPERATIONS</span><h1>Smart Timetable</h1><p>Plan, organise and publish a balanced school timetable. Manage teaching requirements, build schedules and keep every class and teacher in sync.</p></div><div class='tt-home-hero-mark'>▦</div></section>
+          <section class='tt-home-hero'><div class='tt-home-hero-copy'><span class='tt-home-eyebrow'>D-SCHOOL · ACADEMIC OPERATIONS</span><h1>Smart Timetable</h1><p>Plan, organise and publish a balanced school timetable. Manage teaching requirements, build schedules and keep every class and teacher in sync.</p></div><div class='tt-home-hero-mark'>▦</div></section>
           {profile_control}
           {notice}
           {profile_panel}

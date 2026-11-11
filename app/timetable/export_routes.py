@@ -48,7 +48,7 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
     def filename_prefix(school, result):
         raw = str(school["name"] or "School") + "-" + str(result["title"] or "Timetable")
         safe = re.sub(r"[^A-Za-z0-9_-]+", "-", raw).strip("-")
-        return (safe or "DaviSchool-Timetable")[:90]
+        return (safe or "D-School-Timetable")[:90]
 
     def allocated_room_name(lesson):
         """Return a room label only for a real, explicitly allocated room."""
@@ -255,7 +255,7 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
         buffer = BytesIO()
         doc = SimpleDocTemplate(buffer, pagesize=landscape(A4), leftMargin=18, rightMargin=18, topMargin=18, bottomMargin=18)
         styles = getSampleStyleSheet()
-        school_style = ParagraphStyle("DaviSchoolName", parent=styles["Title"], alignment=TA_CENTER, fontSize=16, leading=19, textColor=colors.HexColor("#174a31"))
+        school_style = ParagraphStyle("DSchoolName", parent=styles["Title"], alignment=TA_CENTER, fontSize=16, leading=19, textColor=colors.HexColor("#174a31"))
         title_style = ParagraphStyle("TimetableTitle", parent=styles["Heading2"], alignment=TA_CENTER, fontSize=11, leading=14, textColor=colors.HexColor("#315b3e"))
         cell_style = ParagraphStyle("TimetableCell", parent=styles["BodyText"], fontSize=5.5, leading=6.5)
         day_style = ParagraphStyle("TimetableDay", parent=cell_style, alignment=TA_CENTER)

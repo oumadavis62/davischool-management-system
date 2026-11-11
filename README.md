@@ -1,4 +1,4 @@
-# DaviSchool Management System
+# D-School Management System
 
 A secure browser-based school management platform designed for online deployment.
 

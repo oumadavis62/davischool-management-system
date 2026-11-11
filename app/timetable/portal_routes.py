@@ -403,7 +403,7 @@ def register_timetable_portal_routes(app, get_db):
 
         body = (
             "<!doctype html><html><head><meta name='viewport' content='width=device-width,initial-scale=1'>"
-            "<title>My Timetable · DaviSchool</title><meta http-equiv='refresh' content='60'><style>"
+            "<title>My Timetable · D-School</title><meta http-equiv='refresh' content='60'><style>"
             "body{margin:0;background:#f1f7f1;color:#173d2b;font:14px Arial,sans-serif}"
             ".tp-wrap{max-width:1250px;margin:auto;padding:22px}.tp-hero{margin-bottom:18px}"
             ".tp-hero h1{margin:0 0 6px;font-size:26px}.tp-hero-top{display:flex;align-items:center;justify-content:space-between;gap:12px}.tp-sidebar-toggle{width:36px;height:36px;flex:0 0 36px;border:1px solid #cfe0d2;border-radius:10px;background:#fff;color:#245b39;font-size:19px;cursor:pointer;display:grid;place-items:center}.tp-sidebar-toggle:hover{background:#e8f4eb}.tp-hero p,.tp-head p{color:#64748b;margin:0;font-size:12px}"
@@ -417,7 +417,7 @@ def register_timetable_portal_routes(app, get_db):
             "@media(max-width:600px){.tp-wrap{padding:12px}.tp-hero h1{font-size:22px}.tp-card{padding:11px}.tp-grid-scroll{border-radius:11px}}"
             ".tp-grid thead th.tp-day-col,.tp-grid tbody th.tp-day-col{border-right:2px solid #6f9b78!important}"
                         "</style></head><body><main class='tp-wrap'><header class='tp-hero'><div class='tp-hero-top'><h1>My Timetable</h1><button class='tp-sidebar-toggle' type='button' aria-label='Hide Sidebar' title='Hide Sidebar' onclick='(function(){var docs=[document];try{if(window.parent&&window.parent!==window)docs.push(window.parent.document)}catch(e){}for(var d of docs){var b=Array.from(d.querySelectorAll(`button,a,[role=button]`)).find(function(x){var t=((x.innerText||x.getAttribute(`aria-label`)||x.getAttribute(`title`)||``).trim()).toLowerCase();return t===`hide sidebar`||t===`show sidebar`||t.includes(`hide sidebar`)||t.includes(`show sidebar`)});if(b){b.click();return}}})();'><span aria-hidden='true'>◧</span></button></div>"
-            "<p>Latest published timetable · DaviSchool</p></header>"
+            "<p>Latest published timetable · D-School</p></header>"
             + filter_html
             + ("<div class='tp-notice'>" + escape(message) + "</div>" if message else
                ("<div class='tp-notice'>No published timetable matches these filters.</div>"

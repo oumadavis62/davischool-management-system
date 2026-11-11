@@ -336,7 +336,7 @@ def staff_payslip_print(request: Request, item_id: int):
     if not row:
         return HTMLResponse("Payslip not found.", 404)
     body = """<div class='page hr-page'><div class='hr-tools'><a href='/app/staff/payslips?period=%s'>Back to payslips</a><button onclick='window.print()'>Print payslip</button></div>
-    <article class='hr-slip'><h1>DaviSchool · Staff Payslip</h1><h2>%s</h2><p>%s · %s</p><hr><p>Payroll period: <b>%s</b></p>
+    <article class='hr-slip'><h1>D-School · Staff Payslip</h1><h2>%s</h2><p>%s · %s</p><hr><p>Payroll period: <b>%s</b></p>
     <p>Basic salary: <b>KES %s</b></p><p>Allowances: <b>KES %s</b></p><p>Deductions: <b>KES %s</b></p><h2>Net pay: KES %s</h2>
     <p class='hr-note'>Generated from the school's recorded payroll run.</p></article></div>%s""" % (
         escape(str(row["period"])), escape(str(row["staff_name"] or "")), escape(str(row["designation"] or "")),
