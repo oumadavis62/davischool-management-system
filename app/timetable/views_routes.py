@@ -377,6 +377,17 @@ def register_timetable_view_routes(app, get_db, get_school_obj, module_page):
             padding-left:0!important;
             padding-right:0!important;
         }
+        /* Strongly separate the Day and Class / Stream columns in every view. */
+        .tv-wrap .tb-grid thead th.tb-day-heading,
+        .tv-wrap .tb-grid tbody th.tb-day-heading {{
+            border-right:3px solid #527b5d!important;
+            box-shadow:inset -1px 0 0 #315b3e,inset 0 -3px 0 #6f9b78;
+        }}
+        .tv-wrap .tb-grid thead th.tb-class-heading,
+        .tv-wrap .tb-grid tbody th.tb-class-heading {{
+            border-right:3px solid #527b5d!important;
+            box-shadow:inset -1px 0 0 #315b3e;
+        }}
         </style>
         <div class='tv-wrap'><div class='tv-hero'><div><span class='tv-kicker'>DAVISCHOOL · TIMETABLE VIEWS</span><h2>Timetable Views</h2><p>Inspect the published or draft timetable by school, class, teacher or room.</p></div></div>{notice}
         <div class='tv-actions tv-view-actions'><button type='button' class='tv-btn' onclick="document.getElementById('tv-filter-dialog').showModal()">Choose timetable view</button><button type='button' class='tv-btn secondary' onclick="document.getElementById('tv-export-dialog').showModal()">Export / print</button></div>
