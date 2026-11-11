@@ -46,10 +46,10 @@ def build_export_grid(result, view_type):
                             cells.append({"kind":"break","item":item,"rowspan":len(days)})
                         else:
                             cells.append({"kind":"break_placeholder"})
-                    elif class_index == 0:
-                        # School view repeats each break for each day, spanning
-                        # that day's class rows only (not the entire export).
-                        cells.append({"kind":"break","item":item,"rowspan":len(rowspec)})
+                    elif day_index == 0 and class_index == 0:
+                        # Match the timetable view: one vertical break label spans
+                        # every day and class row in the exported grid.
+                        cells.append({"kind":"break","item":item,"rowspan":len(days) * len(rowspec)})
                     else:
                         cells.append({"kind":"break_placeholder"})
                     continue
