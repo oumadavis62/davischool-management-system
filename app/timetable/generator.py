@@ -783,11 +783,12 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
         diagnostic_assumptions = {}
 
         def assumption_for(group_key, description):
-            literal = diagnostic_assumptions.get(group_key)
-            if literal is None:
-                literal = model.NewBoolVar("diagnose_" + group_key)
-                model.AddAssumption(literal)
-                diagnostic_assumptions[group_key] = (literal, description)
+            existing = diagnostic_assumptions.get(group_key)
+            if existing is not None:
+                return existing[0]
+            literal = model.NewBoolVar("diagnose_" + group_key)
+            model.AddAssumption(literal)
+            diagnostic_assumptions[group_key] = (literal, description)
             return literal
 
         for task_index, task in enumerate(tasks):
