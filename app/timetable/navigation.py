@@ -95,7 +95,10 @@ def timetable_workspace(request, body):
         // Tracking and Subject Requirements. Never expose a separate requirements-only page.
         const keep = allLabels.map(label=>{
           if(requested==='requirements') return /track class lesson allocations|subject requirements/i.test(label);
-          if(requested==='availability') return /teacher availability/i.test(label);
+          // Availability is a section inside the Configure workspace. Keep every
+          // Configure section in the tab strip so users can still navigate away;
+          // the availability workspace itself is selected below.
+          if(requested==='availability') return true;
           if(requested==='setup') return !/teacher availability|subject availability|requirement|workload|allocation/i.test(label);
           return true;
         });
@@ -112,6 +115,9 @@ def timetable_workspace(request, body):
             : /subject requirements/i;
           const match=labels.findIndex(label=>wanted.test(label));
           initial=match>=0?match:Math.max(0,labels.findIndex(label=>/subject requirements/i.test(label)));
+        }else if(requested==='availability'){
+          const match=labels.findIndex(label=>/staff and subject availability|teacher availability/i.test(label));
+          initial=match>=0?match:0;
         }
         function activate(index){
           sectionsForTabs.forEach((section,i)=>{
