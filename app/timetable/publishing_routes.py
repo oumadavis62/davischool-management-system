@@ -106,7 +106,7 @@ def register_timetable_publishing_routes(app, get_db, get_school_obj, module_pag
             action_submit_html = f"""<form method='post' action='/app/timetable/publishing/publish'><input type='hidden' name='profile_id' value='{pid}'><button class='pub-btn' {'disabled' if not readiness or not readiness['ready'] else ''}>Confirm & Publish</button></form>"""
         elif status in ("published","archived"):
             action_html = "<button type='button' class='pub-btn' data-open='pub-action-dialog'>Create editable revision</button>"
-            action_submit_html = f"""<form method='post' action='/app/timetable/publishing/revision'><input type='hidden' name='profile_id' value='{pid}'><button class='pub-btn'>Create revision</button></form>"""
+            action_submit_html = f"""<button type='button' class='pub-btn' data-create-revision='{pid}'>Create revision</button>"""
         version_rows = "".join(
             f"<tr><td>{esc(v['label'])}</td><td>{esc(v['profile_name'])}</td><td>R{int(v['revision_no'] or 1)}</td><td>{esc(v['created_at'])}</td><td>{esc(v['created_by'])}</td></tr>"
             for v in versions
@@ -143,6 +143,18 @@ def register_timetable_publishing_routes(app, get_db, get_school_obj, module_pag
           const openers=document.querySelectorAll('[data-open]');
           openers.forEach(button=>button.addEventListener('click',()=>document.getElementById(button.dataset.open)?.showModal()));
           document.querySelectorAll('[data-close]').forEach(button=>button.addEventListener('click',()=>document.getElementById(button.dataset.close)?.close()));
+          document.querySelectorAll('[data-create-revision]').forEach(button=>button.addEventListener('click',()=>{{
+            const form=document.createElement('form');
+            form.method='post';
+            form.action='/app/timetable/publishing/revision';
+            const profile=document.createElement('input');
+            profile.type='hidden';
+            profile.name='profile_id';
+            profile.value=button.dataset.createRevision;
+            form.appendChild(profile);
+            document.body.appendChild(form);
+            form.submit();
+          }}));
           document.querySelectorAll('.pub-dialog').forEach(dialog=>dialog.addEventListener('click',event=>{{if(event.target===dialog)dialog.close();}}));
           if(new URLSearchParams(window.location.search).has('compare_first'))document.getElementById('pub-compare-dialog')?.showModal();
         }})();
@@ -210,7 +222,15 @@ def register_timetable_publishing_routes(app, get_db, get_school_obj, module_pag
             con.close()
         if status == "pending_approval":
             return timetable_approve_and_publish(request, profile_id)
-        return timetable_submit_for_approval(request, profile_id)
+        if status in ("published", "archived"):
+            return timetable_create_revision(request, profile_id)
+        if status == "draft":
+            return timetable_submit_for_approval(request, profile_id)
+        return redirect_publishing(
+            profile_id,
+            "This timetable status does not support a publishing action.",
+            True,
+        )
 
     @app.post("/app/timetable/publishing/publish")
     def timetable_approve_and_publish(request: Request, profile_id: int = Form(...)):
