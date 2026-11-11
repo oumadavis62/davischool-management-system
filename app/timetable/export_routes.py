@@ -152,7 +152,7 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                         )
                         cards.append("<div class='lesson' style='--teacher-color:" + card_color + "'>" + detail + "</div>")
                     cells.append(f"<td class='slot' colspan='{cell['span']}'>" + "".join(cards) + "</td>")
-            row_height = " height='" + str(round(100 / max(1, len(layout["rows"])), 4)) + "%'" if view_type in ("class", "teacher", "room") else ""
+            row_height = " style='height:" + str(round(100 / max(1, len(layout["rows"])), 4)) + "%'" if view_type in ("class", "teacher", "room") else ""
             body_rows.append("<tr" + row_height + ">" + "".join(cells) + "</tr>")
         def print_session_table(items, include_rotation=False):
             if not items:
@@ -389,7 +389,7 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                             card = Table(
                                 card_rows,
                                 colWidths=[card_width],
-                                rowHeights=[max(5, (individual_row_height - 8) / len(card_rows))] * len(card_rows)
+                                rowHeights=[max(4, (individual_row_height - 8) / (len(card_rows) * max(1, len(cell["lessons"]))))] * len(card_rows)
                                 if view_type in ("class", "teacher", "room") else None,
                             )
                             card.setStyle(TableStyle([
