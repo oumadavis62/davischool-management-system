@@ -67,10 +67,8 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
         return value if value.startswith("data:image/") else "data:image/png;base64," + value
 
     def school_details(school):
-        fields = [("Principal", field_value(school, "principal", "")),
-                  ("Phone", field_value(school, "phone", "")),
-                  ("Email", field_value(school, "email", "")),
-                  ("School type", field_value(school, "school_type", ""))]
+        fields = [("Phone", field_value(school, "phone", "")),
+                  ("Email", field_value(school, "email", ""))]
         return [(label, str(value).strip()) for label, value in fields if str(value or "").strip()]
 
     def status_label(profile):
@@ -189,7 +187,12 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
         logo_src=school_logo_data(school)
         logo_img=("<img style='width:60px;height:60px;object-fit:contain' src='" + escape(logo_src, quote=True) + "' alt='School logo'>") if logo_src else ""
         school_details_html=" · ".join(escape(label + ": " + value) for label,value in school_details(school))
-        meta=escape(str(result["profile"]["academic_year"]) + " · " + str(result["profile"]["term"]) + " · " + status_label(result["profile"]))
+        timetable_fields = [
+            ("Term", str(result["profile"]["term"])),
+            ("Year", str(result["profile"]["academic_year"])),
+            ("Status", status_label(result["profile"])),
+        ]
+        meta_html = "".join("<span style='display:inline-block;margin:0 22px'>" + escape(label) + ": <b>" + escape(value) + "</b></span>" for label,value in timetable_fields)
         header_html = "<th>" + headers[0] + "</th>" + (("<th>" + headers[1] + "</th>") if layout["show_class_column"] else "") + "".join("<th class='" + ("break-header" if kind == "break" else "period-header") + "'>" + (str(item["start_time"]) + "–" + str(item["end_time"]) if kind == "break" else str(item["label"]) + "<br>" + str(item["start_time"]) + "–" + str(item["end_time"])) + "</th>" for _, kind, item in timeline)
         html=f"""<!doctype html><html><head><meta charset="utf-8"><title>{title}</title>
         <style>
@@ -203,8 +206,8 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
         .extra-section{{margin-top:18px;break-inside:avoid}}.extra-section h3{{font-size:12px;color:#1d563b;margin:0 0 8px}}.session-table{{width:100%;border-collapse:collapse;table-layout:fixed;min-width:0;font-size:8px}}.session-table th{{background:#17633b;color:#fff;padding:5px}}.session-table td{{padding:5px;border:1px solid #dce7de;text-align:left}}.empty{{color:#64748b;font-size:9px}}
         @media print{{body{{margin:0}}.actions{{display:none}}tr{{break-inside:avoid}}table{{min-width:0}}.extra-remedial-separate,.extra-weekend{{break-before:page}}}}
         </style></head><body><div class="actions"><button onclick="window.print()">Print timetable</button></div>
-        <div style="display:grid;grid-template-columns:68px 1fr 68px;align-items:center;gap:8px;margin-bottom:4px"><div>{logo_img}</div><div><h1 style="text-decoration:underline">{school_name}</h1><h2 style="text-decoration:underline">{title}</h2></div><div style="text-align:right">{logo_img}</div></div>
-        <p style="font-size:8px;color:#405b49">{school_details_html}</p><p style="font-size:9px;font-weight:bold"><u>{meta}</u></p>
+        <div style="display:grid;grid-template-columns:68px 1fr 68px;align-items:center;gap:8px;margin-bottom:4px"><div>{logo_img}</div><div><h1 style="text-decoration:underline">{school_name}</h1><p style="font-size:8px;color:#405b49;margin:3px 0">{school_details_html}</p><h2 style="text-decoration:underline">{title}</h2></div><div style="text-align:right">{logo_img}</div></div>
+        <p style="font-size:9px;font-weight:500;text-align:center;margin:10px 0 14px">{meta_html}</p>
         <table><thead><tr>{header_html}</tr></thead><tbody>{"".join(body_rows)}</tbody></table>
         {dated_html}{weekday_html}{weekend_html}
         <script>window.addEventListener("load",()=>setTimeout(()=>window.print(),250));</script></body></html>"""
@@ -253,20 +256,28 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
             except Exception:
                 logo_cell = ""
         cover_title = "MASTER TIMETABLE" if view_type == "school" else str(result["title"]).upper()
-        cover_center = [Paragraph("<u><b>" + school_name + "</b></u>", school_style),
-                        Paragraph("<u><b>" + pdf_text(cover_title) + "</b></u>", title_style)]
+        details = "   |   ".join(pdf_text(label + ": " + value) for label,value in school_details(school))
+        cover_center = [Paragraph("<u><b>" + school_name + "</b></u>", school_style)]
+        if details:
+            details_style = ParagraphStyle("SchoolDetails", parent=styles["Normal"], alignment=TA_CENTER, fontSize=7, leading=9)
+            cover_center.append(Paragraph(details, details_style))
+        cover_center.append(Paragraph("<u><b>" + pdf_text(cover_title) + "</b></u>", title_style))
         cover = Table([[logo_cell, cover_center, logo_cell]], colWidths=[60, doc.width-120, 60])
         cover.setStyle(TableStyle([("ALIGN",(0,0),(-1,-1),"CENTER"),("VALIGN",(0,0),(-1,-1),"MIDDLE"),
                                    ("LEFTPADDING",(0,0),(-1,-1),2),("RIGHTPADDING",(0,0),(-1,-1),2)]))
         story = [cover]
-        details = "   |   ".join(pdf_text(label + ": " + value) for label,value in school_details(school))
-        if details:
-            details_style = ParagraphStyle("SchoolDetails", parent=styles["Normal"], alignment=TA_CENTER, fontSize=7, leading=9)
-            story.append(Paragraph(details, details_style))
-        meta_style = ParagraphStyle("TimetableCoverMeta", parent=styles["Normal"], alignment=TA_CENTER, fontSize=8, leading=10)
-        story.extend([Paragraph("<u>" + pdf_text(profile_meta) + " | " + pdf_text(current_status) +
-                                " | " + str(len(result["lessons"])) + " scheduled lessons</u>", meta_style),
-                      Spacer(1,10)])
+        meta_style = ParagraphStyle("TimetableCoverMeta", parent=styles["Normal"], alignment=TA_CENTER, fontSize=8, leading=11)
+        meta_cells = [[Paragraph("<b>Term:</b> " + pdf_text(result["profile"]["term"]), meta_style),
+                       Paragraph("<b>Year:</b> " + pdf_text(result["profile"]["academic_year"]), meta_style),
+                       Paragraph("<b>Status:</b> " + pdf_text(current_status), meta_style)]]
+        meta_table = Table(meta_cells, colWidths=[doc.width/3]*3)
+        meta_table.setStyle(TableStyle([("ALIGN",(0,0),(-1,-1),"CENTER"),
+                                        ("VALIGN",(0,0),(-1,-1),"MIDDLE"),
+                                        ("LEFTPADDING",(0,0),(-1,-1),12),
+                                        ("RIGHTPADDING",(0,0),(-1,-1),12),
+                                        ("TOPPADDING",(0,0),(-1,-1),8),
+                                        ("BOTTOMPADDING",(0,0),(-1,-1),10)]))
+        story.extend([meta_table, Spacer(1,10)])
         layout = build_export_grid(result, view_type)
         timeline = layout["timeline"]
         first_width = 30 if not layout["show_class_column"] else 30
