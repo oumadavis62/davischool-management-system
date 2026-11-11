@@ -532,17 +532,18 @@ def update_profile(connection: Any, school_id: int, profile_id: int, name: str, 
         if end_date <= start_date:
             raise TimetableSetupError("Academic end date must be after the start date.")
     cur = connection.cursor()
-    current = cur.execute("SELECT id,status FROM ds_timetable_profiles WHERE id=? AND school_id=?", (int(profile_id), int(school_id))).fetchone()
+    current = cur.execute("SELECT id,status,revision_of_profile_id FROM ds_timetable_profiles WHERE id=? AND school_id=?", (int(profile_id), int(school_id))).fetchone()
     if not current:
         raise TimetableSetupError("The selected timetable profile could not be found.")
     if str(current["status"] or "draft").lower() not in {"draft", "published"}:
         raise TimetableSetupError("Only a draft or active published timetable can be edited here.")
+    root_id = int(current["revision_of_profile_id"] or current["id"])
     if profile_type == "main":
-        duplicate = cur.execute("""SELECT id FROM ds_timetable_profiles WHERE school_id=? AND academic_year=? AND term=? AND profile_type='main' AND status IN ('draft','pending_approval','published') AND id<>? LIMIT 1""", (int(school_id), academic_year, term, int(profile_id))).fetchone()
+        duplicate = cur.execute("""SELECT id FROM ds_timetable_profiles WHERE school_id=? AND academic_year=? AND term=? AND profile_type='main' AND status IN ('draft','pending_approval','published') AND COALESCE(revision_of_profile_id,id)<>? LIMIT 1""", (int(school_id), academic_year, term, root_id)).fetchone()
         if duplicate:
             raise TimetableSetupError("A main timetable already exists for this academic year and term.")
     else:
-        duplicate = cur.execute("""SELECT id FROM ds_timetable_profiles WHERE school_id=? AND academic_year=? AND term=? AND profile_type=? AND name=? AND status IN ('draft','pending_approval','published') AND id<>? LIMIT 1""", (int(school_id), academic_year, term, profile_type, name, int(profile_id))).fetchone()
+        duplicate = cur.execute("""SELECT id FROM ds_timetable_profiles WHERE school_id=? AND academic_year=? AND term=? AND profile_type=? AND name=? AND status IN ('draft','pending_approval','published') AND COALESCE(revision_of_profile_id,id)<>? LIMIT 1""", (int(school_id), academic_year, term, profile_type, name, root_id)).fetchone()
         if duplicate:
             raise TimetableSetupError("A timetable with this name and programme type already exists for this academic year and term.")
     cur.execute("""UPDATE ds_timetable_profiles SET name=?,academic_year=?,term=?,profile_type=?,academic_start_date=?,academic_end_date=?,updated_at=? WHERE id=? AND school_id=?""", (name, academic_year, term, profile_type, academic_start_date or None, academic_end_date or None, _now(), int(profile_id), int(school_id)))
