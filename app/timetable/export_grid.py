@@ -15,12 +15,12 @@ def build_export_grid(result, view_type):
     classes = {}
     if view_type == "school":
         for row in result.get("allocation_classes", []):
-            classes[int(row["class_id"])] = {"class_id": int(row["class_id"]), "class_name": str(row["class_name"]), "stream": str(row["stream"] or "")}
+            classes[int(row["class_id"])] = {"class_id": int(row["class_id"]), "class_name": str(row["class_name"]), "stream": str(row["stream"] or ""), "initials": str(row["initials"] or "")}
     for lesson in lessons:
-        classes.setdefault(int(lesson["class_id"]), {"class_id": int(lesson["class_id"]), "class_name": str(lesson["class_name"]), "stream": str(lesson["stream"] or "")})
+        classes.setdefault(int(lesson["class_id"]), {"class_id": int(lesson["class_id"]), "class_name": str(lesson["class_name"]), "stream": str(lesson["stream"] or ""), "initials": str(lesson.get("timetable_class_initials") or "")})
     if view_type == "class" and result.get("target"):
         target = result["target"]
-        classes = {int(target["id"]): {"class_id": int(target["id"]), "class_name": str(target["name"]), "stream": str(target["stream"] or "")}}
+        classes = {int(target["id"]): {"class_id": int(target["id"]), "class_name": str(target["name"]), "stream": str(target["stream"] or ""), "initials": next((str(x.get("timetable_class_initials") or "") for x in lessons if int(x["class_id"]) == int(target["id"])), "")}}
     rowspec = sorted(classes.values(), key=lambda x: (x["class_name"].casefold(), x["stream"].casefold()))
     if view_type in ("teacher", "room"):
         rowspec = [{"class_id": 0, "class_name": "", "stream": ""}]
