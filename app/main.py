@@ -1061,6 +1061,7 @@ def home(request: Request):
     field.value = id;
     sessionStorage.setItem(key, id);
     url.searchParams.delete("ds_tab_new");
+    url.searchParams.delete("ds_tab_source");
     url.searchParams.set("ds_tab", id);
     if (url.search !== window.location.search) {
       window.history.replaceState(null, "", url.pathname + url.search + url.hash);
