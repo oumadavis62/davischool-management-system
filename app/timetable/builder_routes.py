@@ -10,6 +10,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from app.timetable.setup import TimetableSetupError
 from app.timetable.builder import place_lesson, move_lesson, swap_lesson_positions, delete_lesson, place_advanced_requirement_session, place_dated_advanced_requirement_session
 from app.timetable.session_engine import create_teaching_group
+from app.timetable.publishing import profile_display_name
 from app.timetable.advanced_setup import create_scheduling_requirement, save_scheduling_pattern
 from app.timetable.advanced_setup import resolve_calendar_occurrence
 
@@ -300,7 +301,7 @@ def register_timetable_builder_routes(app, get_db, get_school_obj, module_page):
         read_only = bool(selected and str(selected["status"] or "draft").strip().lower() in ("published", "archived"))
         notice = f"<div class='tb-alert {'error' if error else 'success'}'>{esc(message)}</div>" if message else ""
         profile_options = "".join(
-            f"<option value='{int(p['id'])}' {'selected' if selected and int(p['id'])==pid else ''}>{esc(p['academic_year'])} · {esc(p['term'])} — {esc(p['name'])}</option>"
+            f"<option value='{int(p['id'])}' {'selected' if selected and int(p['id'])==pid else ''}>{esc(p['academic_year'])} · {esc(p['term'])} — {esc(profile_display_name(p['name']))}</option>"
             for p in profiles
         )
         profile_selector = f"<form method='get' action='/app/timetable/builder' class='tb-profile-select'><label>Timetable profile</label><select name='profile_id' onchange='this.form.submit()'>{profile_options}</select></form>" if profiles else ""
@@ -729,7 +730,7 @@ def register_timetable_builder_routes(app, get_db, get_school_obj, module_page):
             
         }}
         </style>
-        <div class='tb-wrap'><header class='tb-hero'><div><span class='tb-kicker'>DAVISCHOOL · TIMETABLE WORKSPACE</span><h2>Manual Timetable Builder</h2><p>Drag to move · Select a tool for other actions.</p></div></header>{notice}<div class='tb-toolbar'>{profile_selector}<div class='tb-profile-context'><strong>{esc(selected['name'])}</strong><span>{esc(selected['academic_year'])} · {esc(selected['term'])}</span></div></div><nav class='tb-toolbar' aria-label='Builder tools'>{builder_tool_buttons}</nav>{grid}{builder_modals}</div>
+        <div class='tb-wrap'><header class='tb-hero'><div><span class='tb-kicker'>DAVISCHOOL · TIMETABLE WORKSPACE</span><h2>Manual Timetable Builder</h2><p>Drag to move · Select a tool for other actions.</p></div></header>{notice}<div class='tb-toolbar'>{profile_selector}<div class='tb-profile-context'><strong>{esc(profile_display_name(selected['name']))}</strong><span>{esc(selected['academic_year'])} · {esc(selected['term'])}</span></div></div><nav class='tb-toolbar' aria-label='Builder tools'>{builder_tool_buttons}</nav>{grid}{builder_modals}</div>
         <script>
         (function(){{
           const modals=Array.from(document.querySelectorAll('.tb-modal'));
