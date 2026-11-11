@@ -214,6 +214,7 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
         cell_style = ParagraphStyle("TimetableCell", parent=styles["BodyText"], fontSize=5.5, leading=6.5)
         day_style = ParagraphStyle("TimetableDay", parent=cell_style, alignment=TA_CENTER)
         header_style = ParagraphStyle("TimetableHeader", parent=styles["BodyText"], fontSize=6, leading=7, textColor=colors.white, alignment=TA_CENTER)
+        break_header_style = ParagraphStyle("TimetableBreakHeader", parent=header_style, textColor=colors.HexColor("#75551d"))
         def pdf_text(value):
             return xml_escape(str(value).encode("latin-1", "replace").decode("latin-1"))
         school_name = pdf_text(str(school["name"] or "School"))
@@ -235,11 +236,6 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
         slot_width = max(1, (doc.width - first_width - class_width) / max(1, len(timeline)))
         first_day_rows = layout["rows"][:max(1, layout["rows"][0]["day_rowspan"])]
         rows_per_day = max(1, len(first_day_rows))
-        break_templates = {
-            cell_index: cell
-            for cell_index, cell in enumerate(first_day_rows[0]["cells"])
-            if cell["kind"] == "break"
-        }
         widths = [first_width] + ([class_width] if layout["show_class_column"] else []) + [slot_width] * len(timeline)
 
         # Render each day as its own full-width table. This keeps each day's
@@ -251,7 +247,7 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
             data = [[Paragraph("Day", header_style)] + ([Paragraph("Class / Stream", header_style)] if layout["show_class_column"] else [])]
             for _, kind, item in timeline:
                 label = (pdf_text(str(item["start_time"])) + "–" + pdf_text(str(item["end_time"]))) if kind == "break" else ("<b>" + pdf_text(str(item["label"])) + "</b><br/>" + pdf_text(str(item["start_time"])) + "–" + pdf_text(str(item["end_time"])))
-                data[0].append(Paragraph(label, header_style))
+                data[0].append(Paragraph(label, break_header_style if kind == "break" else header_style))
             span_commands = []
             for day_row_index, row in enumerate(day_rows):
                 row_index = day_row_index + 1
@@ -268,8 +264,9 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                 for cell_index, original_cell in enumerate(row["cells"]):
                     cell = original_cell
                     if cell["kind"] == "break_placeholder":
-                        if day_row_index == 0 and cell_index in break_templates:
-                            cell = dict(break_templates[cell_index], rowspan=len(day_rows))
+                        timeline_entry = timeline[cell_index]
+                        if timeline_entry[1] == "break" and day_row_index == 0:
+                            cell = {"kind": "break", "item": timeline_entry[2], "rowspan": len(day_rows)}
                         else:
                             cells.append("")
                             continue
