@@ -770,7 +770,6 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
         by_teacher_period = defaultdict(list)
         by_teacher_class_period_subject = defaultdict(list)
         by_room_period = defaultdict(list)
-        by_schoolwide_block_period = defaultdict(list)
         by_subject_day = defaultdict(list)
         by_subject_teacher_day = defaultdict(list)
         by_class_subject_period_day = defaultdict(list)
@@ -874,9 +873,6 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
                     if room_id is not None:
                         for pid in period_ids:
                             by_room_period[(int(room_id), day_id, pid)].append(var)
-                    if len(period_ids) > 1:
-                        for pid in period_ids:
-                            by_schoolwide_block_period[(day_id, pid)].append(var)
                     by_subject_teacher_day[(int(task["class_id"]), int(task["subject_id"]), int(task["teacher_id"]), day_id)].append(var)
                     # Soft preferences: fallback-only cells carry a substantial
                     # penalty; preferred cells and earlier periods are favoured.
@@ -918,7 +914,6 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
             (by_teacher_period, "teacher_clashes", "A teacher cannot teach overlapping lessons"),
             (by_room_period, "room_clashes", "A room cannot host overlapping lessons"),
             (by_subject_day, "one_subject_per_day", "A class cannot repeat the same subject on one day"),
-            (by_schoolwide_block_period, "schoolwide_block_clashes", "Multi-period blocks cannot overlap school-wide"),
         )
         for group, group_key, description in conflict_groups:
             literal = assumption_for(group_key, description)
