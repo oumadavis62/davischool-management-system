@@ -367,6 +367,16 @@ def register_timetable_view_routes(app, get_db, get_school_obj, module_page):
         /* Match the teacher portal: one centered character per line across the merged break column. */
         .tv-wrap .tb-grid .tb-break-cell>span{{position:absolute;inset:3px 0;display:flex;flex-direction:column;justify-content:space-evenly;align-items:center;writing-mode:horizontal-tb;text-orientation:mixed;white-space:nowrap;overflow:hidden;line-height:1;margin:0;padding:0;font-size:inherit;font-weight:950}}
         .tv-wrap .tb-grid .tb-break-cell>span i{{display:block;font-style:normal;font-size:clamp(20px,3.4vh,34px);font-weight:950;line-height:1;letter-spacing:0}}
+        /* Specialized timetables only: reduce break columns by 60% (34px -> 14px). Main timetable widths remain unchanged. */
+        .tv-wrap .tb-grid-compact thead th.tb-break-heading,
+        .tv-wrap .tb-grid-compact .tb-break-heading,
+        .tv-wrap .tb-grid-compact .tb-break-cell {
+            width:14px!important;
+            min-width:14px!important;
+            max-width:14px!important;
+            padding-left:0!important;
+            padding-right:0!important;
+        }
         </style>
         <div class='tv-wrap'><div class='tv-hero'><div><span class='tv-kicker'>DAVISCHOOL · TIMETABLE VIEWS</span><h2>Timetable Views</h2><p>Inspect the published or draft timetable by school, class, teacher or room.</p></div></div>{notice}
         <div class='tv-actions tv-view-actions'><button type='button' class='tv-btn' onclick="document.getElementById('tv-filter-dialog').showModal()">Choose timetable view</button><button type='button' class='tv-btn secondary' onclick="document.getElementById('tv-export-dialog').showModal()">Export / print</button></div>
