@@ -695,7 +695,7 @@ def publish_timetable(connection: Any, school_id: int, profile_id: int, actor: s
     ).fetchone()["next_no"]
     now = _now()
     revision_no = int(profile["revision_no"] or 1)
-    label = "Revision %s — Published" % revision_no
+    label = "Revision — Published"
     cur.execute(
         """INSERT INTO ds_timetable_versions
            (school_id,profile_id,version_no,label,snapshot_json,created_by,created_at)
@@ -760,7 +760,7 @@ def create_revision(connection: Any, school_id: int, source_profile_id: int, act
     ).fetchone()["max_no"]
     revision_no = int(max_revision or 1) + 1
     now = _now()
-    name = str(source["name"] or "Timetable").split(" · Revision ")[0] + " · Revision " + str(revision_no)
+    name = str(source["name"] or "Timetable").split(" · Revision ")[0] + " · Revision
     cur.execute(
         """INSERT INTO ds_timetable_profiles
            (school_id,name,academic_year,term,profile_type,status,week_start,week_end,academic_start_date,academic_end_date,
@@ -959,3 +959,10 @@ def compare_timetable_versions(connection: Any, school_id: int, first_version_id
         "advanced_removed":advanced_removed,
         "advanced_unchanged":len(first_advanced.keys() & second_advanced.keys()),
     }
+
+
+def profile_display_name(value: Any) -> str:
+    """Hide internal revision sequence numbers in user-facing profile names."""
+    name = str(value or "")
+    marker = " · Revision "
+    return name.split(marker, 1)[0] + " · Revision" if marker in name else name
