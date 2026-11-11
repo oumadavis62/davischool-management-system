@@ -262,14 +262,16 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                 if layout["show_class_column"]:
                     cl = row["class"]
                     cells.append(Paragraph("<b>" + pdf_text(cl["class_name"] + ((" " + cl["stream"]) if cl["stream"] else "")) + "</b>", cell_style))
-                for cell_index, original_cell in enumerate(row["cells"]):
+                timeline_cursor = 0
+                for original_cell in row["cells"]:
                     cell = original_cell
                     if cell["kind"] == "break_placeholder":
-                        timeline_entry = timeline[cell_index]
+                        timeline_entry = timeline[timeline_cursor]
                         if timeline_entry[1] == "break" and day_row_index == 0:
                             cell = {"kind": "break", "item": timeline_entry[2], "rowspan": len(day_rows)}
                         else:
                             cells.append("")
+                            timeline_cursor += 1
                             continue
                     if cell["kind"] == "break":
                         if day_row_index == 0:
@@ -331,6 +333,7 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                             col = len(cells) - 1
                             span_commands.append(("SPAN", (col, row_index), (col + cell["span"] - 1, row_index)))
                             cells.extend([""] * (cell["span"] - 1))
+                    timeline_cursor += cell.get("span", 1)
                 data.append(cells)
             table = Table(data, colWidths=widths, repeatRows=1)
             commands = [
