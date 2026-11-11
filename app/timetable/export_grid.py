@@ -47,10 +47,9 @@ def build_export_grid(result, view_type):
                         else:
                             cells.append({"kind":"break_placeholder"})
                     elif class_index == 0:
-                        # Whole-school break cells span every class row across
-                        # every displayed day, matching the on-screen grid.
-                        break_rowspan = len(days) * len(rowspec) if view_type == "school" else len(days)
-                        cells.append({"kind":"break","item":item,"rowspan":break_rowspan})
+                        # School view repeats each break for each day, spanning
+                        # that day's class rows only (not the entire export).
+                        cells.append({"kind":"break","item":item,"rowspan":len(rowspec)})
                     else:
                         cells.append({"kind":"break_placeholder"})
                     continue
