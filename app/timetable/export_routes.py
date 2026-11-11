@@ -202,7 +202,7 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
         h1,h2,p{{text-align:center;margin:3px}}h1{{font-size:17px}}h2{{font-size:13px}}p{{color:#647b6a;margin-bottom:12px}}
         table{{width:100%;border-collapse:collapse;table-layout:fixed;min-width:900px}}th,td{{border:1px solid #c7d9ca;padding:4px;text-align:center;vertical-align:middle;overflow-wrap:anywhere}}
         thead th{{background:#347b50;color:white;font-size:9px;padding:7px 3px}}th.day{{background:#edf5ee;color:#315b3e;width:38px;text-align:center;vertical-align:middle}}th.class{{background:#f5f9f5;color:#315b3e;width:48px}}
-        table.specialized-timetable{{width:auto;min-width:0}}table.specialized-timetable th.period-header{{width:42px}}table.specialized-timetable th.break-header{{width:20px}}table.specialized-timetable td.break{{min-width:0;width:20px}}table.specialized-timetable td.break>span{{font-size:13px}}
+        table.specialized-timetable{{width:auto;min-width:0}}table.specialized-timetable{{width:max-content;max-width:100%;table-layout:auto}}table.specialized-timetable th.period-header,table.specialized-timetable td.slot{{width:28px;min-width:28px}}table.specialized-timetable th.break-header,table.specialized-timetable td.break{{width:12px;min-width:12px;max-width:12px}}table.specialized-timetable td.break>span{{font-size:11px}}
         td.slot{{background:#fff}}.lesson{{position:relative;min-height:66px;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;background:color-mix(in srgb,var(--teacher-color) 17%,white);border:1px solid color-mix(in srgb,var(--teacher-color) 48%,white);border-left:4px solid var(--teacher-color);border-radius:6px;padding:13px 5px 5px;margin:2px;font-size:9px;line-height:1.2}}
         .lesson .duration-label{{position:absolute;top:3px;right:5px;font-size:8px;font-weight:bold;background:#d5e9d9;border-radius:8px;padding:2px 4px}}.lesson .subject-initials{{display:block;text-align:center;font-size:12px;font-weight:900;letter-spacing:.4px}}.lesson .room-detail{{display:block;color:#55705d;font-size:8px;margin-top:4px;max-width:100%;overflow-wrap:anywhere}}.lesson .teacher-initials{{align-self:flex-end;margin-top:auto;background:#245b39;color:#fff;border-radius:4px;padding:2px 5px;font-size:8px;font-weight:900}}th.break-header{{width:90%}}td.break{{width:90%;background:#f1ead8;color:#75551d;vertical-align:middle;text-align:center;min-width:24px;padding:0;position:relative}}td.break>span{{display:flex;flex-direction:column;justify-content:center;align-items:center;min-height:100%;height:100%;font-size:18px;font-weight:950;line-height:1}}td.break>span i{{display:block;font-style:normal;line-height:1}}td.free{{background:#fbfdfb}}td.continued{{background:#f6faf6;color:#7b9480;font-size:8px}}
         .actions{{text-align:center;margin-bottom:10px}}button{{padding:8px 15px;background:#17633b;color:#fff;border:0;border-radius:7px}}
@@ -288,8 +288,8 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
         else:
             # Specialized exports use compact fixed-width period and break
             # columns; they do not need to stretch across the landscape page.
-            slot_width = 42
-            timeline_widths = [20 if kind == "break" else slot_width for _, kind, _ in timeline]
+            slot_width = 28
+            timeline_widths = [12 if kind == "break" else slot_width for _, kind, _ in timeline]
         first_day_rows = layout["rows"][:max(1, layout["rows"][0]["day_rowspan"])]
         rows_per_day = max(1, len(first_day_rows))
         widths = [first_width] + ([class_width] if layout["show_class_column"] else []) + timeline_widths
@@ -597,7 +597,12 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
         if layout["show_class_column"]:
             sheet.column_dimensions["B"].width = 14
         for col in range(2+(1 if layout["show_class_column"] else 0),last_col+1):
-            sheet.column_dimensions[get_column_letter(col)].width = 19.8 if timeline[col - (2 if layout["show_class_column"] else 1) - 1][1] == "break" else 22
+            kind = timeline[col - (2 if layout["show_class_column"] else 1) - 1][1]
+            if view_type == "school":
+                column_width = 19.8 if kind == "break" else 22
+            else:
+                column_width = 5.5 if kind == "break" else 10
+            sheet.column_dimensions[get_column_letter(col)].width = column_width
         sheet.freeze_panes = "B6"
         sheet.sheet_view.showGridLines = False
         sheet.auto_filter.ref = f"A{header_row}:{get_column_letter(last_col)}{row_index-1}"
