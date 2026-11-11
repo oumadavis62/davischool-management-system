@@ -970,4 +970,4 @@ def profile_display_name(value: Any) -> str:
 
 def revision_display_label(value: Any) -> str:
     """Hide the internal revision sequence in a user-facing version label."""
-    return re.sub(r"^Revision\\s+\\d+", "Revision", str(value or ""))
+    return re.sub(r"^Revision\s+\d+", "Revision", str(value or ""))
