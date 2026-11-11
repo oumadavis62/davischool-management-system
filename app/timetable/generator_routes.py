@@ -46,7 +46,7 @@ def register_timetable_generator_routes(app, get_db, get_school_obj, module_page
         con = get_db()
         cur = con.cursor()
         profiles = cur.execute(
-            "SELECT * FROM ds_timetable_profiles WHERE school_id=? ORDER BY academic_year DESC,term,id DESC",
+            "SELECT * FROM ds_timetable_profiles WHERE school_id=? AND status IN ('draft','pending_approval','published') ORDER BY academic_year DESC,term,id DESC",
             (school_id,),
         ).fetchall()
         selected = (next((p for p in profiles if int(p["id"]) == int(profile_id)), None) or (profiles[0] if profiles else None))
