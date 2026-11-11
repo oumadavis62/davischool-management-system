@@ -89,7 +89,7 @@ def get_timetable_view(connection: Any, school_id: int, profile_id: int, view_ty
         title = str(target["name"]) + " — room timetable"
 
     lessons = cur.execute(
-        """SELECT l.*,c.name class_name,c.stream,s.name subject_name,s.initial subject_initial,
+        """SELECT l.*,c.name class_name,c.stream,cl.initials timetable_class_initials,s.name subject_name,s.initial subject_initial,
                   t.name teacher_name,t.teacher_color,t.teacher_initials,
                   rm.name room_name,p.period_no,p.label period_label,p.start_time,p.end_time,d.day_name
            FROM ds_timetable_lessons l
@@ -97,6 +97,7 @@ def get_timetable_view(connection: Any, school_id: int, profile_id: int, view_ty
            JOIN subjects s ON s.id=l.subject_id AND s.school_id=l.school_id
            JOIN teachers t ON t.id=l.teacher_id AND t.school_id=l.school_id
            LEFT JOIN ds_timetable_rooms rm ON rm.id=l.room_id AND rm.school_id=l.school_id
+           LEFT JOIN ds_timetable_class_limits cl ON cl.school_id=l.school_id AND cl.profile_id=l.profile_id AND cl.class_id=l.class_id
            JOIN ds_timetable_periods p ON p.id=l.period_id AND p.profile_id=l.profile_id
            JOIN ds_timetable_days d ON d.id=l.day_id AND d.profile_id=l.profile_id
            WHERE l.school_id=? AND l.profile_id=? AND l.status='scheduled'""" + where +
@@ -129,15 +130,16 @@ def get_timetable_view(connection: Any, school_id: int, profile_id: int, view_ty
         "breaks": breaks,
         "lessons": lessons,
         "allocation_classes": cur.execute(
-            """SELECT DISTINCT ta.class_id,c.name class_name,c.stream
+            """SELECT DISTINCT ta.class_id,c.name class_name,c.stream,cl.initials
                FROM teacher_allocations ta
                JOIN classes c ON c.id=ta.class_id AND c.school_id=ta.school_id
                JOIN ds_timetable_class_requirements r
                  ON r.school_id=ta.school_id AND r.class_id=ta.class_id
                 AND r.subject_id=ta.subject_id AND r.teacher_id=ta.teacher_id
                 AND r.profile_id=?
+               LEFT JOIN ds_timetable_class_limits cl ON cl.school_id=ta.school_id AND cl.profile_id=? AND cl.class_id=ta.class_id
                WHERE ta.school_id=? ORDER BY c.name,c.stream""",
-            (profile_id, school_id),
+            (profile_id, profile_id, school_id),
         ).fetchall(),
         "advanced_sessions": advanced_sessions,
         "weekend_sessions": weekend_sessions,
