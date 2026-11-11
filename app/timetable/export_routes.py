@@ -204,7 +204,7 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
         .extra-section{{margin-top:18px;break-inside:avoid}}.extra-section h3{{font-size:12px;color:#1d563b;margin:0 0 8px}}.session-table{{width:100%;border-collapse:collapse;table-layout:fixed;min-width:0;font-size:8px}}.session-table th{{background:#17633b;color:#fff;padding:5px}}.session-table td{{padding:5px;border:1px solid #dce7de;text-align:left}}.empty{{color:#64748b;font-size:9px}}
         @media print{{body{{margin:0}}.actions{{display:none}}tr{{break-inside:avoid}}table{{min-width:0}}.extra-remedial-separate,.extra-weekend{{break-before:page}}}}
         </style></head><body><div class="actions"><button onclick="window.print()">Print timetable</button></div>
-        <div style="display:grid;grid-template-columns:68px 1fr 68px;align-items:center;gap:8px;margin-bottom:4px"><div>{logo_img}</div><div><h1>{school_name}</h1><h2>{title}</h2></div><div style="text-align:right">{logo_img}</div></div>
+        <div style="display:grid;grid-template-columns:68px 1fr 68px;align-items:center;gap:8px;margin-bottom:4px"><div>{logo_img}</div><div><h1 style="text-decoration:underline">{school_name}</h1><h2 style="text-decoration:underline">{title}</h2></div><div style="text-align:right">{logo_img}</div></div>
         <p style="font-size:8px;color:#405b49">{school_details_html}</p><p style="font-size:9px;font-weight:bold"><u>{meta}</u></p>
         <table><thead><tr>{header_html}</tr></thead><tbody>{"".join(body_rows)}</tbody></table>
         {dated_html}{weekday_html}{weekend_html}
@@ -254,8 +254,8 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
             except Exception:
                 logo_cell = ""
         cover_title = "MASTER TIMETABLE" if view_type == "school" else str(result["title"]).upper()
-        cover_center = [Paragraph("<b>" + school_name + "</b>", school_style),
-                        Paragraph("<b>" + pdf_text(cover_title) + "</b>", title_style)]
+        cover_center = [Paragraph("<u><b>" + school_name + "</b></u>", school_style),
+                        Paragraph("<u><b>" + pdf_text(cover_title) + "</b></u>", title_style)]
         cover = Table([[logo_cell, cover_center, logo_cell]], colWidths=[60, doc.width-120, 60])
         cover.setStyle(TableStyle([("ALIGN",(0,0),(-1,-1),"CENTER"),("VALIGN",(0,0),(-1,-1),"MIDDLE"),
                                    ("LEFTPADDING",(0,0),(-1,-1),2),("RIGHTPADDING",(0,0),(-1,-1),2)]))
