@@ -176,6 +176,9 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
         ])
         layout = build_export_grid(result, view_type)
         timeline = layout["timeline"]
+        first_width = 42 if not layout["show_class_column"] else 76
+        class_width = 65 if layout["show_class_column"] else 0
+        slot_width = max(1, (doc.width - first_width - class_width) / max(1, len(timeline)))
         data = [[Paragraph("Day", header_style)] + ([Paragraph("Class / Stream",header_style)] if layout["show_class_column"] else [])]
         for _, kind, item in timeline:
             label = "<b>" + pdf_text(str(item["label"])) + "</b><br/>" + pdf_text(str(item["start_time"])) + "–" + pdf_text(str(item["end_time"]))
@@ -206,24 +209,40 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                 elif cell["kind"]=="continued":
                     cells.append(Paragraph("<br/>".join("↳ "+pdf_text(x["subject_name"])+" continues" for x in cell["lessons"]),cell_style))
                 else:
-                    parts=[]
+                    card_tables=[]
+                    card_width=max(1,slot_width*cell["span"]-8)
                     for lesson in cell["lessons"]:
                         class_label=str(lesson["class_name"])+((" "+str(lesson["stream"])) if lesson["stream"] else "")
                         detail="<b>"+pdf_text(lesson["subject_name"])+"</b><br/>"+pdf_text(str(lesson["duration_periods"])+" period(s)")
                         if layout["resource_view"]: detail += "<br/>"+pdf_text(class_label)
                         if view_type!="teacher": detail += "<br/>"+pdf_text(lesson["teacher_name"])
                         if not layout["room_view"] and lesson.get("room_name"): detail += "<br/>"+pdf_text(lesson["room_name"])
-                        parts.append(detail)
-                    cells.append(Paragraph("<br/><br/>".join(parts),cell_style))
+                        card_color=str(lesson.get("teacher_color") or "").strip()
+                        if not re.fullmatch(r"#[0-9A-Fa-f]{6}",card_color):
+                            card_color="#2563EB"
+                        accent=colors.HexColor(card_color)
+                        tint=colors.Color(1-(1-accent.red)*0.17,1-(1-accent.green)*0.17,1-(1-accent.blue)*0.17)
+                        card=Table([[Paragraph(detail,cell_style)]],colWidths=[card_width])
+                        card.setStyle(TableStyle([
+                            ("BACKGROUND",(0,0),(-1,-1),tint),
+                            ("BOX",(0,0),(-1,-1),0.45,accent),
+                            ("LINEBEFORE",(0,0),(0,-1),3,accent),
+                            ("LEFTPADDING",(0,0),(-1,-1),5),("RIGHTPADDING",(0,0),(-1,-1),3),
+                            ("TOPPADDING",(0,0),(-1,-1),4),("BOTTOMPADDING",(0,0),(-1,-1),4),
+                        ]))
+                        card_tables.append(card)
+                    if len(card_tables)==1:
+                        cells.append(card_tables[0])
+                    else:
+                        stack=Table([[card] for card in card_tables],colWidths=[card_width])
+                        stack.setStyle(TableStyle([("LEFTPADDING",(0,0),(-1,-1),0),("RIGHTPADDING",(0,0),(-1,-1),0),("TOPPADDING",(0,0),(-1,-1),1),("BOTTOMPADDING",(0,0),(-1,-1),1)]))
+                        cells.append(stack)
                     if cell["span"]>1:
                         col=len(cells)-1
                         span_commands.append(("SPAN",(col,row_index),(col+cell["span"]-1,row_index)))
                         cells.extend([""] * (cell["span"]-1))
             data.append(cells)
-        column_count=len(data[0])
-        first_width=42 if not layout["show_class_column"] else 76
-        slot_width=max(1,(doc.width-first_width-(65 if layout["show_class_column"] else 0))/max(1,len(timeline)))
-        widths=[first_width]+([65] if layout["show_class_column"] else [])+[slot_width]*len(timeline)
+        widths=[first_width]+([class_width] if layout["show_class_column"] else [])+[slot_width]*len(timeline)
         table=Table(data,colWidths=widths,repeatRows=1)
         commands=[
             ("BACKGROUND",(0,0),(-1,0),colors.HexColor("#17633b")),
