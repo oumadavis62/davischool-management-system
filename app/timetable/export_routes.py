@@ -49,6 +49,15 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
         safe = re.sub(r"[^A-Za-z0-9_-]+", "-", raw).strip("-")
         return (safe or "DaviSchool-Timetable")[:90]
 
+    def teacher_color_hex(value):
+        color = str(value or "").strip()
+        return color.upper() if re.fullmatch(r"#[0-9A-Fa-f]{6}", color) else "#2563EB"
+
+    def teacher_tint_hex(value, ratio=0.17):
+        color = teacher_color_hex(value)[1:]
+        channels = [int(color[index:index+2], 16) for index in (0, 2, 4)]
+        return "".join(f"{round(channel * (1-ratio) + 255 * ratio):02X}" for channel in channels)
+
     def cell_map(result):
         periods = result["periods"]
         index = {int(p["id"]):i for i,p in enumerate(periods)}
@@ -397,6 +406,7 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
         for col,value in enumerate(headers,1):
             c=sheet.cell(header_row,col,value); c.font=Font(bold=True,color="FFFFFF"); c.fill=PatternFill("solid",fgColor="17633B"); c.alignment=Alignment(horizontal="center",vertical="center",wrap_text=True)
         break_columns=set()
+        lesson_color_cells=[]
         row_index=header_row+1
         for row in layout["rows"]:
             col=1
@@ -427,6 +437,9 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                         if not layout["room_view"] and lesson.get("room_name"): detail+="\n"+str(lesson["room_name"])
                         values.append(detail)
                     target.value="\n\n".join(values)
+                    lesson_colors={teacher_color_hex(lesson.get("teacher_color")) for lesson in cell["lessons"]}
+                    if len(lesson_colors)==1:
+                        lesson_color_cells.append((row_index,col,next(iter(lesson_colors))))
                     if cell["span"]>1: sheet.merge_cells(start_row=row_index,start_column=col,end_row=row_index,end_column=col+cell["span"]-1)
                 target.alignment=Alignment(wrap_text=True,vertical="center",horizontal="center")
                 if cell["kind"]=="break": break_columns.add(col)
@@ -514,6 +527,11 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
             for row in ws.iter_rows():
                 for cell in row:
                     cell.border = Border(bottom=thin)
+        # Reapply teacher accents after the shared grid borders.
+        for lesson_row, lesson_col, accent in lesson_color_cells:
+            target=sheet.cell(lesson_row,lesson_col)
+            target.fill=PatternFill("solid",fgColor=teacher_tint_hex(accent))
+            target.border=Border(left=Side(style="medium",color=accent[1:]),bottom=thin)
         # Keep every worksheet printable on standard A4 paper. Wide timetables
         # and details scale to one page wide; weekend rotations remain a single
         # consolidated A4 page as explicitly requested.
