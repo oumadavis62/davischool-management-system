@@ -231,20 +231,17 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
         timeline = layout["timeline"]
         first_width = 42 if not layout["show_class_column"] else 76
         class_width = 65 if layout["show_class_column"] else 0
-        slot_width = max(1, (doc.width - first_width - class_width) / max(1, len(timeline)))
+        slot_width = max(1, (doc.width - 12 - first_width - class_width) / max(1, len(timeline)))
         data = [[Paragraph("Day", header_style)] + ([Paragraph("Class / Stream",header_style)] if layout["show_class_column"] else [])]
         for _, kind, item in timeline:
             label = (pdf_text(str(item["start_time"])) + "–" + pdf_text(str(item["end_time"]))) if kind == "break" else ("<b>" + pdf_text(str(item["label"])) + "</b><br/>" + pdf_text(str(item["start_time"])) + "–" + pdf_text(str(item["end_time"])))
             data[0].append(Paragraph(label, header_style))
-        span_commands=[]
         for row_index, row in enumerate(layout["rows"], start=1):
             cells=[]
-            if row["day_first"]:
-                cells.append(Paragraph("<b>"+pdf_text(row["day"]["day_name"])+"</b>",cell_style))
-                if row["day_rowspan"]>1:
-                    span_commands.append(("SPAN",(0,row_index),(0,row_index+row["day_rowspan"]-1)))
-            else:
-                cells.append("")
+            # Avoid vertically merged cells in the PDF: ReportLab cannot split
+            # a day/break rowspan across pages. Repeat day labels per row and
+            # place the vertical break label at the start of each day instead.
+            cells.append(Paragraph("<b>"+pdf_text(row["day"]["day_name"])+"</b>",cell_style))
             if layout["show_class_column"]:
                 cl=row["class"]
                 cells.append(Paragraph("<b>"+pdf_text(cl["class_name"] + ((" "+cl["stream"]) if cl["stream"] else ""))+"</b>",cell_style))
@@ -255,10 +252,7 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                     b=cell["item"]
                     break_label="<br/>".join(pdf_text(ch) for ch in str(b["label"]))
                     break_style=ParagraphStyle("ExportBreak",parent=cell_style,alignment=TA_CENTER,fontSize=10,leading=11,textColor=colors.HexColor("#75551d"))
-                    cells.append(Paragraph("<b>"+break_label+"</b>",break_style))
-                    if cell["rowspan"]>1:
-                        col=len(cells)-1
-                        span_commands.append(("SPAN",(col,row_index),(col,row_index+cell["rowspan"]-1)))
+                    cells.append(Paragraph("<b>"+break_label+"</b>",break_style) if row["day_first"] else "")
                 elif cell["kind"]=="free":
                     cells.append(Paragraph("—",cell_style))
                 elif cell["kind"]=="continued":
@@ -320,7 +314,7 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
             ("VALIGN",(0,0),(-1,-1),"MIDDLE"),
             ("LEFTPADDING",(0,0),(-1,-1),3),("RIGHTPADDING",(0,0),(-1,-1),3),
             ("TOPPADDING",(0,0),(-1,-1),4),("BOTTOMPADDING",(0,0),(-1,-1),4),
-        ]+span_commands
+        ]
         for col,(_,kind,_) in enumerate(timeline,start=1+(1 if layout["show_class_column"] else 0)):
             if kind=="break":
                 commands += [("BACKGROUND",(col,0),(col,-1),colors.HexColor("#f1ead8")),("TEXTCOLOR",(col,0),(col,-1),colors.HexColor("#75551d"))]
