@@ -9,6 +9,7 @@ from fastapi import Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 
 from app.timetable.setup import TimetableSetupError
+from app.timetable.publishing import profile_display_name
 from app.timetable.generator import (
     generate_timetable, generate_advanced_instructional_sessions,
     generate_dated_advanced_sessions,
@@ -80,7 +81,7 @@ def register_timetable_generator_routes(app, get_db, get_school_obj, module_page
         pid = int(selected["id"]) if selected else 0
         notice = f"<div class='ag-alert {'error' if error else 'success'}'>{esc(message)}</div>" if message else ""
         profile_options = "".join(
-            f"<option value='{int(p['id'])}' {'selected' if selected and int(p['id'])==pid else ''}>{esc(p['academic_year'])} · {esc(p['term'])} — {esc(p['name'])}</option>"
+            f"<option value='{int(p['id'])}' {'selected' if selected and int(p['id'])==pid else ''}>{esc(p['academic_year'])} · {esc(p['term'])} — {esc(profile_display_name(p['name']))}</option>"
             for p in profiles
         )
         selector = f"<form method='get' action='/app/timetable/automatic' class='ag-select'><label>Timetable profile</label><select name='profile_id' onchange='this.form.submit()'>{profile_options}</select></form>" if profiles else ""
