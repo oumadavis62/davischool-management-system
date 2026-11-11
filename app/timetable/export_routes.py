@@ -92,7 +92,7 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
         layout = build_export_grid(result, view_type)
         timeline = layout["timeline"]
         headers = ["Day"] + (["Class / Stream"] if layout["show_class_column"] else [])
-        headers += [(str(item["start_time"]) + "–" + str(item["end_time"])) if kind == "break" else (str(item["label"]) + "<br>" + str(item["start_time"]) + "–" + str(item["end_time"])) for _,kind,item in timeline]
+        headers += ["" if kind == "break" else (str(item["label"]) + "<br>" + str(item["start_time"]) + "–" + str(item["end_time"])) for _,kind,item in timeline]
         body_rows = []
         for row in layout["rows"]:
             cells = []
@@ -176,7 +176,7 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
         table{{width:100%;border-collapse:collapse;table-layout:fixed;min-width:900px}}th,td{{border:1px solid #c7d9ca;padding:4px;text-align:center;vertical-align:middle;overflow-wrap:anywhere}}
         thead th{{background:#347b50;color:white;font-size:9px;padding:7px 3px}}th.day{{background:#edf5ee;color:#315b3e;width:65px}}th.class{{background:#f5f9f5;color:#315b3e;width:65px}}
         td.slot{{background:#fff}}.lesson{{position:relative;min-height:66px;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;background:color-mix(in srgb,var(--teacher-color) 17%,white);border:1px solid color-mix(in srgb,var(--teacher-color) 48%,white);border-left:4px solid var(--teacher-color);border-radius:6px;padding:13px 5px 5px;margin:2px;font-size:9px;line-height:1.2}}
-        .lesson .duration-label{{position:absolute;top:3px;right:5px;font-size:8px;font-weight:bold;background:#d5e9d9;border-radius:8px;padding:2px 4px}}.lesson .subject-initials{{display:block;text-align:center;font-size:12px;font-weight:900;letter-spacing:.4px}}.lesson .room-detail{{display:block;color:#55705d;font-size:8px;margin-top:4px;max-width:100%;overflow-wrap:anywhere}}.lesson .teacher-initials{{align-self:flex-end;margin-top:auto;background:#245b39;color:#fff;border-radius:4px;padding:2px 5px;font-size:8px;font-weight:900}}td.break{{background:#f1ead8;color:#75551d;vertical-align:middle;text-align:center;min-width:24px;padding:0;position:relative}}td.break>span{{display:flex;flex-direction:column;justify-content:space-evenly;align-items:center;min-height:100%;font-size:18px;font-weight:950;line-height:1}}td.break>span i{{display:block;font-style:normal;line-height:1}}td.free{{background:#fbfdfb}}td.continued{{background:#f6faf6;color:#7b9480;font-size:8px}}
+        .lesson .duration-label{{position:absolute;top:3px;right:5px;font-size:8px;font-weight:bold;background:#d5e9d9;border-radius:8px;padding:2px 4px}}.lesson .subject-initials{{display:block;text-align:center;font-size:12px;font-weight:900;letter-spacing:.4px}}.lesson .room-detail{{display:block;color:#55705d;font-size:8px;margin-top:4px;max-width:100%;overflow-wrap:anywhere}}.lesson .teacher-initials{{align-self:flex-end;margin-top:auto;background:#245b39;color:#fff;border-radius:4px;padding:2px 5px;font-size:8px;font-weight:900}}td.break{{background:#f1ead8;color:#75551d;vertical-align:middle;text-align:center;min-width:24px;padding:0;position:relative}}td.break>span{{display:flex;flex-direction:column;justify-content:center;align-items:center;min-height:100%;height:100%;font-size:18px;font-weight:950;line-height:1}}td.break>span i{{display:block;font-style:normal;line-height:1}}td.free{{background:#fbfdfb}}td.continued{{background:#f6faf6;color:#7b9480;font-size:8px}}
         .actions{{text-align:center;margin-bottom:10px}}button{{padding:8px 15px;background:#17633b;color:#fff;border:0;border-radius:7px}}
         .extra-section{{margin-top:18px;break-inside:avoid}}.extra-section h3{{font-size:12px;color:#1d563b;margin:0 0 8px}}.session-table{{width:100%;border-collapse:collapse;table-layout:fixed;min-width:0;font-size:8px}}.session-table th{{background:#17633b;color:#fff;padding:5px}}.session-table td{{padding:5px;border:1px solid #dce7de;text-align:left}}.empty{{color:#64748b;font-size:9px}}
         @media print{{body{{margin:0}}.actions{{display:none}}tr{{break-inside:avoid}}table{{min-width:0}}.extra-remedial-separate,.extra-weekend{{break-before:page}}}}
@@ -234,7 +234,7 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
         slot_width = max(1, (doc.width - 12 - first_width - class_width) / max(1, len(timeline)))
         data = [[Paragraph("Day", header_style)] + ([Paragraph("Class / Stream",header_style)] if layout["show_class_column"] else [])]
         for _, kind, item in timeline:
-            label = (pdf_text(str(item["start_time"])) + "–" + pdf_text(str(item["end_time"]))) if kind == "break" else ("<b>" + pdf_text(str(item["label"])) + "</b><br/>" + pdf_text(str(item["start_time"])) + "–" + pdf_text(str(item["end_time"])))
+            label = "" if kind == "break" else ("<b>" + pdf_text(str(item["label"])) + "</b><br/>" + pdf_text(str(item["start_time"])) + "–" + pdf_text(str(item["end_time"])))
             data[0].append(Paragraph(label, header_style))
         span_commands=[]
         for row_index, row in enumerate(layout["rows"], start=1):
@@ -453,7 +453,7 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
         sheet.cell(3,1).alignment = Alignment(horizontal="center")
         header_row = 5
         headers = ["Day"] + [
-            ((str(item["start_time"]) + "–" + str(item["end_time"])) if kind == "break" else (str(item["label"]) + "\n" + str(item["start_time"]) + "–" + str(item["end_time"])))
+            ("" if kind == "break" else (str(item["label"]) + "\n" + str(item["start_time"]) + "–" + str(item["end_time"])))
             for _, kind, item in timeline
         ]
         for col, value in enumerate(headers,1):
@@ -463,7 +463,7 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
             cell.alignment = Alignment(horizontal="center",vertical="center",wrap_text=True)
         layout=build_export_grid(result,view_type)
         timeline=layout["timeline"]
-        headers=["Day"]+([ "Class / Stream" ] if layout["show_class_column"] else [])+[((str(item["start_time"])+"–"+str(item["end_time"])) if kind=="break" else (str(item["label"])+"\n"+str(item["start_time"])+"–"+str(item["end_time"]))) for _,kind,item in timeline]
+        headers=["Day"]+([ "Class / Stream" ] if layout["show_class_column"] else [])+[("" if kind=="break" else (str(item["label"])+"\n"+str(item["start_time"])+"–"+str(item["end_time"]))) for _,kind,item in timeline]
         for col,value in enumerate(headers,1):
             c=sheet.cell(header_row,col,value); c.font=Font(bold=True,color="FFFFFF"); c.fill=PatternFill("solid",fgColor="17633B"); c.alignment=Alignment(horizontal="center",vertical="center",wrap_text=True)
         break_columns=set()
