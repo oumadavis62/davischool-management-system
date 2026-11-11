@@ -111,12 +111,34 @@ class DaviSchoolTabSessionMiddleware:
     var currentUrl = new URL(window.location.href);
     var urlTabId = currentUrl.searchParams.get("ds_tab") || "";
     var forceNewTab = currentUrl.searchParams.get("ds_tab_new") === "1";
+    var instanceId = newTabId();
+    var channel = null;
+    if (!forceNewTab && id && /^[A-Za-z0-9_-]{16,64}$/.test(id) && window.BroadcastChannel) {
+      try {
+        channel = new BroadcastChannel("davischool-tab-session:" + id);
+        channel.onmessage = function (event) {
+          var data = event && event.data || {};
+          if (!data || (data.type !== "HELLO" && data.type !== "CLAIM") || data.instance === instanceId) return;
+          if (data.type === "HELLO") { channel.postMessage({type:"CLAIM", instance:instanceId}); return; }
+          if (String(data.instance) < String(instanceId)) {
+            var rotateUrl = new URL(window.location.href);
+            rotateUrl.searchParams.delete("ds_tab");
+            rotateUrl.searchParams.set("ds_tab_source", id);
+            rotateUrl.searchParams.set("ds_tab_new", "1");
+            channel.close();
+            window.location.replace(rotateUrl.pathname + rotateUrl.search + rotateUrl.hash);
+          }
+        };
+        channel.postMessage({type:"HELLO", instance:instanceId});
+      } catch (_) { channel = null; }
+    }
     if (forceNewTab) {
       // The server has already selected this fresh ID for the new tab and
       // uses it to choose the matching cookie. Adopt that exact ID.
       id = /^[A-Za-z0-9_-]{16,64}$/.test(urlTabId) ? urlTabId : newTabId();
       sessionStorage.setItem(KEY, id);
       currentUrl.searchParams.delete("ds_tab_new");
+      currentUrl.searchParams.delete("ds_tab_source");
       currentUrl.searchParams.set("ds_tab", id);
       window.history.replaceState(null, "", currentUrl.pathname + currentUrl.search + currentUrl.hash);
       urlTabId = id;
@@ -182,7 +204,9 @@ class DaviSchoolTabSessionMiddleware:
         window.location.replace(currentUrl.pathname + currentUrl.search + currentUrl.hash);
         return;
       }
-      currentUrl.searchParams.set("ds_tab", id);
+      currentUrl.searchParams.delete("ds_tab");
+      if (urlTabId && /^[A-Za-z0-9_-]{16,64}$/.test(urlTabId)) currentUrl.searchParams.set("ds_tab_source", urlTabId);
+      currentUrl.searchParams.set("ds_tab_new", "1");
       markInternalNavigation();
       window.location.replace(currentUrl.pathname + currentUrl.search + currentUrl.hash);
       return;
@@ -204,6 +228,7 @@ class DaviSchoolTabSessionMiddleware:
           // authenticated session. Ordinary new tabs must get a fresh ID,
           // even when the browser clones the opener's sessionStorage.
           if (newTabUrl.searchParams.get("ds_tab_shared") !== "1") {
+            newTabUrl.searchParams.set("ds_tab_source", id);
             newTabUrl.searchParams.delete("ds_tab");
             newTabUrl.searchParams.set("ds_tab_new", "1");
             destination = newTabUrl.pathname + newTabUrl.search + newTabUrl.hash;
@@ -384,9 +409,9 @@ class DaviSchoolTabSessionMiddleware:
         existing_query_tab = initial_query.get(_TAB_PARAM, [""])[0]
         force_new_tab = new_tab_marker and not _TAB_RE.fullmatch(existing_query_tab or "")
         if force_new_tab:
-            # A target=_blank tab can inherit a copy of its opener's
-            # sessionStorage. Give it a distinct cookie namespace before
-            # any route reads the session, and carry the marker through login.
+            # A new/duplicated tab receives its own cookie namespace. If the
+            # browser supplies a source tab ID, clone its signed login session
+            # into the new cookie so both tabs begin independently.
             tab_id = secrets.token_urlsafe(24)
             initial_query[_TAB_PARAM] = [tab_id]
             scope["query_string"] = urlencode(initial_query, doseq=True).encode("utf-8")
@@ -558,6 +583,17 @@ class DaviSchoolTabSessionMiddleware:
             for part in cookie_header.split(";")
             if "=" in part
         ]
+        if force_new_tab:
+            source_tab_id = initial_query.get("ds_tab_source", [""])[0]
+            if _TAB_RE.fullmatch(source_tab_id or ""):
+                source_cookie_name = self._cookie_name(source_tab_id)
+                source_cookie_value = next((value for name, value in cookie_pairs if name == source_cookie_name), None)
+                if cookie_has_authenticated_session(source_cookie_value):
+                    cookie_pairs = [(name, value) for name, value in cookie_pairs if name != session_cookie]
+                    cookie_pairs.append((session_cookie, source_cookie_value))
+                    rewritten_cookie = "; ".join(name + "=" + value for name, value in cookie_pairs).encode("latin-1", "ignore")
+                    scope["headers"] = [(name, rewritten_cookie if name.lower() == b"cookie" else value) for name, value in scope.get("headers", [])]
+                    cookie_header = rewritten_cookie.decode("latin-1", "ignore")
         selected_cookie_value = next((value for name, value in cookie_pairs if name == session_cookie), None)
         legacy_value = next((value for name, value in cookie_pairs if name == "session"), None)
         selected_cookie_present = selected_cookie_value is not None
