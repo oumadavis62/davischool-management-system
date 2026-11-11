@@ -95,7 +95,7 @@ def timetable_workspace(request, body):
         // Tracking and Subject Requirements. Never expose a separate requirements-only page.
         const keep = allLabels.map(label=>{
           if(requested==='requirements') return /track class lesson allocations|subject requirements/i.test(label);
-          if(requested==='availability') return /teacher availability/i.test(label);
+          if(requested==='availability') return /teacher availability|subject availability/i.test(label);
           if(requested==='setup') return !/teacher availability|subject availability|requirement|workload|allocation/i.test(label);
           return true;
         });
