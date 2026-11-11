@@ -123,22 +123,53 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                         cards.append("<div class='lesson' style='--teacher-color:" + card_color + "'>" + detail + "</div>")
                     cells.append(f"<td class='slot' colspan='{cell['span']}'>" + "".join(cards) + "</td>")
             body_rows.append("<tr>" + "".join(cells) + "</tr>")
+        def print_session_table(items, include_rotation=False):
+            if not items:
+                return "<p class='empty'>No sessions scheduled in this section.</p>"
+            labels = (["Weekend rotation"] if include_rotation else []) + ["Date / Day", "Time", "Lesson / Activity", "Class / Group", "Teacher(s)", "Venue"]
+            rows = []
+            for item in items:
+                date_label = str(item.get("session_date") or item.get("day_name") or "Weekly")
+                if item.get("session_date") and item.get("day_name"):
+                    date_label += " · " + str(item["day_name"])
+                values = ([str(item.get("rotation_label") or "Weekend rotation")] if include_rotation else []) + [
+                    date_label, str(item["start_time"]) + "–" + str(item["end_time"]),
+                    str(item.get("subject_name") or item.get("programme_name") or item.get("session_type") or "Session"),
+                    str(item.get("class_names") or "—"), str(item.get("teacher_names") or "—"),
+                    str(item.get("room_name") or "—"),
+                ]
+                rows.append("<tr>" + "".join("<td>" + escape(value) + "</td>" for value in values) + "</tr>")
+            return "<table class='session-table'><thead><tr>" + "".join("<th>" + escape(label) + "</th>" for label in labels) + "</tr></thead><tbody>" + "".join(rows) + "</tbody></table>"
+
+        dated_html = ""
+        if result.get("dated_instructional_sessions"):
+            dated_html = "<section class='extra-section'><h3>Calendar-dated instructional lessons</h3>" + print_session_table(result["dated_instructional_sessions"]) + "</section>"
+        weekday_html = ""
+        if result.get("weekday_remedials"):
+            remedial_class = " extra-remedial-separate" if remedial_display == "separate" else ""
+            weekday_html = "<section class='extra-section" + remedial_class + "'><h3>Weekday remedial &amp; study sessions</h3>" + print_session_table(result["weekday_remedials"]) + "</section>"
+        weekend_html = ""
+        if result.get("weekend_sessions"):
+            weekend_html = "<section class='extra-section extra-weekend'><h3>Weekend lessons &amp; remedials</h3>" + print_session_table(result["weekend_sessions"], True) + "</section>"
+
         school_name=escape(str(field_value(school,"name","School")))
         title=escape(str(result["title"]))
         meta=escape(str(result["profile"]["academic_year"]) + " · " + str(result["profile"]["term"]))
         header_html="".join("<th>"+h+"</th>" for h in headers)
         html=f"""<!doctype html><html><head><meta charset="utf-8"><title>{title}</title>
         <style>
-        @page{{size:A4 landscape;margin:7mm}}*{{box-sizing:border-box}}body{{font:10px Arial,sans-serif;color:#234638;margin:12px}}
+        @page{{size:A4 landscape;margin:7mm}}*{{box-sizing:border-box;-webkit-print-color-adjust:exact;print-color-adjust:exact}}body{{font:10px Arial,sans-serif;color:#234638;margin:12px}}
         h1,h2,p{{text-align:center;margin:3px}}h1{{font-size:17px}}h2{{font-size:13px}}p{{color:#647b6a;margin-bottom:12px}}
         table{{width:100%;border-collapse:collapse;table-layout:fixed;min-width:900px}}th,td{{border:1px solid #c7d9ca;padding:4px;text-align:center;vertical-align:middle;overflow-wrap:anywhere}}
         thead th{{background:#347b50;color:white;font-size:9px;padding:7px 3px}}th.day{{background:#edf5ee;color:#315b3e;width:65px}}th.class{{background:#f5f9f5;color:#315b3e;width:65px}}
         td.slot{{background:#fff}}.lesson{{background:color-mix(in srgb,var(--teacher-color) 17%,white);border:1px solid color-mix(in srgb,var(--teacher-color) 48%,white);border-left:4px solid var(--teacher-color);border-radius:6px;padding:5px;margin:2px;font-size:9px;line-height:1.35}}
         .lesson small{{display:block;color:#55705d;font-size:8px;margin-top:2px}}td.free{{background:#fbfdfb}}td.continued{{background:#f6faf6;color:#7b9480;font-size:8px}}
         td.break{{background:#f1ead8;color:#75551d;font-weight:bold}}.actions{{text-align:center;margin-bottom:10px}}button{{padding:8px 15px;background:#17633b;color:#fff;border:0;border-radius:7px}}
-        @media print{{body{{margin:0}}.actions{{display:none}}tr{{break-inside:avoid}}table{{min-width:0}}}}
+        .extra-section{{margin-top:18px;break-inside:avoid}}.extra-section h3{{font-size:12px;color:#1d563b;margin:0 0 8px}}.session-table{{width:100%;border-collapse:collapse;table-layout:fixed;min-width:0;font-size:8px}}.session-table th{{background:#17633b;color:#fff;padding:5px}}.session-table td{{padding:5px;border:1px solid #dce7de;text-align:left}}.empty{{color:#64748b;font-size:9px}}
+        @media print{{body{{margin:0}}.actions{{display:none}}tr{{break-inside:avoid}}table{{min-width:0}}.extra-remedial-separate,.extra-weekend{{break-before:page}}}}
         </style></head><body><div class="actions"><button onclick="window.print()">Print timetable</button></div>
         <h1>{school_name}</h1><h2>{title}</h2><p>{meta}</p><table><thead><tr>{header_html}</tr></thead><tbody>{"".join(body_rows)}</tbody></table>
+        {dated_html}{weekday_html}{weekend_html}
         <script>window.addEventListener("load",()=>setTimeout(()=>window.print(),250));</script></body></html>"""
         return HTMLResponse(html)
 
