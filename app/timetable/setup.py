@@ -367,7 +367,7 @@ def save_teacher_availability(connection: Any, school_id: int, profile_id: int, 
 
 def save_class_limits(connection: Any, school_id: int, profile_id: int,
                      class_id: int, max_lessons_per_week: int | None,
-                     max_periods_per_day: int | None, notes: str = "") -> None:
+                     max_periods_per_day: int | None, notes: str = "", initials: str = "") -> None:
     cur = connection.cursor()
     _profile(cur, school_id, profile_id)
     target = cur.execute(
@@ -380,26 +380,27 @@ def save_class_limits(connection: Any, school_id: int, profile_id: int,
         raise TimetableSetupError("Maximum lessons per week must be between 1 and 100.")
     if max_periods_per_day is not None and not 1 <= int(max_periods_per_day) <= 30:
         raise TimetableSetupError("Maximum periods per day must be between 1 and 30.")
-    if max_lessons_per_week is None and max_periods_per_day is None:
-        raise TimetableSetupError("Set at least one class workload limit.")
+    initials = (initials or "").strip().upper()[:12]
+    if max_lessons_per_week is None and max_periods_per_day is None and not initials:
+        raise TimetableSetupError("Set a class initials label or at least one workload limit.")
     existing = cur.execute(
         """SELECT id FROM ds_timetable_class_limits
            WHERE school_id=? AND profile_id=? AND class_id=?""",
         (school_id, profile_id, class_id),
     ).fetchone()
-    values = (max_lessons_per_week, max_periods_per_day, (notes or "").strip())
+    values = (max_lessons_per_week, max_periods_per_day, initials, (notes or "").strip())
     if existing:
         cur.execute(
             """UPDATE ds_timetable_class_limits
-               SET max_lessons_per_week=?,max_periods_per_day=?,notes=?,updated_at=CURRENT_TIMESTAMP
+               SET max_lessons_per_week=?,max_periods_per_day=?,initials=?,notes=?,updated_at=CURRENT_TIMESTAMP
                WHERE id=? AND school_id=?""",
             values + (existing["id"], school_id),
         )
     else:
         cur.execute(
             """INSERT INTO ds_timetable_class_limits
-               (school_id,profile_id,class_id,max_lessons_per_week,max_periods_per_day,notes)
-               VALUES(?,?,?,?,?,?)""",
+               (school_id,profile_id,class_id,max_lessons_per_week,max_periods_per_day,initials,notes)
+               VALUES(?,?,?,?,?,?,?)""",
             (school_id, profile_id, class_id) + values,
         )
     connection.commit()
