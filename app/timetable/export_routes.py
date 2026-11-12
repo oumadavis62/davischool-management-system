@@ -408,91 +408,126 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                     elif cell["kind"] == "continued":
                         cells.append(Paragraph("<br/>".join("↳ " + pdf_text(str(x.get("subject_initial") or "").strip().upper() or "—") + " continues" for x in cell["lessons"]), cell_style))
                     else:
-                        card_tables = []
-                        card_width = max(1, slot_width * cell["span"] - 8)
-                        for lesson in cell["lessons"]:
-                            subject_initial = pdf_text(str(lesson.get("subject_initial") or "").strip().upper() or "—")
-                            teacher_initials = str(lesson.get("teacher_initials") or "").strip().upper()
-                            if not teacher_initials:
-                                name_parts = [part for part in str(lesson.get("teacher_name") or "").split() if part]
-                                teacher_initials = "".join(part[0] for part in (name_parts[:1] + (name_parts[-1:] if len(name_parts) > 1 else []))).upper()[:4] or "—"
-                            allocated_room = allocated_room_name(lesson)
-                            room_text = "" if layout["room_view"] or not allocated_room else pdf_text(allocated_room)
-                            card_color = str(lesson.get("teacher_color") or "").strip()
-                            if not re.fullmatch(r"#[0-9A-Fa-f]{6}", card_color):
-                                card_color = "#2563EB"
-                            accent = colors.HexColor(card_color)
-                            tint = (colors.white if print_sheet else colors.Color(1-(1-accent.red)*0.17, 1-(1-accent.green)*0.17, 1-(1-accent.blue)*0.17))
-                            card_border = colors.HexColor("#B8B8B8") if print_sheet else accent
-                            top_style = ParagraphStyle("ExportDuration", parent=cell_style, alignment=2, fontSize=5, leading=6)
-                            subject_style = ParagraphStyle("ExportSubject", parent=cell_style, alignment=TA_CENTER, fontSize=9, leading=11)
-                            room_style = ParagraphStyle("ExportRoom", parent=cell_style, alignment=TA_CENTER, fontSize=5, leading=6, textColor=colors.black if print_sheet else colors.HexColor("#55705d"))
-                            teacher_style = ParagraphStyle("ExportTeacher", parent=cell_style, alignment=2, fontSize=5, leading=6, textColor=colors.black if print_sheet else colors.white)
-                            class_label = str(lesson.get("class_name") or "").strip()
-                            stream_label = str(lesson.get("stream") or "").strip()
-                            class_full = class_label + ((" " + stream_label) if stream_label else "")
-                            class_initials = str(lesson.get("class_initials") or "").strip().upper() or class_full or "—"
-                            footer_style = ParagraphStyle("ExportCellFooter", parent=teacher_style, alignment=2, fontSize=5, leading=6)
-                            if view_type in ("teacher", "room"):
-                                resource_subject_style = ParagraphStyle("ResourceSubject", parent=cell_style, alignment=TA_LEFT, fontSize=8, leading=9, wordWrap=None, splitLongWords=0, textColor=colors.black if print_sheet else colors.HexColor("#365b40"))
-                                resource_period_style = ParagraphStyle("ResourcePeriod", parent=cell_style, alignment=TA_RIGHT, fontSize=7, leading=8, wordWrap=None, textColor=colors.black if print_sheet else colors.HexColor("#536b58"))
-                                resource_class_style = ParagraphStyle("ResourceClass", parent=cell_style, alignment=TA_CENTER, fontSize=25, leading=27, textColor=colors.black if print_sheet else colors.HexColor("#263f30"))
-                                resource_meta = allocated_room if view_type == "teacher" else teacher_initials
-                                resource_card_height = max(28, (individual_row_height - 8) / max(1, len(cell["lessons"])))
-                                card_rows = [
-                                    [
-                                        Paragraph("<b>" + subject_initial + "</b>", resource_subject_style),
-                                        "",
-                                        Paragraph(pdf_text(str(max(1, int(lesson.get("duration_periods") or 1))) + "P"), resource_period_style) if view_type == "room" else "",
-                                    ],
-                                    [Paragraph("<b>" + pdf_text(class_initials) + "</b>", resource_class_style), "", ""],
-                                    [
-                                        Paragraph(pdf_text(resource_meta), footer_style) if resource_meta else "",
-                                        "",
-                                        Paragraph(pdf_text(str(max(1, int(lesson.get("duration_periods") or 1))) + "P"), resource_period_style) if view_type == "teacher" else "",
-                                    ],
-                                ]
-                            else:
-                                card_rows = [
-                                    [Paragraph(str(max(1, int(lesson.get("duration_periods") or 1))) + "P", top_style)],
-                                    [Paragraph("<b>" + subject_initial + "</b>", subject_style)],
-                                ]
-                                if room_text:
-                                    card_rows.append([Paragraph("⌂ " + room_text, room_style)])
-                                footer_label = teacher_initials
-                                card_rows.append([Paragraph("<font color='black'><b>" + pdf_text(footer_label) + "</b></font>", footer_style) if print_sheet else Paragraph("<font backColor='#245b39' color='white'><b>" + pdf_text(footer_label) + "</b></font>", footer_style)])
-                            card = Table(
-                                card_rows,
-                                colWidths=([card_width * 0.30, card_width * 0.40, card_width * 0.30] if view_type in ("teacher", "room") else [card_width]),
-                                rowHeights=(
-                                    [resource_card_height * 0.20, resource_card_height * 0.60, resource_card_height * 0.20]
-                                    if view_type in ("teacher", "room") else
-                                    [max(4, (individual_row_height - 8) / (len(card_rows) * max(1, len(cell["lessons"]))))] * len(card_rows)
-                                )
-                                if view_type in ("class", "teacher", "room") else None,
-                            )
-                            card.setStyle(TableStyle([
-                                ("SPAN", (0,0), (1,0)) if view_type in ("teacher", "room") else ("ALIGN", (0,0), (-1,-1), "CENTER"),
-                                ("SPAN", (0,1), (2,1)) if view_type in ("teacher", "room") else ("ALIGN", (0,0), (-1,-1), "CENTER"),
-                                ("VALIGN", (0,2), (-1,2), "MIDDLE") if view_type in ("teacher", "room") else ("ALIGN", (0,0), (-1,-1), "CENTER"),
-                                ("BACKGROUND", (0,0), (-1,-1), tint),
-                                ("BOX", (0,0), (-1,-1), 0.45, card_border),
-                                ("LINEBEFORE", (0,0), (0,-1), 3, card_border),
-                                ("LEFTPADDING", (0,0), (-1,-1), 3), ("RIGHTPADDING", (0,0), (-1,-1), 3),
-                                ("TOPPADDING", (0,0), (-1,-1), 1), ("BOTTOMPADDING", (0,0), (-1,-1), 1),
-                                ("VALIGN", (0,0), (-1,-1), "MIDDLE"),
-                            ]))
-                            card_tables.append(card)
-                        if len(card_tables) == 1:
-                            cells.append(card_tables[0])
+                        if print_sheet:
+                            # Plain text only: no nested lesson-card backgrounds, borders, or badges.
+                            plain_lines = []
+                            for lesson in cell["lessons"]:
+                                subject_initial = pdf_text(str(lesson.get("subject_initial") or "").strip().upper() or "—")
+                                teacher_initials = str(lesson.get("teacher_initials") or "").strip().upper()
+                                if not teacher_initials:
+                                    name_parts = [part for part in str(lesson.get("teacher_name") or "").split() if part]
+                                    teacher_initials = "".join(part[0] for part in (name_parts[:1] + (name_parts[-1:] if len(name_parts) > 1 else []))).upper()[:4] or "—"
+                                duration = str(max(1, int(lesson.get("duration_periods") or 1))) + "P"
+                                if view_type in ("teacher", "room"):
+                                    class_label = str(lesson.get("class_name") or "").strip()
+                                    stream_label = str(lesson.get("stream") or "").strip()
+                                    class_initials = str(lesson.get("class_initials") or "").strip().upper() or (class_label + ((" " + stream_label) if stream_label else "") or "—")
+                                    resource_meta = allocated_room_name(lesson) if view_type == "teacher" else teacher_initials
+                                    line = "<b>" + subject_initial + "</b><br/><b>" + pdf_text(class_initials) + "</b>"
+                                    if resource_meta:
+                                        line += "<br/>" + pdf_text(resource_meta)
+                                    line += "<br/>" + duration
+                                else:
+                                    line = "<b>" + duration + "</b><br/><b>" + subject_initial + "</b>"
+                                    room_text = "" if layout["room_view"] else pdf_text(allocated_room_name(lesson))
+                                    if room_text:
+                                        line += "<br/>⌂ " + room_text
+                                    line += "<br/>" + pdf_text(teacher_initials)
+                                plain_lines.append(line)
+                            cells.append(Paragraph("<br/><br/>".join(plain_lines), ParagraphStyle(
+                                "PlainPrintTimetableCell", parent=cell_style, alignment=TA_CENTER,
+                                fontSize=6, leading=7, textColor=colors.black,
+                            )))
+                            if cell["span"] > 1:
+                                col = len(cells) - 1
+                                span_commands.append(("SPAN", (col, row_index), (col + cell["span"] - 1, row_index)))
+                                cells.extend([""] * (cell["span"] - 1))
                         else:
-                            stack = Table([[card] for card in card_tables], colWidths=[card_width])
-                            stack.setStyle(TableStyle([("LEFTPADDING",(0,0),(-1,-1),0),("RIGHTPADDING",(0,0),(-1,-1),0),("TOPPADDING",(0,0),(-1,-1),1),("BOTTOMPADDING",(0,0),(-1,-1),1)]))
-                            cells.append(stack)
-                        if cell["span"] > 1:
-                            col = len(cells) - 1
-                            span_commands.append(("SPAN", (col, row_index), (col + cell["span"] - 1, row_index)))
-                            cells.extend([""] * (cell["span"] - 1))
+                            card_tables = []
+                            card_width = max(1, slot_width * cell["span"] - 8)
+                            for lesson in cell["lessons"]:
+                                subject_initial = pdf_text(str(lesson.get("subject_initial") or "").strip().upper() or "—")
+                                teacher_initials = str(lesson.get("teacher_initials") or "").strip().upper()
+                                if not teacher_initials:
+                                    name_parts = [part for part in str(lesson.get("teacher_name") or "").split() if part]
+                                    teacher_initials = "".join(part[0] for part in (name_parts[:1] + (name_parts[-1:] if len(name_parts) > 1 else []))).upper()[:4] or "—"
+                                allocated_room = allocated_room_name(lesson)
+                                room_text = "" if layout["room_view"] or not allocated_room else pdf_text(allocated_room)
+                                card_color = str(lesson.get("teacher_color") or "").strip()
+                                if not re.fullmatch(r"#[0-9A-Fa-f]{6}", card_color):
+                                    card_color = "#2563EB"
+                                accent = colors.HexColor(card_color)
+                                tint = (colors.white if print_sheet else colors.Color(1-(1-accent.red)*0.17, 1-(1-accent.green)*0.17, 1-(1-accent.blue)*0.17))
+                                card_border = colors.HexColor("#B8B8B8") if print_sheet else accent
+                                top_style = ParagraphStyle("ExportDuration", parent=cell_style, alignment=2, fontSize=5, leading=6)
+                                subject_style = ParagraphStyle("ExportSubject", parent=cell_style, alignment=TA_CENTER, fontSize=9, leading=11)
+                                room_style = ParagraphStyle("ExportRoom", parent=cell_style, alignment=TA_CENTER, fontSize=5, leading=6, textColor=colors.black if print_sheet else colors.HexColor("#55705d"))
+                                teacher_style = ParagraphStyle("ExportTeacher", parent=cell_style, alignment=2, fontSize=5, leading=6, textColor=colors.black if print_sheet else colors.white)
+                                class_label = str(lesson.get("class_name") or "").strip()
+                                stream_label = str(lesson.get("stream") or "").strip()
+                                class_full = class_label + ((" " + stream_label) if stream_label else "")
+                                class_initials = str(lesson.get("class_initials") or "").strip().upper() or class_full or "—"
+                                footer_style = ParagraphStyle("ExportCellFooter", parent=teacher_style, alignment=2, fontSize=5, leading=6)
+                                if view_type in ("teacher", "room"):
+                                    resource_subject_style = ParagraphStyle("ResourceSubject", parent=cell_style, alignment=TA_LEFT, fontSize=8, leading=9, wordWrap=None, splitLongWords=0, textColor=colors.black if print_sheet else colors.HexColor("#365b40"))
+                                    resource_period_style = ParagraphStyle("ResourcePeriod", parent=cell_style, alignment=TA_RIGHT, fontSize=7, leading=8, wordWrap=None, textColor=colors.black if print_sheet else colors.HexColor("#536b58"))
+                                    resource_class_style = ParagraphStyle("ResourceClass", parent=cell_style, alignment=TA_CENTER, fontSize=25, leading=27, textColor=colors.black if print_sheet else colors.HexColor("#263f30"))
+                                    resource_meta = allocated_room if view_type == "teacher" else teacher_initials
+                                    resource_card_height = max(28, (individual_row_height - 8) / max(1, len(cell["lessons"])))
+                                    card_rows = [
+                                        [
+                                            Paragraph("<b>" + subject_initial + "</b>", resource_subject_style),
+                                            "",
+                                            Paragraph(pdf_text(str(max(1, int(lesson.get("duration_periods") or 1))) + "P"), resource_period_style) if view_type == "room" else "",
+                                        ],
+                                        [Paragraph("<b>" + pdf_text(class_initials) + "</b>", resource_class_style), "", ""],
+                                        [
+                                            Paragraph(pdf_text(resource_meta), footer_style) if resource_meta else "",
+                                            "",
+                                            Paragraph(pdf_text(str(max(1, int(lesson.get("duration_periods") or 1))) + "P"), resource_period_style) if view_type == "teacher" else "",
+                                        ],
+                                    ]
+                                else:
+                                    card_rows = [
+                                        [Paragraph(str(max(1, int(lesson.get("duration_periods") or 1))) + "P", top_style)],
+                                        [Paragraph("<b>" + subject_initial + "</b>", subject_style)],
+                                    ]
+                                    if room_text:
+                                        card_rows.append([Paragraph("⌂ " + room_text, room_style)])
+                                    footer_label = teacher_initials
+                                    card_rows.append([Paragraph("<font color='black'><b>" + pdf_text(footer_label) + "</b></font>", footer_style) if print_sheet else Paragraph("<font backColor='#245b39' color='white'><b>" + pdf_text(footer_label) + "</b></font>", footer_style)])
+                                card = Table(
+                                    card_rows,
+                                    colWidths=([card_width * 0.30, card_width * 0.40, card_width * 0.30] if view_type in ("teacher", "room") else [card_width]),
+                                    rowHeights=(
+                                        [resource_card_height * 0.20, resource_card_height * 0.60, resource_card_height * 0.20]
+                                        if view_type in ("teacher", "room") else
+                                        [max(4, (individual_row_height - 8) / (len(card_rows) * max(1, len(cell["lessons"]))))] * len(card_rows)
+                                    )
+                                    if view_type in ("class", "teacher", "room") else None,
+                                )
+                                card.setStyle(TableStyle([
+                                    ("SPAN", (0,0), (1,0)) if view_type in ("teacher", "room") else ("ALIGN", (0,0), (-1,-1), "CENTER"),
+                                    ("SPAN", (0,1), (2,1)) if view_type in ("teacher", "room") else ("ALIGN", (0,0), (-1,-1), "CENTER"),
+                                    ("VALIGN", (0,2), (-1,2), "MIDDLE") if view_type in ("teacher", "room") else ("ALIGN", (0,0), (-1,-1), "CENTER"),
+                                    ("BACKGROUND", (0,0), (-1,-1), tint),
+                                    ("BOX", (0,0), (-1,-1), 0.45, card_border),
+                                    ("LINEBEFORE", (0,0), (0,-1), 3, card_border),
+                                    ("LEFTPADDING", (0,0), (-1,-1), 3), ("RIGHTPADDING", (0,0), (-1,-1), 3),
+                                    ("TOPPADDING", (0,0), (-1,-1), 1), ("BOTTOMPADDING", (0,0), (-1,-1), 1),
+                                    ("VALIGN", (0,0), (-1,-1), "MIDDLE"),
+                                ]))
+                                card_tables.append(card)
+                            if len(card_tables) == 1:
+                                cells.append(card_tables[0])
+                            else:
+                                stack = Table([[card] for card in card_tables], colWidths=[card_width])
+                                stack.setStyle(TableStyle([("LEFTPADDING",(0,0),(-1,-1),0),("RIGHTPADDING",(0,0),(-1,-1),0),("TOPPADDING",(0,0),(-1,-1),1),("BOTTOMPADDING",(0,0),(-1,-1),1)]))
+                                cells.append(stack)
+                            if cell["span"] > 1:
+                                col = len(cells) - 1
+                                span_commands.append(("SPAN", (col, row_index), (col + cell["span"] - 1, row_index)))
+                                cells.extend([""] * (cell["span"] - 1))
                     timeline_cursor += cell.get("span", 1)
                 data.append(cells)
             table = Table(data, colWidths=widths, repeatRows=1)
@@ -515,7 +550,7 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                 ("BACKGROUND", (0,0), (-1,-1), colors.white if print_sheet else colors.white),
                 ("BACKGROUND", (0,0), (-1,0), colors.white if print_sheet else colors.HexColor("#17633b")),
                 ("TEXTCOLOR", (0,0), (-1,-1), colors.black),
-                ("GRID", (0,0), (-1,-1), 0.35, colors.HexColor("#cbd8ce")),
+                ("GRID", (0,0), (-1,-1), 0.8 if print_sheet else 0.35, colors.black if print_sheet else colors.HexColor("#cbd8ce")),
                 ("BACKGROUND", (0,1), (0,-1), colors.white if print_sheet else colors.HexColor("#eef5ef")),
                 ("VALIGN", (0,0), (-1,-1), "MIDDLE"),
                 ("LEFTPADDING", (0,0), (-1,-1), 3), ("RIGHTPADDING", (0,0), (-1,-1), 3),
