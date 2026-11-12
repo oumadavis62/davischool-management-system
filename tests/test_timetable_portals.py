@@ -17,7 +17,7 @@ class TimetablePortalTargetTests(unittest.TestCase):
                 school_id INTEGER, user_id INTEGER, student_id INTEGER
             );
             INSERT INTO teachers VALUES (10,1,'Teacher A'),(11,2,'Teacher B');
-            INSERT INTO classes VALUES (20,1,'Grade 7','Blue'),(21,2,'Grade 8','Green');
+            INSERT INTO classes VALUES (20,1,'Grade 7','Blue','G7'),(21,2,'Grade 8','Green','G8');
             INSERT INTO students VALUES (30,1,'Learner A',20),(31,2,'Learner B',21),(32,1,'Learner C',20);
             INSERT INTO parent_student_links VALUES (1,100,30),(1,100,32),(2,100,31);
         """)
