@@ -1544,6 +1544,13 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
                   document.body.appendChild(fresh);
                   fresh.remove();
                 }});
+                // The global Configure tab controller lives outside .tt-wrap,
+                // so replacing the workspace removes its generated tab strip.
+                // Re-run it against the new content; it reads the current URL
+                // to restore the exact selected Configure tab and section.
+                if(typeof window.initTimetableSetupTabs==='function'){{
+                  window.initTimetableSetupTabs();
+                }}
                 // Re-open the section the user was editing and restore both
                 // document and application-pane scroll offsets after layout.
                 openSections.forEach(title=>{{

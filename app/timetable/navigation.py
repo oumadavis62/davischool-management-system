@@ -82,8 +82,12 @@ def timetable_workspace(request, body):
         const sections=[...root.querySelectorAll('.tt-section')];
         if(!sections.length)return;
         const state=document.querySelector('.tt-workspace-state');
-        const requested=state?.getAttribute('data-requested-tab')||'setup';
-        const requestedSection=state?.getAttribute('data-requested-section')||'';
+        // AJAX saves replace .tt-wrap without replacing this outer marker.
+        // Always read the live URL so a newly initialised tab strip follows
+        // the section the user selected immediately before saving.
+        const liveParams=new URL(window.location.href).searchParams;
+        const requested=liveParams.get('tab')||state?.getAttribute('data-requested-tab')||'setup';
+        const requestedSection=liveParams.get('section')||state?.getAttribute('data-requested-section')||'';
         const nav=document.createElement('nav');
         nav.className='tt-setup-tabs';
         nav.setAttribute('role','tablist');
@@ -195,6 +199,9 @@ def timetable_workspace(request, body):
           }
         },true);
       }
+      // Expose the initializer so the AJAX save/delete refresh can rebuild
+      // the in-page tabs after replacing the timetable content.
+      window.initTimetableSetupTabs=initTimetableSetupTabs;
       if(document.readyState==='loading'){
         document.addEventListener('DOMContentLoaded',initTimetableSetupTabs,{once:true});
       }else{
