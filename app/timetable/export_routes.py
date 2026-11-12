@@ -963,12 +963,11 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
             else:
                 ws.page_setup.fitToHeight = 0
 
-        if view_type in ("teacher", "room"):
-            generated_at = datetime.now(EAT).strftime("%d %b %Y %H:%M EAT")
-            sheet.oddFooter.left.text = "Mabale_ICT Software · Generated: " + generated_at
-            sheet.oddFooter.right.text = "Total scheduled lessons: " + str(len(result["lessons"]))
-            sheet.oddFooter.left.size = 8
-            sheet.oddFooter.right.size = 8
+        generated_at = datetime.now(EAT).strftime("%d %b %Y %H:%M EAT")
+        sheet.oddFooter.left.text = "Mabale_ICT Software · Generated: " + generated_at
+        sheet.oddFooter.right.text = "Total scheduled lessons: " + str(len(result["lessons"]))
+        sheet.oddFooter.left.size = 8
+        sheet.oddFooter.right.size = 8
         workbook.save(buffer)
         buffer.seek(0)
         filename = filename_prefix(school,result) + ".xlsx"
