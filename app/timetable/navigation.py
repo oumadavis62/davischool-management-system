@@ -56,15 +56,16 @@ def timetable_workspace(request, body):
     marker = ("<span class='tt-workspace-state' data-requested-tab='" + escape(requested, quote=True) +
               "' data-requested-section='" + escape(requested_section, quote=True) + "' hidden></span>")
     intro = """
-      <div class='tt-workflow-intro'><span>▦</span><div>
-        <b>TIMETABLE CONFIGURATION</b>
-        <p>Choose a section below to configure each part of your school's timetable.</p>
-      </div></div>
+      <header class='tt-workflow-intro'>
+        <div><span>SMART TIMETABLE · CONFIGURATION</span><h1>Configure Timetable</h1>
+        <p>Set up the timetable structure, availability and teaching requirements.</p></div>
+      </header>
       <style>
-        .tt-workflow-intro{display:flex;align-items:center;gap:12px;margin:0 0 13px;padding:13px 16px;border:1px solid #dceade;border-radius:13px;background:linear-gradient(110deg,#f7fbf7,#edf6ef)}
-        .tt-workflow-intro>span{width:34px;height:34px;display:grid;place-items:center;flex:none;border-radius:11px;background:#e0f0e3;color:#267347;font-size:17px}
-        .tt-workflow-intro b{display:block;font-size:10px;letter-spacing:.11em;color:#398052}
-        .tt-workflow-intro p{margin:4px 0 0;font-size:11px;line-height:1.45;color:#718276}
+        .tt-workflow-intro{margin:0 0 14px;padding:8px 2px 12px;border-bottom:1px solid #e1ebe2}
+        .tt-workflow-intro>div{display:grid;gap:4px}
+        .tt-workflow-intro span{font-size:9px;letter-spacing:.13em;font-weight:850;color:#398052}
+        .tt-workflow-intro h1{margin:0;color:#204a34;font-size:clamp(21px,2.5vw,28px);letter-spacing:-.55px}
+        .tt-workflow-intro p{margin:0;color:#718276;font-size:11px;line-height:1.5}
         .tt-wrap .tt-section[hidden]{display:none!important}
         .tt-setup-tabs{display:flex;gap:7px;overflow-x:auto;overscroll-behavior-x:contain;padding:7px;margin:0 0 16px;border:1px solid #d9e8dc;border-radius:15px;background:#f8fcf8;scrollbar-width:thin}
         .tt-setup-tabs button{flex:0 0 auto;min-height:42px;padding:10px 15px;border:1px solid transparent;border-radius:10px;background:transparent;color:#52705b;font-size:12px;font-weight:800;white-space:nowrap;cursor:pointer;transition:background .15s,color .15s,box-shadow .15s}
@@ -148,6 +149,14 @@ def timetable_workspace(request, body):
           nav.append(button);
         });
         sectionsForTabs[0].parentNode.insertBefore(nav,sectionsForTabs[0]);
+        // Keep the existing profile switcher and save feedback, but place them
+        // below the section tabs so the Configure page opens directly on its tabs.
+        const wrap=sectionsForTabs[0].parentNode;
+        const profilePicker=wrap.querySelector(':scope > .tt-select');
+        const alerts=[...wrap.querySelectorAll(':scope > .tt-alert')];
+        if(profilePicker) nav.insertAdjacentElement('afterend',profilePicker);
+        let anchor=profilePicker||nav;
+        alerts.forEach(alert=>{anchor.insertAdjacentElement('afterend',alert);anchor=alert;});
         activate(initial);
       }
       if(document.readyState==='loading'){
