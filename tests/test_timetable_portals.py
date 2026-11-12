@@ -11,7 +11,7 @@ class TimetablePortalTargetTests(unittest.TestCase):
         self.db.row_factory = sqlite3.Row
         self.db.executescript("""
             CREATE TABLE teachers (id INTEGER, school_id INTEGER, name TEXT);
-            CREATE TABLE classes (id INTEGER, school_id INTEGER, name TEXT, stream TEXT);
+            CREATE TABLE classes (id INTEGER, school_id INTEGER, name TEXT, stream TEXT, initials TEXT);
             CREATE TABLE students (id INTEGER, school_id INTEGER, name TEXT, class_id INTEGER);
             CREATE TABLE parent_student_links (
                 school_id INTEGER, user_id INTEGER, student_id INTEGER
@@ -35,15 +35,15 @@ class TimetablePortalTargetTests(unittest.TestCase):
     def test_student_resolves_only_own_enrolled_class(self):
         self.assertEqual(
             get_portal_timetable_targets(self.db, 1, "student", student_id=30),
-            [("class", 20, "Learner A · Grade 7 Blue")],
+            [("student", 30, "Learner A · Grade 7 Blue")],
         )
         self.assertEqual(get_portal_timetable_targets(self.db, 1, "student", student_id=31), [])
 
     def test_parent_sees_only_school_scoped_linked_children(self):
         targets = get_portal_timetable_targets(self.db, 1, "parent", user_id=100)
         self.assertEqual(targets, [
-            ("class", 20, "Learner A · Grade 7 Blue"),
-            ("class", 20, "Learner C · Grade 7 Blue"),
+            ("student", 30, "Learner A · Grade 7 Blue"),
+            ("student", 32, "Learner C · Grade 7 Blue"),
         ])
 
     def test_portal_rows_include_advanced_weekend_remedial_and_activity_sessions(self):
@@ -56,7 +56,7 @@ class TimetablePortalTargetTests(unittest.TestCase):
         }
         rows = build_portal_timetable_rows(view)
         self.assertEqual(len(rows), 3)
-        self.assertEqual(rows[0]["subject"], "Mathematics")
+        self.assertEqual(rows[0]["subject"], "M")
         self.assertEqual(rows[1]["date_day"], "2027-03-06 · Saturday")
         self.assertEqual(rows[1]["layer"], "Additional Learning")
         self.assertEqual(rows[1]["teachers"], "Teacher A, Teacher B")
