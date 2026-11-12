@@ -23,7 +23,7 @@ class TimetableBuilderTests(unittest.TestCase):
         ensure_timetable_schema(self.db)
         self.db.executescript("""
             CREATE TABLE teachers (id INTEGER PRIMARY KEY, school_id INTEGER, name TEXT);
-            CREATE TABLE classes (id INTEGER PRIMARY KEY, school_id INTEGER, name TEXT, stream TEXT);
+            CREATE TABLE classes (id INTEGER PRIMARY KEY, school_id INTEGER, name TEXT, stream TEXT, initials TEXT);
             CREATE TABLE subjects (id INTEGER PRIMARY KEY, school_id INTEGER, name TEXT);
             CREATE TABLE teacher_allocations (
                 id INTEGER PRIMARY KEY, school_id INTEGER, teacher_id INTEGER,
@@ -31,7 +31,7 @@ class TimetableBuilderTests(unittest.TestCase):
             );
         """)
         self.db.executemany("INSERT INTO teachers VALUES(?,?,?)", [(10,1,"Teacher A"),(11,1,"Teacher B")])
-        self.db.executemany("INSERT INTO classes VALUES(?,?,?,?)", [(20,1,"Grade 7","Blue"),(21,1,"Grade 8","Green")])
+        self.db.executemany("INSERT INTO classes VALUES(?,?,?,?,?)", [(20,1,"Grade 7","Blue","G7"),(21,1,"Grade 8","Green","G8")])
         self.db.executemany("INSERT INTO subjects VALUES(?,?,?)", [(30,1,"Mathematics"),(31,1,"English")])
         self.db.executemany(
             "INSERT INTO teacher_allocations VALUES(?,?,?,?,?)",

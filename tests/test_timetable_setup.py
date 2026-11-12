@@ -26,7 +26,7 @@ class TimetableSetupTests(unittest.TestCase):
         ensure_timetable_schema(self.db)
         self.db.executescript("""
             CREATE TABLE teachers (id INTEGER PRIMARY KEY, school_id INTEGER, name TEXT);
-            CREATE TABLE classes (id INTEGER PRIMARY KEY, school_id INTEGER, name TEXT, stream TEXT);
+            CREATE TABLE classes (id INTEGER PRIMARY KEY, school_id INTEGER, name TEXT, stream TEXT, initials TEXT);
             CREATE TABLE subjects (id INTEGER PRIMARY KEY, school_id INTEGER, name TEXT);
             CREATE TABLE teacher_allocations (
                 id INTEGER PRIMARY KEY, school_id INTEGER, teacher_id INTEGER,
@@ -34,7 +34,7 @@ class TimetableSetupTests(unittest.TestCase):
             );
         """)
         self.db.execute("INSERT INTO teachers VALUES(10,1,'Teacher A')")
-        self.db.execute("INSERT INTO classes VALUES(20,1,'Grade 7','Blue')")
+        self.db.execute("INSERT INTO classes (id,school_id,name,stream,initials) VALUES(20,1,'Grade 7','Blue','G7')")
         self.db.execute("INSERT INTO subjects VALUES(30,1,'Mathematics')")
         self.db.execute("INSERT INTO teacher_allocations VALUES(1,1,10,30,20)")
         self.db.commit()
@@ -42,7 +42,7 @@ class TimetableSetupTests(unittest.TestCase):
 
     def test_subject_requirements_apply_to_every_allocated_class_and_preserve_customized_rows(self):
         self.db.execute("INSERT INTO teachers VALUES(11,1,'Teacher B')")
-        self.db.execute("INSERT INTO classes VALUES(21,1,'Grade 8','Green')")
+        self.db.execute("INSERT INTO classes (id,school_id,name,stream,initials) VALUES(21,1,'Grade 8','Green','G8')")
         self.db.execute("INSERT INTO teacher_allocations VALUES(2,1,11,30,21)")
         save_class_requirement(self.db, 1, self.profile_id, 20, 30, 10, 3, 2, 2, True)
 
@@ -160,7 +160,7 @@ class TimetableSetupTests(unittest.TestCase):
     def test_classroom_assignment_rejects_other_class_owner_and_insufficient_capacity(self):
         self.db.executescript("""
             CREATE TABLE students (id INTEGER PRIMARY KEY, school_id INTEGER, class_id INTEGER);
-            INSERT INTO classes VALUES(21,1,'Grade 8','Green');
+            INSERT INTO classes (id,school_id,name,stream,initials) VALUES(21,1,'Grade 8','Green','G8');
             INSERT INTO students VALUES(1,1,21);
             INSERT INTO students VALUES(2,1,21);
             INSERT INTO students VALUES(3,1,21);
