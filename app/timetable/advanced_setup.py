@@ -6,12 +6,13 @@ record against the owning school and editable timetable profile.
 """
 from __future__ import annotations
 
-from datetime import date, datetime, timedelta
+from datetime import date, timedelta
 import json
 import re
 from typing import Any
 
 from app.timetable.setup import TimetableSetupError, _profile
+from app.timetable.time_utils import now_eat
 
 
 _TIME_RE = re.compile(r"^(?:[01]\d|2[0-3]):[0-5]\d$")
@@ -731,7 +732,7 @@ def save_timetable_constraint(connection: Any, school_id: int, profile_id: int,
     if cur.execute(duplicate_sql, duplicate_params).fetchone():
         raise TimetableSetupError("A constraint with this name already exists in this timetable profile. Choose a different name.")
 
-    now = datetime.utcnow().replace(microsecond=0).isoformat() + "Z"
+    now = now_eat()
     values = (name,constraint_type,applies_to,schedule_layer,subject_id,teacher_id,
               class_id,room_id,day_id,period_id,start_time,end_time,effective_from,
               effective_to,(reason or "").strip(),now)
