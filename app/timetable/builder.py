@@ -1,7 +1,7 @@
 """Conflict-safe manual timetable placement operations."""
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from app.timetable.time_utils import now_eat
 import json
 from typing import Any
 
@@ -152,7 +152,7 @@ def _placement_context(cursor: Any, school_id: int, profile_id: int, class_id: i
 
 
 def _log_change(cursor: Any, school_id: int, profile_id: int, lesson_id: int, action: str, before: Any, after: Any, changed_by: str):
-    now = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+    now = now_eat()
     cursor.execute(
         """INSERT INTO ds_timetable_change_log
            (school_id,profile_id,lesson_id,action,before_json,after_json,changed_by,changed_at)
@@ -171,7 +171,7 @@ def place_lesson(connection: Any, school_id: int, profile_id: int, class_id: int
     requirement, span = _placement_context(
         cur, school_id, profile_id, class_id, subject_id, teacher_id, day_id, period_id, room_id
     )
-    now = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+    now = now_eat()
     cur.execute(
         """INSERT INTO ds_timetable_lessons
            (school_id,profile_id,class_id,subject_id,teacher_id,room_id,day_id,period_id,duration_periods,status,created_by,created_at,updated_at)
@@ -228,7 +228,7 @@ def move_lesson(connection: Any, school_id: int, profile_id: int, lesson_id: int
     if end_period_id is not None and int(span[-1]["id"]) != int(end_period_id):
         raise TimetableSetupError("The selected ending period is not part of a valid consecutive lesson block.")
     before = dict(existing)
-    now = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+    now = now_eat()
     cur.execute(
         "UPDATE ds_timetable_lessons SET day_id=?,period_id=?,room_id=?,duration_periods=?,generation_run_id=NULL,updated_at=? WHERE id=? AND school_id=? AND profile_id=?",
         (day_id, period_id, room_id if room_id is not None else existing["room_id"], len(span), now, lesson_id, school_id, profile_id),
@@ -258,7 +258,7 @@ def swap_lesson_positions(connection: Any, school_id: int, profile_id: int,
     if int(first["duration_periods"] or 1) != int(second["duration_periods"] or 1):
         raise TimetableSetupError("Only lessons with the same duration can be swapped. Move or adjust the double lesson separately.")
     first_before, second_before = dict(first), dict(second)
-    now = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+    now = now_eat()
     cur.execute(
         """UPDATE ds_timetable_lessons SET status='swap_pending'
            WHERE school_id=? AND profile_id=? AND id IN (?,?)""",
