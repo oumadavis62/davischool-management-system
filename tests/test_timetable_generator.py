@@ -35,7 +35,7 @@ class TimetableGeneratorTests(unittest.TestCase):
             );
         """)
         self.db.execute("INSERT INTO teachers VALUES(10,1,'Teacher A')")
-        self.db.execute("INSERT INTO classes VALUES(20,1,'Grade 7','Blue')")
+        self.db.execute("INSERT INTO classes VALUES(20,1,'Grade 7','Blue','G7')")
         self.db.execute("INSERT INTO subjects VALUES(30,1,'Mathematics')")
         self.db.execute("INSERT INTO teacher_allocations VALUES(1,1,10,30,20)")
         self.db.commit()
@@ -437,7 +437,7 @@ class TimetableGeneratorTests(unittest.TestCase):
             generate_timetable(self.db, 1, self.profile_id, "admin@test")
 
     def test_incompatible_teacher_constraints_return_explainable_failure(self):
-        self.db.execute("INSERT INTO classes VALUES(21,1,'Grade 8','Green')")
+        self.db.execute("INSERT INTO classes VALUES(21,1,'Grade 8','Green','G8')")
         self.db.execute("INSERT INTO subjects VALUES(31,1,'English')")
         self.db.execute("INSERT INTO teacher_allocations VALUES(2,1,10,31,21)")
         save_class_requirement(self.db, 1, self.profile_id, 21, 31, 10, 2, 1, 1, False)
@@ -485,7 +485,7 @@ class TimetableSchoolSnapshotIntegrationTests(unittest.TestCase):
             CREATE TABLE students (id INTEGER PRIMARY KEY, school_id INTEGER, class_id INTEGER);
         """)
         self.db.execute("INSERT INTO teachers VALUES(10,1,'Existing teacher')")
-        self.db.execute("INSERT INTO classes VALUES(20,1,'Existing class','Blue')")
+        self.db.execute("INSERT INTO classes VALUES(20,1,'Existing class','Blue','EC')")
         self.db.execute("INSERT INTO subjects VALUES(30,1,'Existing subject')")
         self.db.execute("INSERT INTO teacher_allocations VALUES(1,1,10,30,20)")
         self.db.commit()
@@ -530,7 +530,7 @@ class TimetableSchoolSnapshotIntegrationTests(unittest.TestCase):
         class_names = {1: "GRADE 9", 2: "GRADE 9", 5: "GRADE 8", 6: "GRADE 8"}
         for source_id, target_id in class_map.items():
             self.db.execute(
-                "INSERT INTO classes VALUES(?,?,?,?)",
+                "INSERT INTO classes VALUES(?,?,?,?,?)",
                 (target_id, 1, class_names[source_id], "Blue" if source_id in (1, 5) else "Green"),
             )
         teacher_names = {
