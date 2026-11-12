@@ -91,8 +91,8 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
                 for p in profiles
             )
             profile_control = f"<form class='tt-home-profile' method='get' action='/app/timetable'><label for='tt-home-profile'>Working timetable</label><select id='tt-home-profile' name='profile_id' onchange='this.form.submit()'>{profile_options}</select></form>"
-            status = esc(selected["status"]).upper()
-            profile_name = esc(profile_display_name(selected["name"]))
+            status = esc('Revised' if str(selected['status']).lower() in ('published','archived') else str(selected['status']).replace('_', ' ').title())
+            profile_name = esc(profile_display_name(selected["name"], selected["status"]))
             profile_meta = f"{esc(selected['academic_year'])} · {esc(selected['term'])} · {esc(str(selected['profile_type'] or 'main').replace('_',' ').title())}"
             profile_panel = f"""
               <section class='tt-home-profile-card'>
@@ -131,7 +131,7 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
         profile_catalog_html = (
             "<section class='tt-home-catalog'><div><span class='tt-home-eyebrow'>ALL TIMETABLE PROGRAMMES</span><h3>Independent timetables</h3><p>Each programme has its own configuration, publishing status and revision history.</p></div><div class='tt-home-catalog-list'>"
             + "".join(
-                "<a href='/app/timetable?profile_id=" + str(int(p["id"])) + "'><span><b>" + esc(profile_display_name(p["name"])) + "</b><small>"
+                "<a href='/app/timetable?profile_id=" + str(int(p["id"])) + "'><span><b>" + esc(profile_display_name(p["name"], p["status"])) + "</b><small>"
                 + esc(p["academic_year"]) + " · " + esc(p["term"]) + " · " + esc(str(p["profile_type"] or "main").replace("_", " ").title())
                 + "</small></span><em>" + esc('Revised' if str(p['status']).lower() in ('published','archived') else str(p['status']).replace('_', ' ').title()) + "</em></a>"
                 for p in profiles
@@ -501,7 +501,7 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
         subject_group_options = "".join(f"<option value='{int(row['id'])}'>{esc(row['name'])}</option>" for row in subjects) if selected else ""
         room_options = "<option value=''>No room preference</option>" + "".join(f"<option value='{int(row['id'])}'>{esc(row['name'])} ({esc(row['room_type'])})</option>" for row in rooms)
         profile_options = "".join(
-            f"<option value='{int(p['id'])}' {'selected' if selected and int(p['id'])==int(selected['id']) else ''}>{esc(p['academic_year'])} · {esc(p['term'])} — {esc(profile_display_name(p['name']))} ({esc(p['status'])})</option>"
+            f"<option value='{int(p['id'])}' {'selected' if selected and int(p['id'])==int(selected['id']) else ''}>{esc(p['academic_year'])} · {esc(p['term'])} — {esc(profile_display_name(p['name'], p['status']))} ({esc('Revised' if str(p['status']).lower() in ('published','archived') else str(p['status']).replace('_', ' ').title())})</option>"
             for p in profiles
         )
         notice = f"<div class='tt-alert {'error' if error else 'success'}'>{esc(message)}</div>" if message else ""
