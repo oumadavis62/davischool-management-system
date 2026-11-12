@@ -16,6 +16,7 @@ class TimetableViewTests(unittest.TestCase):
         ensure_timetable_schema(self.db)
         self.db.executescript("""
             CREATE TABLE teachers (id INTEGER PRIMARY KEY, school_id INTEGER, name TEXT, teacher_color TEXT, teacher_initials TEXT);
+            CREATE TABLE students (id INTEGER PRIMARY KEY, school_id INTEGER, name TEXT, class_id INTEGER);
             CREATE TABLE classes (id INTEGER PRIMARY KEY, school_id INTEGER, name TEXT, stream TEXT, initials TEXT);
             CREATE TABLE subjects (id INTEGER PRIMARY KEY, school_id INTEGER, name TEXT, initial TEXT);
             CREATE TABLE teacher_allocations (
