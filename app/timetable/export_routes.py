@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from io import BytesIO
+from datetime import datetime
 from html import escape
 import logging
 import re
@@ -201,7 +202,7 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
             weekend_html = "<section class='extra-section extra-weekend'><h3>Weekend lessons &amp; remedials</h3>" + print_session_table(result["weekend_sessions"], True) + "</section>"
 
         school_name=escape(str(field_value(school,"name","School")))
-        title=escape("MASTER TIMETABLE" if view_type == "school" else str(result["title"]))
+        title=escape("MASTER TIMETABLE" if view_type == "school" else ("TEACHER " + str(result["target"]["name"]) if view_type == "teacher" else str(result["title"])))
         logo_src=school_logo_data(school)
         logo_img=("<img style='width:60px;height:60px;object-fit:contain' src='" + escape(logo_src, quote=True) + "' alt='School logo'>") if logo_src else ""
         school_details_html=" · ".join(escape(label + ": " + value) for label,value in school_details(school))
@@ -214,6 +215,8 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
         header_html = "<th>" + headers[0] + "</th>" + (("<th>" + headers[1] + "</th>") if layout["show_class_column"] else "") + "".join("<th class='" + ("break-header" if kind == "break" else "period-header") + "'>" + (str(item["start_time"]) + "–" + str(item["end_time"]) if kind == "break" else str(item["label"]) + "<br>" + str(item["start_time"]) + "–" + str(item["end_time"])) + "</th>" for _, kind, item in timeline)
         specialized_export = view_type != "school"
         timetable_table_class = "specialized-timetable" if specialized_export else "main-timetable"
+        generated_at = datetime.now().astimezone().strftime("%d %b %Y %H:%M %Z")
+        export_footer = ("<footer class='export-footer'><span>Mabale_ICT Management System · Generated: " + escape(generated_at) + "</span><span>Total scheduled lessons: " + str(len(result["lessons"])) + "</span></footer>") if view_type in ("teacher", "room") else ""
         html=f"""<!doctype html><html><head><meta charset="utf-8"><title>{title}</title>
         <style>
         @page{{size:A4 landscape;margin:7mm}}*{{box-sizing:border-box;-webkit-print-color-adjust:exact;print-color-adjust:exact}}body{{font:10px Arial,sans-serif;color:#234638;margin:12px}}
@@ -228,7 +231,7 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
         body.individual-sheet table.specialized-timetable td.slot{{height:100%}}
         td.slot{{background:#fff}}.resource-lesson{{position:relative;min-height:0;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:12px 4px 14px;border-radius:0;background:color-mix(in srgb,var(--teacher-color) 12%,white);border:1px solid color-mix(in srgb,var(--teacher-color) 42%,white);border-left:3px solid var(--teacher-color);margin:0}}.resource-subject{{position:absolute;top:4px;left:5px;right:auto;font-size:10px;line-height:1;font-weight:900;color:#365b40;white-space:nowrap;word-break:keep-all;overflow-wrap:normal;writing-mode:horizontal-tb;z-index:2}}.resource-class{{display:flex;flex:1;align-items:center;justify-content:center;width:100%;min-height:0;text-align:center;font-size:clamp(25px,2.2vw,34px);line-height:.95;font-weight:950;letter-spacing:-.04em;color:#263f30;overflow-wrap:anywhere}}.resource-duration{{position:absolute;bottom:3px;right:5px;left:auto;font-size:9px;line-height:1;font-weight:900;color:#536b58;white-space:nowrap;word-break:keep-all;overflow-wrap:normal;writing-mode:horizontal-tb;z-index:2}}.resource-footer{{position:absolute;bottom:3px;left:4px;right:30px;display:flex;justify-content:space-between;font-size:7px;color:#637968}}.resource-teacher{{margin-left:auto;font-weight:800;color:#245b39}}.lesson{{position:relative;min-height:66px;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;background:color-mix(in srgb,var(--teacher-color) 17%,white);border:1px solid color-mix(in srgb,var(--teacher-color) 48%,white);border-left:4px solid var(--teacher-color);border-radius:6px;padding:13px 5px 5px;margin:2px;font-size:9px;line-height:1.2}}
         .lesson .duration-label{{position:absolute;top:3px;right:5px;font-size:8px;font-weight:bold;background:#d5e9d9;border-radius:8px;padding:2px 4px}}.lesson .subject-initials{{display:block;text-align:center;font-size:12px;font-weight:900;letter-spacing:.4px}}.lesson .room-detail{{display:block;color:#55705d;font-size:8px;margin-top:4px;max-width:100%;overflow-wrap:anywhere}}.lesson .teacher-initials,.lesson .class-detail{{align-self:flex-end;margin-top:auto;background:#245b39;color:#fff;border-radius:4px;padding:2px 5px;font-size:8px;font-weight:900}}.lesson .class-detail{{max-width:100%;text-align:right;overflow-wrap:anywhere}}th.break-header{{width:90%}}td.break{{width:90%;background:#f1ead8;color:#75551d;vertical-align:middle;text-align:center;min-width:24px;padding:0;position:relative}}td.break>span{{display:flex;flex-direction:column;justify-content:center;align-items:center;min-height:100%;height:100%;font-size:18px;font-weight:950;line-height:1}}td.break>span i{{display:block;font-style:normal;line-height:1}}td.free{{background:#fbfdfb}}td.continued{{background:#f6faf6;color:#7b9480;font-size:8px}}
-        .actions{{text-align:center;margin-bottom:10px}}button{{padding:8px 15px;background:#17633b;color:#fff;border:0;border-radius:7px}}
+        .actions{{text-align:center;margin-bottom:10px}}button{{padding:8px 15px;background:#17633b;color:#fff;border:0;border-radius:7px}}.export-footer{{display:flex;justify-content:space-between;gap:12px;position:fixed;bottom:0;left:0;right:0;padding:5px 12px;font-size:8px;color:#536b58;border-top:1px solid #c7d9ca;background:#fff}}body.individual-sheet{{padding-bottom:24px}}
         .extra-section{{margin-top:18px;break-inside:avoid}}.extra-section h3{{font-size:12px;color:#1d563b;margin:0 0 8px}}.session-table{{width:100%;border-collapse:collapse;table-layout:fixed;min-width:0;font-size:8px}}.session-table th{{background:#17633b;color:#fff;padding:5px}}.session-table td{{padding:5px;border:1px solid #dce7de;text-align:left}}.empty{{color:#64748b;font-size:9px}}
         body.individual-sheet{{min-height:calc(100vh - 14mm);display:flex;flex-direction:column}}
         body.individual-sheet>table.specialized-timetable{{flex:1;height:100%;width:100%;table-layout:fixed}}
@@ -238,7 +241,7 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
         <div style="display:grid;grid-template-columns:68px 1fr 68px;align-items:center;gap:8px;margin-bottom:4px"><div>{logo_img}</div><div><h1 style="text-decoration:underline">{school_name}</h1><p style="font-size:8px;color:#405b49;margin:3px 0">{school_details_html}</p><h2 style="text-decoration:underline">{title}</h2></div><div style="text-align:right">{logo_img}</div></div>
         <p style="font-size:9px;font-weight:500;text-align:center;margin:10px 0 14px">{meta_html}</p>
         <table class="{timetable_table_class}"><thead><tr>{header_html}</tr></thead><tbody>{"".join(body_rows)}</tbody></table>
-        {dated_html}{weekday_html}{weekend_html}
+        {dated_html}{weekday_html}{weekend_html}{export_footer}
         <script>window.addEventListener("load",()=>setTimeout(()=>window.print(),250));</script></body></html>"""
         return HTMLResponse(html)
 
@@ -284,7 +287,7 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                 logo_cell = ReportLabImage(BytesIO(base64.b64decode(encoded)), width=52, height=52, kind="proportional")
             except Exception:
                 logo_cell = ""
-        cover_title = "MASTER TIMETABLE" if view_type == "school" else str(result["title"]).upper()
+        cover_title = "MASTER TIMETABLE" if view_type == "school" else ("TEACHER " + str(result["target"]["name"]) if view_type == "teacher" else str(result["title"]).upper())
         details = "   |   ".join(pdf_text(label + ": " + value) for label,value in school_details(school))
         cover_center = [Paragraph("<u><b>" + school_name + "</b></u>", school_style)]
         if details:
@@ -576,7 +579,17 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
             # Keep both weekend rotations together on one A4 landscape page.
             # Shrink only this consolidated sheet when a school has many entries.
             story.append(KeepInFrame(doc.width, doc.height - 34, [weekend_table], mode="shrink", hAlign="LEFT", vAlign="TOP"))
-        doc.build(story)
+        generated_at = datetime.now().astimezone().strftime("%d %b %Y %H:%M %Z")
+        def draw_export_footer(canvas, document):
+            if view_type not in ("teacher", "room"):
+                return
+            canvas.saveState()
+            canvas.setFont("Helvetica", 7)
+            canvas.setFillColor(colors.HexColor("#536b58"))
+            canvas.drawString(doc.leftMargin, 9, "Mabale_ICT Management System · Generated: " + generated_at)
+            canvas.drawRightString(doc.pagesize[0] - doc.rightMargin, 9, "Total scheduled lessons: " + str(len(result["lessons"])))
+            canvas.restoreState()
+        doc.build(story, onFirstPage=draw_export_footer, onLaterPages=draw_export_footer)
         buffer.seek(0)
         filename = filename_prefix(school,result) + ".pdf"
         return StreamingResponse(buffer, media_type="application/pdf", headers={"Content-Disposition": "attachment; filename=" + filename})
@@ -615,7 +628,7 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
         sheet.cell(1,1).font = Font(bold=True,size=16,color="174A31")
         sheet.cell(1,1).alignment = Alignment(horizontal="center")
         sheet.merge_cells(start_row=2,start_column=1,end_row=2,end_column=last_col)
-        sheet.cell(2,1,result["title"].upper())
+        sheet.cell(2,1,("TEACHER " + str(result["target"]["name"])) if view_type == "teacher" else result["title"].upper())
         sheet.cell(2,1).font = Font(bold=True,size=12,color="315B3E")
         sheet.cell(2,1).alignment = Alignment(horizontal="center")
         sheet.merge_cells(start_row=3,start_column=1,end_row=3,end_column=last_col)
@@ -820,6 +833,12 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
             else:
                 ws.page_setup.fitToHeight = 0
 
+        if view_type in ("teacher", "room"):
+            generated_at = datetime.now().astimezone().strftime("%d %b %Y %H:%M %Z")
+            sheet.oddFooter.left.text = "Mabale_ICT Management System · Generated: " + generated_at
+            sheet.oddFooter.right.text = "Total scheduled lessons: " + str(len(result["lessons"]))
+            sheet.oddFooter.left.size = 8
+            sheet.oddFooter.right.size = 8
         workbook.save(buffer)
         buffer.seek(0)
         filename = filename_prefix(school,result) + ".xlsx"
