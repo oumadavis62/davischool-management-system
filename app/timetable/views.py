@@ -52,6 +52,25 @@ def get_timetable_view(connection: Any, school_id: int, profile_id: int, view_ty
         where = " AND l.class_id=?"
         params.append(target_id)
         title = str(target["name"]) + ((" " + str(target["stream"])) if target["stream"] else "") + " timetable"
+        # Read the current class/stream teacher from the same assignment source
+        # used by the Classes & Streams manager.
+        cur.execute("""CREATE TABLE IF NOT EXISTS class_teacher_assignments(
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            school_id INTEGER NOT NULL,
+            class_id INTEGER NOT NULL,
+            teacher_id INTEGER NOT NULL,
+            assigned_at TEXT,
+            UNIQUE(school_id,class_id)
+        )""")
+        class_teacher = cur.execute(
+            """SELECT t.name
+               FROM class_teacher_assignments a
+               JOIN teachers t ON t.id=a.teacher_id AND t.school_id=a.school_id
+               WHERE a.school_id=? AND a.class_id=?
+               ORDER BY a.id DESC LIMIT 1""",
+            (school_id, target_id),
+        ).fetchone()
+        class_teacher_name = str(class_teacher["name"] or "").strip() if class_teacher else ""
     elif view_type == "student":
         target = cur.execute(
             """SELECT s.id,s.name,s.class_id,c.name class_name,c.stream
@@ -124,6 +143,7 @@ def get_timetable_view(connection: Any, school_id: int, profile_id: int, view_ty
         "profile": profile,
         "view_type": view_type,
         "target": target,
+        "class_teacher_name": class_teacher_name if view_type == "class" else "",
         "days": days,
         "periods": periods,
         "breaks": breaks,
