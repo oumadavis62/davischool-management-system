@@ -300,8 +300,8 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
         title_style = ParagraphStyle("TimetableTitle", parent=styles["Heading2"], alignment=TA_CENTER, fontSize=11, leading=14, textColor=colors.HexColor("#315b3e"))
         cell_style = ParagraphStyle("TimetableCell", parent=styles["BodyText"], fontSize=5.5, leading=6.5)
         day_style = ParagraphStyle("TimetableDay", parent=cell_style, alignment=TA_CENTER)
-        header_style = ParagraphStyle("TimetableHeader", parent=styles["BodyText"], fontSize=6, leading=7, textColor=colors.white, alignment=TA_CENTER)
-        break_header_style = ParagraphStyle("TimetableBreakHeader", parent=header_style, textColor=colors.HexColor("#75551d"))
+        header_style = ParagraphStyle("TimetableHeader", parent=styles["BodyText"], fontSize=6, leading=7, textColor=colors.black if print_sheet else colors.white, alignment=TA_CENTER)
+        break_header_style = ParagraphStyle("TimetableBreakHeader", parent=header_style, textColor=colors.black if print_sheet else colors.HexColor("#75551d"))
         def pdf_text(value):
             return xml_escape(str(value).encode("latin-1", "replace").decode("latin-1"))
         school_name = pdf_text(str(school["name"] or "School"))
@@ -398,7 +398,7 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                             cell = dict(cell, rowspan=len(day_rows))
                         b = cell["item"]
                         break_label = "<br/>".join(pdf_text(ch) for ch in str(b["label"]))
-                        break_style = ParagraphStyle("ExportBreak", parent=cell_style, alignment=TA_CENTER, fontSize=10, leading=11, textColor=colors.HexColor("#75551d"))
+                        break_style = ParagraphStyle("ExportBreak", parent=cell_style, alignment=TA_CENTER, fontSize=10, leading=11, textColor=colors.black if print_sheet else colors.HexColor("#75551d"))
                         cells.append(Paragraph("<b>" + break_label + "</b>", break_style))
                         if cell["rowspan"] > 1:
                             col = len(cells) - 1
@@ -422,21 +422,21 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                             if not re.fullmatch(r"#[0-9A-Fa-f]{6}", card_color):
                                 card_color = "#2563EB"
                             accent = colors.HexColor(card_color)
-                            tint = (colors.HexColor("#F4F7F4") if print_sheet else colors.Color(1-(1-accent.red)*0.17, 1-(1-accent.green)*0.17, 1-(1-accent.blue)*0.17))
-                            card_border = colors.HexColor("#B8C9BC") if print_sheet else accent
+                            tint = (colors.white if print_sheet else colors.Color(1-(1-accent.red)*0.17, 1-(1-accent.green)*0.17, 1-(1-accent.blue)*0.17))
+                            card_border = colors.HexColor("#B8B8B8") if print_sheet else accent
                             top_style = ParagraphStyle("ExportDuration", parent=cell_style, alignment=2, fontSize=5, leading=6)
                             subject_style = ParagraphStyle("ExportSubject", parent=cell_style, alignment=TA_CENTER, fontSize=9, leading=11)
-                            room_style = ParagraphStyle("ExportRoom", parent=cell_style, alignment=TA_CENTER, fontSize=5, leading=6, textColor=colors.HexColor("#55705d"))
-                            teacher_style = ParagraphStyle("ExportTeacher", parent=cell_style, alignment=2, fontSize=5, leading=6, textColor=colors.white)
+                            room_style = ParagraphStyle("ExportRoom", parent=cell_style, alignment=TA_CENTER, fontSize=5, leading=6, textColor=colors.black if print_sheet else colors.HexColor("#55705d"))
+                            teacher_style = ParagraphStyle("ExportTeacher", parent=cell_style, alignment=2, fontSize=5, leading=6, textColor=colors.black if print_sheet else colors.white)
                             class_label = str(lesson.get("class_name") or "").strip()
                             stream_label = str(lesson.get("stream") or "").strip()
                             class_full = class_label + ((" " + stream_label) if stream_label else "")
                             class_initials = str(lesson.get("class_initials") or "").strip().upper() or class_full or "—"
                             footer_style = ParagraphStyle("ExportCellFooter", parent=teacher_style, alignment=2, fontSize=5, leading=6)
                             if view_type in ("teacher", "room"):
-                                resource_subject_style = ParagraphStyle("ResourceSubject", parent=cell_style, alignment=TA_LEFT, fontSize=8, leading=9, wordWrap=None, splitLongWords=0, textColor=colors.HexColor("#365b40"))
-                                resource_period_style = ParagraphStyle("ResourcePeriod", parent=cell_style, alignment=TA_RIGHT, fontSize=7, leading=8, wordWrap=None, textColor=colors.HexColor("#536b58"))
-                                resource_class_style = ParagraphStyle("ResourceClass", parent=cell_style, alignment=TA_CENTER, fontSize=25, leading=27, textColor=colors.HexColor("#263f30"))
+                                resource_subject_style = ParagraphStyle("ResourceSubject", parent=cell_style, alignment=TA_LEFT, fontSize=8, leading=9, wordWrap=None, splitLongWords=0, textColor=colors.black if print_sheet else colors.HexColor("#365b40"))
+                                resource_period_style = ParagraphStyle("ResourcePeriod", parent=cell_style, alignment=TA_RIGHT, fontSize=7, leading=8, wordWrap=None, textColor=colors.black if print_sheet else colors.HexColor("#536b58"))
+                                resource_class_style = ParagraphStyle("ResourceClass", parent=cell_style, alignment=TA_CENTER, fontSize=25, leading=27, textColor=colors.black if print_sheet else colors.HexColor("#263f30"))
                                 resource_meta = allocated_room if view_type == "teacher" else teacher_initials
                                 resource_card_height = max(28, (individual_row_height - 8) / max(1, len(cell["lessons"])))
                                 card_rows = [
@@ -460,7 +460,7 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                                 if room_text:
                                     card_rows.append([Paragraph("⌂ " + room_text, room_style)])
                                 footer_label = teacher_initials
-                                card_rows.append([Paragraph("<font backColor='#245b39' color='white'><b>" + pdf_text(footer_label) + "</b></font>", footer_style)])
+                                card_rows.append([Paragraph("<font color='black'><b>" + pdf_text(footer_label) + "</b></font>", footer_style) if print_sheet else Paragraph("<font backColor='#245b39' color='white'><b>" + pdf_text(footer_label) + "</b></font>", footer_style)])
                             card = Table(
                                 card_rows,
                                 colWidths=([card_width * 0.30, card_width * 0.40, card_width * 0.30] if view_type in ("teacher", "room") else [card_width]),
@@ -512,17 +512,18 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                     repeatRows=1,
                 )
             commands = [
-                ("BACKGROUND", (0,0), (-1,0), colors.HexColor("#17633b")),
-                ("TEXTCOLOR", (0,0), (-1,0), colors.white),
+                ("BACKGROUND", (0,0), (-1,-1), colors.white if print_sheet else colors.white),
+                ("BACKGROUND", (0,0), (-1,0), colors.white if print_sheet else colors.HexColor("#17633b")),
+                ("TEXTCOLOR", (0,0), (-1,-1), colors.black),
                 ("GRID", (0,0), (-1,-1), 0.35, colors.HexColor("#cbd8ce")),
-                ("BACKGROUND", (0,1), (0,-1), colors.HexColor("#eef5ef")),
+                ("BACKGROUND", (0,1), (0,-1), colors.white if print_sheet else colors.HexColor("#eef5ef")),
                 ("VALIGN", (0,0), (-1,-1), "MIDDLE"),
                 ("LEFTPADDING", (0,0), (-1,-1), 3), ("RIGHTPADDING", (0,0), (-1,-1), 3),
                 ("TOPPADDING", (0,0), (-1,-1), 4), ("BOTTOMPADDING", (0,0), (-1,-1), 4),
             ] + span_commands
             for col, (_, kind, _) in enumerate(timeline, start=1 + (1 if layout["show_class_column"] else 0)):
                 if kind == "break":
-                    commands += [("BACKGROUND", (col,0), (col,-1), colors.HexColor("#f1ead8")), ("TEXTCOLOR", (col,0), (col,-1), colors.HexColor("#75551d"))]
+                    commands += [("BACKGROUND", (col,0), (col,-1), colors.white if print_sheet else colors.HexColor("#f1ead8")), ("TEXTCOLOR", (col,0), (col,-1), colors.black if print_sheet else colors.HexColor("#75551d"))]
             table.setStyle(TableStyle(commands))
             story.append(table)
             if day_start + rows_per_day < len(layout["rows"]):
@@ -548,7 +549,7 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                     Paragraph(pdf_text(item.get("room_name") or "—"),cell_style),
                 ])
             dated_table = Table(dated_rows,colWidths=[doc.width*.16,doc.width*.13,doc.width*.20,doc.width*.18,doc.width*.18,doc.width*.15],repeatRows=1)
-            dated_table.setStyle(TableStyle([("BACKGROUND",(0,0),(-1,0),colors.HexColor("#17633b")),("TEXTCOLOR",(0,0),(-1,0),colors.white),("GRID",(0,0),(-1,-1),.3,colors.HexColor("#cbd8ce")),("VALIGN",(0,0),(-1,-1),"TOP"),("FONTSIZE",(0,1),(-1,-1),6),("LEFTPADDING",(0,0),(-1,-1),3),("RIGHTPADDING",(0,0),(-1,-1),3),("TOPPADDING",(0,0),(-1,-1),3),("BOTTOMPADDING",(0,0),(-1,-1),3)]))
+            dated_table.setStyle(TableStyle([("BACKGROUND",(0,0),(-1,0),colors.white if print_sheet else colors.HexColor("#17633b")),("TEXTCOLOR",(0,0),(-1,0),colors.black if print_sheet else colors.white),("GRID",(0,0),(-1,-1),.3,colors.HexColor("#cbd8ce")),("VALIGN",(0,0),(-1,-1),"TOP"),("FONTSIZE",(0,1),(-1,-1),6),("LEFTPADDING",(0,0),(-1,-1),3),("RIGHTPADDING",(0,0),(-1,-1),3),("TOPPADDING",(0,0),(-1,-1),3),("BOTTOMPADDING",(0,0),(-1,-1),3)]))
             story.append(dated_table)
 
         def session_paragraphs(items, rotation=False):
@@ -579,7 +580,7 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                     pdf_text(item.get("class_names") or "—"),pdf_text(item.get("teacher_names") or "—"),
                     pdf_text(item.get("room_name") or "—")])
             rt=Table(remedial_rows,colWidths=[65,70,130,100,115,75],repeatRows=1)
-            rt.setStyle(TableStyle([("BACKGROUND",(0,0),(-1,0),colors.HexColor("#17633b")),("TEXTCOLOR",(0,0),(-1,0),colors.white),("GRID",(0,0),(-1,-1),.3,colors.HexColor("#cbd8ce")),("FONTSIZE",(0,1),(-1,-1),7),("VALIGN",(0,0),(-1,-1),"TOP")]))
+            rt.setStyle(TableStyle([("BACKGROUND",(0,0),(-1,0),colors.white if print_sheet else colors.HexColor("#17633b")),("TEXTCOLOR",(0,0),(-1,0),colors.black if print_sheet else colors.white),("GRID",(0,0),(-1,-1),.3,colors.HexColor("#cbd8ce")),("FONTSIZE",(0,1),(-1,-1),7),("VALIGN",(0,0),(-1,-1),"TOP")]))
             story.append(rt)
 
         if result.get("weekend_sessions"):
@@ -606,7 +607,7 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                 ])
             widths = [doc.width*.14,doc.width*.15,doc.width*.12,doc.width*.19,doc.width*.15,doc.width*.15,doc.width*.10]
             weekend_table = Table(weekend_rows,colWidths=widths,repeatRows=1)
-            weekend_table.setStyle(TableStyle([("BACKGROUND",(0,0),(-1,0),colors.HexColor("#17633b")),("TEXTCOLOR",(0,0),(-1,0),colors.white),("GRID",(0,0),(-1,-1),.35,colors.HexColor("#b8d2bd")),("VALIGN",(0,0),(-1,-1),"TOP"),("LEFTPADDING",(0,0),(-1,-1),3),("RIGHTPADDING",(0,0),(-1,-1),3),("TOPPADDING",(0,0),(-1,-1),3),("BOTTOMPADDING",(0,0),(-1,-1),3)]))
+            weekend_table.setStyle(TableStyle([("BACKGROUND",(0,0),(-1,0),colors.white if print_sheet else colors.HexColor("#17633b")),("TEXTCOLOR",(0,0),(-1,0),colors.black if print_sheet else colors.white),("GRID",(0,0),(-1,-1),.35,colors.HexColor("#b8d2bd")),("VALIGN",(0,0),(-1,-1),"TOP"),("LEFTPADDING",(0,0),(-1,-1),3),("RIGHTPADDING",(0,0),(-1,-1),3),("TOPPADDING",(0,0),(-1,-1),3),("BOTTOMPADDING",(0,0),(-1,-1),3)]))
             # Keep both weekend rotations together on one A4 landscape page.
             # Shrink only this consolidated sheet when a school has many entries.
             story.append(KeepInFrame(doc.width, doc.height - 34, [weekend_table], mode="shrink", hAlign="LEFT", vAlign="TOP"))
