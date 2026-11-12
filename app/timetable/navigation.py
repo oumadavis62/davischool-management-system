@@ -109,7 +109,12 @@ def timetable_workspace(request, body):
         if(!visibleSections.length)return;
         const sectionsForTabs=visibleSections;
         const labels=visibleLabels;
+        const sectionKey=label=>String(label||'').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'');
         let initial=0;
+        if(requested==='setup' && requestedSection){
+          const match=labels.findIndex(label=>sectionKey(label)===requestedSection);
+          if(match>=0)initial=match;
+        }
         if(requested==='requirements'){
           const wanted=requestedSection==='tracking'
             ? /track class lesson allocations/i
@@ -120,7 +125,7 @@ def timetable_workspace(request, body):
           const match=labels.findIndex(label=>/staff and subject availability|teacher availability/i.test(label));
           initial=match>=0?match:0;
         }
-        function activate(index){
+        function activate(index, updateAddress=true){
           sectionsForTabs.forEach((section,i)=>{
             section.hidden=i!==index;
             section.classList.toggle('tt-tab-active',i===index);
@@ -129,6 +134,12 @@ def timetable_workspace(request, body):
             button.setAttribute('aria-selected',String(i===index));
             button.tabIndex=i===index?0:-1;
           });
+          if(updateAddress && requested==='setup'){
+            const url=new URL(window.location.href);
+            url.searchParams.set('tab','setup');
+            url.searchParams.set('section',sectionKey(labels[index]));
+            window.history.replaceState({},'',url.pathname+url.search+url.hash);
+          }
         }
         sectionsForTabs.forEach((section,index)=>{
           const button=document.createElement('button');
@@ -157,7 +168,20 @@ def timetable_workspace(request, body):
         if(profilePicker) nav.insertAdjacentElement('afterend',profilePicker);
         let anchor=profilePicker||nav;
         alerts.forEach(alert=>{anchor.insertAdjacentElement('afterend',alert);anchor=alert;});
-        activate(initial);
+        activate(initial,false);
+        // Keep the selected Configure section when any setup form posts.
+        root.addEventListener('submit',event=>{
+          const form=event.target;
+          if(!(form instanceof HTMLFormElement))return;
+          const activeIndex=sectionsForTabs.findIndex(section=>section.classList.contains('tt-tab-active'));
+          const activeLabel=labels[activeIndex>=0?activeIndex:initial];
+          const url=new URL(form.action || window.location.href,window.location.href);
+          if(requested==='setup'){
+            url.searchParams.set('tab','setup');
+            url.searchParams.set('section',sectionKey(activeLabel));
+            form.action=url.pathname+url.search+url.hash;
+          }
+        },true);
       }
       if(document.readyState==='loading'){
         document.addEventListener('DOMContentLoaded',initTimetableSetupTabs,{once:true});
