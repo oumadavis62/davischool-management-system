@@ -89,7 +89,7 @@ def get_timetable_view(connection: Any, school_id: int, profile_id: int, view_ty
         title = str(target["name"]) + " — room timetable"
 
     lessons = cur.execute(
-        """SELECT l.*,c.name class_name,c.stream,s.name subject_name,s.initial subject_initial,
+        """SELECT l.*,c.name class_name,c.stream,c.initials class_initials,s.name subject_name,s.initial subject_initial,
                   t.name teacher_name,t.teacher_color,t.teacher_initials,
                   rm.name room_name,p.period_no,p.label period_label,p.start_time,p.end_time,d.day_name
            FROM ds_timetable_lessons l
