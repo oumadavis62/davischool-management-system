@@ -287,7 +287,7 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                 logo_cell = ReportLabImage(BytesIO(base64.b64decode(encoded)), width=52, height=52, kind="proportional")
             except Exception:
                 logo_cell = ""
-        cover_title = "MASTER TIMETABLE" if view_type == "school" else ("TEACHER " + str(result["target"]["name"]) if view_type == "teacher" else str(result["title"])).upper()
+        cover_title = "MASTER TIMETABLE" if view_type == "school" else ("TEACHER " + str(result["target"]["name"]) if view_type == "teacher" else str(result["title"]).upper())
         details = "   |   ".join(pdf_text(label + ": " + value) for label,value in school_details(school))
         cover_center = [Paragraph("<u><b>" + school_name + "</b></u>", school_style)]
         if details:
@@ -628,7 +628,7 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
         sheet.cell(1,1).font = Font(bold=True,size=16,color="174A31")
         sheet.cell(1,1).alignment = Alignment(horizontal="center")
         sheet.merge_cells(start_row=2,start_column=1,end_row=2,end_column=last_col)
-        sheet.cell(2,1,result["title"].upper())
+        sheet.cell(2,1,("TEACHER " + str(result["target"]["name"])) if view_type == "teacher" else result["title"].upper())
         sheet.cell(2,1).font = Font(bold=True,size=12,color="315B3E")
         sheet.cell(2,1).alignment = Alignment(horizontal="center")
         sheet.merge_cells(start_row=3,start_column=1,end_row=3,end_column=last_col)
