@@ -383,7 +383,8 @@ def save_teacher_availability(connection: Any, school_id: int, profile_id: int, 
 
 def save_class_limits(connection: Any, school_id: int, profile_id: int,
                      class_id: int, max_lessons_per_week: int | None,
-                     max_periods_per_day: int | None, notes: str = "") -> None:
+                     max_periods_per_day: int | None, notes: str = "",
+                     class_initials: str = "") -> None:
     cur = connection.cursor()
     _profile(cur, school_id, profile_id)
     target = cur.execute(
@@ -398,6 +399,10 @@ def save_class_limits(connection: Any, school_id: int, profile_id: int,
         raise TimetableSetupError("Maximum periods per day must be between 1 and 30.")
     if max_lessons_per_week is None and max_periods_per_day is None:
         raise TimetableSetupError("Set at least one class workload limit.")
+    initials = (class_initials or "").strip().upper()
+    if len(initials) > 8:
+        raise TimetableSetupError("Class initials must be 8 characters or fewer.")
+    cur.execute("UPDATE classes SET initials=? WHERE id=? AND school_id=?", (initials or None, int(class_id), int(school_id)))
     existing = cur.execute(
         """SELECT id FROM ds_timetable_class_limits
            WHERE school_id=? AND profile_id=? AND class_id=?""",
