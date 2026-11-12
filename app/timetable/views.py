@@ -42,11 +42,26 @@ def get_timetable_view(connection: Any, school_id: int, profile_id: int, view_ty
     params: list[Any] = [school_id, profile_id]
     title = "School-wide timetable"
     target = None
+    class_teacher_names = []
     if view_type == "class":
         target = cur.execute(
             "SELECT id,name,stream FROM classes WHERE id=? AND school_id=?",
             (target_id, school_id),
         ).fetchone()
+        if target:
+            class_teacher_names = [
+                str(row["name"]).strip()
+                for row in cur.execute(
+                    """SELECT DISTINCT t.name
+                       FROM teacher_allocations ta
+                       JOIN teachers t ON t.id=ta.teacher_id AND t.school_id=ta.school_id
+                       WHERE ta.school_id=? AND ta.class_id=?
+                         AND LOWER(REPLACE(REPLACE(TRIM(COALESCE(ta.responsibility,'')), '_', ' '), '-', ' '))='class teacher'
+                         AND TRIM(COALESCE(t.name,''))<>''
+                       ORDER BY t.name""",
+                    (school_id, target_id),
+                ).fetchall()
+            ]
         if not target:
             raise TimetableSetupError("Select a class or stream belonging to this school.")
         where = " AND l.class_id=?"
@@ -124,6 +139,7 @@ def get_timetable_view(connection: Any, school_id: int, profile_id: int, view_ty
         "profile": profile,
         "view_type": view_type,
         "target": target,
+        "class_teacher_names": class_teacher_names,
         "days": days,
         "periods": periods,
         "breaks": breaks,
