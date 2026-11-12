@@ -279,7 +279,7 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
         from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, KeepInFrame, Image as ReportLabImage
 
         buffer = BytesIO()
-        doc = SimpleDocTemplate(buffer, pagesize=landscape(A4), leftMargin=18, rightMargin=18, topMargin=18, bottomMargin=30)
+        doc = SimpleDocTemplate(buffer, pagesize=landscape(A4), leftMargin=18, rightMargin=18, topMargin=18, bottomMargin=44)
         styles = getSampleStyleSheet()
         school_style = ParagraphStyle("DSchoolName", parent=styles["Title"], alignment=TA_CENTER, fontSize=16, leading=19, textColor=colors.HexColor("#174a31"))
         title_style = ParagraphStyle("TimetableTitle", parent=styles["Heading2"], alignment=TA_CENTER, fontSize=11, leading=14, textColor=colors.HexColor("#315b3e"))
@@ -601,8 +601,8 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
             canvas.saveState()
             canvas.setFont("Helvetica", 7)
             canvas.setFillColor(colors.HexColor("#536b58"))
-            canvas.drawString(doc.leftMargin, 16, "Mabale_ICT Management System · Generated: " + generated_at)
-            canvas.drawRightString(doc.pagesize[0] - doc.rightMargin, 16, "Total scheduled lessons: " + str(len(result["lessons"])))
+            canvas.drawString(doc.leftMargin, 28, "Mabale_ICT Management System · Generated: " + generated_at)
+            canvas.drawRightString(doc.pagesize[0] - doc.rightMargin, 28, "Total scheduled lessons: " + str(len(result["lessons"])))
             canvas.restoreState()
         doc.build(story, onFirstPage=draw_export_footer, onLaterPages=draw_export_footer)
         buffer.seek(0)
