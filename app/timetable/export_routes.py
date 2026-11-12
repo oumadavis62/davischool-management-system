@@ -424,15 +424,14 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                     else:
                         if print_sheet:
                             # Plain text only: no nested lesson-card backgrounds, borders, or badges.
-                            plain_lines = []
-                            for lesson in cell["lessons"]:
-                                subject_initial = pdf_text(str(lesson.get("subject_initial") or "").strip().upper() or "—")
-                                teacher_initials = str(lesson.get("teacher_initials") or "").strip().upper()
-                                if not teacher_initials:
-                                    name_parts = [part for part in str(lesson.get("teacher_name") or "").split() if part]
-                                    teacher_initials = "".join(part[0] for part in (name_parts[:1] + (name_parts[-1:] if len(name_parts) > 1 else []))).upper()[:4] or "—"
-                                duration = str(max(1, int(lesson.get("duration_periods") or 1))) + "P"
-                                if view_type in ("teacher", "room"):
+                            if view_type in ("teacher", "room"):
+                                plain_lines = []
+                                for lesson in cell["lessons"]:
+                                    subject_initial = pdf_text(str(lesson.get("subject_initial") or "").strip().upper() or "—")
+                                    teacher_initials = str(lesson.get("teacher_initials") or "").strip().upper()
+                                    if not teacher_initials:
+                                        name_parts = [part for part in str(lesson.get("teacher_name") or "").split() if part]
+                                        teacher_initials = "".join(part[0] for part in (name_parts[:1] + (name_parts[-1:] if len(name_parts) > 1 else []))).upper()[:4] or "—"
                                     class_label = str(lesson.get("class_name") or "").strip()
                                     stream_label = str(lesson.get("stream") or "").strip()
                                     class_initials = str(lesson.get("class_initials") or "").strip().upper() or (class_label + ((" " + stream_label) if stream_label else "") or "—")
@@ -440,24 +439,55 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                                     line = "<b>" + subject_initial + "</b><br/><b>" + pdf_text(class_initials) + "</b>"
                                     if resource_meta:
                                         line += "<br/>" + pdf_text(resource_meta)
-                                    line += "<br/>" + duration
-                                else:
-                                    # Print-sheet cell hierarchy: period/duration at the
-                                    # upper-right, prominent subject initials, then discreet
-                                    # teacher initials and the full teacher name at lower-right.
-                                    period_line = '<para align="right><font size="5">' + pdf_text(duration) + '</font></para>'
-                                    subject_line = '<para align="center"><font size="10"><b>' + subject_initial + '</b></font></para>'
-                                    room_text = "" if layout["room_view"] else pdf_text(allocated_room_name(lesson))
-                                    room_line = ("<br/><para align=\"center\"><font size=\"5\">⌂ " + room_text + "</font></para>") if room_text else ""
-                                    initials_line = '<br/><para align="right"><font size="4">' + pdf_text(teacher_initials) + '</font></para>'
+                                    line += "<br/>" + str(max(1, int(lesson.get("duration_periods") or 1))) + "P"
+                                    plain_lines.append(line)
+                                cells.append(Paragraph("<br/><br/>".join(plain_lines), ParagraphStyle(
+                                    "PlainPrintResourceCell", parent=cell_style, alignment=TA_CENTER,
+                                    fontSize=6, leading=7, textColor=colors.black,
+                                )))
+                            else:
+                                # A borderless text-only layout keeps each lesson cell free of
+                                # cards while independently aligning its top and bottom labels.
+                                lesson_rows = []
+                                lesson_alignments = []
+                                for lesson in cell["lessons"]:
+                                    subject_initial = pdf_text(str(lesson.get("subject_initial") or "").strip().upper() or "—")
+                                    teacher_initials = str(lesson.get("teacher_initials") or "").strip().upper()
+                                    if not teacher_initials:
+                                        name_parts = [part for part in str(lesson.get("teacher_name") or "").split() if part]
+                                        teacher_initials = "".join(part[0] for part in (name_parts[:1] + (name_parts[-1:] if len(name_parts) > 1 else []))).upper()[:4] or "—"
+                                    duration = str(max(1, int(lesson.get("duration_periods") or 1))) + "P"
                                     teacher_name = pdf_text(str(lesson.get("teacher_name") or "").strip())
-                                    teacher_name_line = ('<para align="right"><font size="5">' + teacher_name + '</font></para>') if teacher_name else ""
-                                    line = period_line + subject_line + room_line + initials_line + teacher_name_line
-                                plain_lines.append(line)
-                            cells.append(Paragraph("<br/><br/>".join(plain_lines), ParagraphStyle(
-                                "PlainPrintTimetableCell", parent=cell_style, alignment=TA_CENTER,
-                                fontSize=6, leading=7, textColor=colors.black,
-                            )))
+                                    room_text = "" if layout["room_view"] else pdf_text(allocated_room_name(lesson))
+                                    period_style = ParagraphStyle("PrintPeriodMarker", parent=cell_style, alignment=TA_RIGHT, fontSize=5, leading=6, textColor=colors.black)
+                                    subject_style = ParagraphStyle("PrintSubjectInitials", parent=cell_style, alignment=TA_CENTER, fontSize=10, leading=11, textColor=colors.black)
+                                    detail_style = ParagraphStyle("PrintCellDetail", parent=cell_style, alignment=TA_RIGHT, fontSize=4, leading=5, textColor=colors.black)
+                                    name_style = ParagraphStyle("PrintTeacherName", parent=cell_style, alignment=TA_RIGHT, fontSize=5, leading=6, textColor=colors.black)
+                                    lesson_rows.extend([
+                                        [Paragraph(pdf_text(duration), period_style)],
+                                        [Paragraph("<b>" + subject_initial + "</b>", subject_style)],
+                                    ])
+                                    lesson_alignments.extend(["RIGHT", "CENTER"])
+                                    if room_text:
+                                        lesson_rows.append([Paragraph("⌂ " + room_text, detail_style)])
+                                        lesson_alignments.append("RIGHT")
+                                    lesson_rows.append([Paragraph(teacher_initials, detail_style)])
+                                    lesson_alignments.append("RIGHT")
+                                    if teacher_name:
+                                        lesson_rows.append([Paragraph(teacher_name, name_style)])
+                                        lesson_alignments.append("RIGHT")
+                                    lesson_rows.append([Paragraph("&nbsp;", cell_style)])
+                                    lesson_alignments.append("CENTER")
+                                text_layout = Table(lesson_rows, colWidths=[max(1, slot_width * cell["span"] - 6)])
+                                text_layout.setStyle(TableStyle([
+                                    ("ALIGN", (0, 0), (-1, -1), "RIGHT"),
+                                    ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                                    ("LEFTPADDING", (0, 0), (-1, -1), 0),
+                                    ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+                                    ("TOPPADDING", (0, 0), (-1, -1), 0),
+                                    ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
+                                ]))
+                                cells.append(text_layout)
                             if cell["span"] > 1:
                                 col = len(cells) - 1
                                 span_commands.append(("SPAN", (col, row_index), (col + cell["span"] - 1, row_index)))
