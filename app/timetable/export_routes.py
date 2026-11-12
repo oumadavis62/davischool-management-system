@@ -227,7 +227,7 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
         specialized_export = view_type != "school"
         timetable_table_class = "specialized-timetable" if specialized_export else "main-timetable"
         generated_at = datetime.now(EAT).strftime("%d %b %Y %H:%M EAT")
-        export_footer = ("<footer class='export-footer'><span>Mabale_ICT Management System · Generated: " + escape(generated_at) + "</span><span>Total scheduled lessons: " + str(len(result["lessons"])) + "</span></footer>") if view_type in ("teacher", "room") else ""
+        export_footer = ("<footer class='export-footer'><span>Mabale_ICT Management System · Generated: " + escape(generated_at) + "</span><span>Total scheduled lessons: " + str(len(result["lessons"])) + "</span></footer>")
         room_period_css = ".resource-duration{top:3px;bottom:auto;right:5px}" if view_type == "room" else ""
         html=f"""<!doctype html><html><head><meta charset="utf-8"><title>{title}</title>
         <style>{room_period_css}
