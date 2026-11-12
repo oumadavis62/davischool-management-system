@@ -1307,6 +1307,33 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
         <script>
         (function(){{
           const root=document.querySelector('.tt-wrap'); if(!root) return;
+          // Preserve the exact Configure tab on every native or AJAX form POST.
+          // Read the selected tab from the address bar and active section before
+          // other submit handlers initiate fetches or document navigation.
+          if(!document.documentElement.dataset.ttConfigureReturnBound){{
+            document.documentElement.dataset.ttConfigureReturnBound='1';
+            document.addEventListener('submit',event=>{{
+              const form=event.target;
+              if(!form||!form.matches||!form.matches('form[method="post" i]')) return;
+              const current=new URL(window.location.href);
+              if(current.pathname!=='/app/timetable/setup') return;
+              let tab=current.searchParams.get('tab')||'setup';
+              let section=current.searchParams.get('section')||'';
+              if(tab==='setup'){{
+                const active=document.querySelector('.tt-section.tt-tab-active');
+                const heading=active?.querySelector('h3,h2,h4');
+                if(heading){{
+                  section=heading.textContent.trim().toLowerCase()
+                    .replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'');
+                }}
+              }}
+              const action=new URL(form.getAttribute('action')||current.href,window.location.origin);
+              if(action.origin!==window.location.origin||!action.pathname.startsWith('/app/timetable/setup/')) return;
+              action.searchParams.set('tab',tab);
+              if(section) action.searchParams.set('section',section);
+              form.action=action.pathname+action.search+action.hash;
+            }},true);
+          }}
           // The setup workspace lives inside the application's own scrolling
           // container on some devices. Do not lock body overflow for a modal:
           // that can leave the app shell unable to scroll after an AJAX refresh.
