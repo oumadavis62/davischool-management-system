@@ -12237,7 +12237,7 @@ def external_exam_analysis_pdf(request: Request, exam_type: str = "", year: str 
         from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
         from reportlab.lib.enums import TA_CENTER
         from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
-         from reportlab.lib.units import mm
+        from reportlab.lib.units import mm
         buffer = io.BytesIO()
         doc = SimpleDocTemplate(buffer,pagesize=landscape(A4),rightMargin=24,leftMargin=24,topMargin=24,bottomMargin=24)
         styles = getSampleStyleSheet()
