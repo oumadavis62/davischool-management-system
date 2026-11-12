@@ -1,6 +1,7 @@
 """Validated setup operations for DaviSchool timetable v2."""
 from __future__ import annotations
 
+from datetime import datetime
 from app.timetable.time_utils import now_eat
 import re
 from typing import Any
