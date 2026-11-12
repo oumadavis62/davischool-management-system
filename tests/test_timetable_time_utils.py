@@ -19,6 +19,9 @@ class TimetableTimeUtilsTests(unittest.TestCase):
     def test_format_eat_preserves_eat_wall_clock_time(self):
         self.assertEqual(format_eat("2026-11-12T15:00:00+03:00"), "12 Nov 2026 15:00 EAT")
 
+    def test_format_eat_handles_postgres_naive_timestamp_as_eat(self):
+        self.assertEqual(format_eat(datetime(2026, 11, 12, 15, 0, 0)), "12 Nov 2026 15:00 EAT")
+
 
 if __name__ == "__main__":
     unittest.main()
