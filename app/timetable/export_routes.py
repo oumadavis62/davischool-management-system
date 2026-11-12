@@ -472,7 +472,7 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                                         teacher_initials = "".join(part[0] for part in (name_parts[:1] + (name_parts[-1:] if len(name_parts) > 1 else []))).upper()[:4] or "—"
                                     duration = str(max(1, int(lesson.get("duration_periods") or 1))) + "P"
                                     room_text = "" if layout["room_view"] else pdf_text(allocated_room_name(lesson))
-                                    period_style = ParagraphStyle("PrintPeriodMarker", parent=cell_style, alignment=TA_RIGHT, fontSize=5, leading=6, textColor=colors.black)
+                                    period_style = ParagraphStyle("PrintPeriodMarker", parent=cell_style, alignment=TA_LEFT, fontSize=5, leading=6, textColor=colors.black)
                                     subject_style = ParagraphStyle("PrintSubjectInitials", parent=cell_style, alignment=TA_CENTER, fontSize=10, leading=11, textColor=colors.black)
                                     detail_style = ParagraphStyle("PrintCellDetail", parent=cell_style, alignment=TA_RIGHT, fontSize=4, leading=5, textColor=colors.black)
                                     lesson_rows.extend([
@@ -490,6 +490,8 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                                 text_layout.setStyle(TableStyle([
                                     ("ALIGN", (0, 0), (-1, -1), "RIGHT"),
                                     ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                                    ("ALIGN", (0, 0), (0, 0), "LEFT"),
+                                    ("VALIGN", (0, 0), (0, 0), "TOP"),
                                     ("VALIGN", (0, len(lesson_rows) - 1), (-1, -1), "BOTTOM"),
                                     ("LEFTPADDING", (0, 0), (-1, -1), 0),
                                     ("RIGHTPADDING", (0, 0), (-1, -1), 0),
@@ -497,6 +499,11 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                                     ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
                                 ]))
                                 cells.append(text_layout)
+                                if view_type == "school":
+                                    # Anchor whole-school print cell content at the top so
+                                    # its period marker sits in the top-left corner.
+                                    print_cell_col = len(cells) - 1
+                                    span_commands.append(("VALIGN", (print_cell_col, row_index), (print_cell_col, row_index), "TOP"))
                             if cell["span"] > 1:
                                 col = len(cells) - 1
                                 span_commands.append(("SPAN", (col, row_index), (col + cell["span"] - 1, row_index)))
