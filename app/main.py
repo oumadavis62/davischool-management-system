@@ -2141,9 +2141,9 @@ def dean_settings(request: Request, tab: str = "terms", class_id: int | None = N
     cur.execute("SELECT * FROM teachers WHERE school_id=? AND lower(trim(COALESCE(role, ''))) = 'teacher' ORDER BY name", (school["id"],)); teachers = cur.fetchall()
     cur.execute("SELECT * FROM classes WHERE school_id=? ORDER BY name, stream", (school["id"],)); classes = cur.fetchall()
     if class_id is not None:
-        cur.execute("SELECT ta.*, t.name as tname, s.name as sname, c.name as cname FROM teacher_allocations ta LEFT JOIN teachers t ON ta.teacher_id=t.id LEFT JOIN subjects s ON ta.subject_id=s.id LEFT JOIN classes c ON ta.class_id=c.id WHERE ta.school_id=? AND ta.class_id=? ORDER BY s.name, t.name", (school["id"], class_id))
+        cur.execute("SELECT ta.*, t.name as tname, s.name as sname, c.name as cname FROM teacher_allocations ta LEFT JOIN teachers t ON ta.teacher_id=t.id LEFT JOIN subjects s ON ta.subject_id=s.id LEFT JOIN classes c ON ta.class_id=c.id WHERE ta.school_id=? AND ta.class_id=? AND lower(trim(COALESCE(t.role, ''))) = 'teacher' ORDER BY s.name, t.name", (school["id"], class_id))
     else:
-        cur.execute("SELECT ta.*, t.name as tname, s.name as sname, c.name as cname FROM teacher_allocations ta LEFT JOIN teachers t ON ta.teacher_id=t.id LEFT JOIN subjects s ON ta.subject_id=s.id LEFT JOIN classes c ON ta.class_id=c.id WHERE ta.school_id=? ORDER BY t.name", (school["id"],))
+        cur.execute("SELECT ta.*, t.name as tname, s.name as sname, c.name as cname FROM teacher_allocations ta LEFT JOIN teachers t ON ta.teacher_id=t.id LEFT JOIN subjects s ON ta.subject_id=s.id LEFT JOIN classes c ON ta.class_id=c.id WHERE ta.school_id=? AND lower(trim(COALESCE(t.role, ''))) = 'teacher' ORDER BY t.name", (school["id"],))
     allocs = cur.fetchall()
     cur.execute("SELECT COUNT(*) as cnt FROM students WHERE school_id=?", (school["id"],)); sc = cur.fetchone()["cnt"]
     con.close()
