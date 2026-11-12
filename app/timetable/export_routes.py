@@ -217,8 +217,9 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
         timetable_table_class = "specialized-timetable" if specialized_export else "main-timetable"
         generated_at = datetime.now().astimezone().strftime("%d %b %Y %H:%M %Z")
         export_footer = ("<footer class='export-footer'><span>Mabale_ICT Management System · Generated: " + escape(generated_at) + "</span><span>Total scheduled lessons: " + str(len(result["lessons"])) + "</span></footer>") if view_type in ("teacher", "room") else ""
+        room_period_css = ".resource-duration{top:3px;bottom:auto;right:5px}" if view_type == "room" else ""
         html=f"""<!doctype html><html><head><meta charset="utf-8"><title>{title}</title>
-        <style>
+        <style>{room_period_css}
         @page{{size:A4 landscape;margin:7mm}}*{{box-sizing:border-box;-webkit-print-color-adjust:exact;print-color-adjust:exact}}body{{font:10px Arial,sans-serif;color:#234638;margin:12px}}
         h1,h2,p{{text-align:center;margin:3px}}h1{{font-size:17px}}h2{{font-size:13px}}p{{color:#647b6a;margin-bottom:12px}}
         table{{width:100%;border-collapse:collapse;table-layout:fixed;min-width:900px}}th,td{{border:1px solid #c7d9ca;padding:4px;text-align:center;vertical-align:middle;overflow-wrap:anywhere}}
@@ -414,13 +415,13 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                                     [
                                         Paragraph("<b>" + subject_initial + "</b>", resource_subject_style),
                                         "",
-                                        "",
+                                        Paragraph(pdf_text(str(max(1, int(lesson.get("duration_periods") or 1))) + "P"), resource_period_style) if view_type == "room" else "",
                                     ],
                                     [Paragraph("<b>" + pdf_text(class_initials) + "</b>", resource_class_style), "", ""],
                                     [
                                         Paragraph(pdf_text(resource_meta), footer_style) if resource_meta else "",
                                         "",
-                                        Paragraph(pdf_text(str(max(1, int(lesson.get("duration_periods") or 1))) + "P"), resource_period_style),
+                                        Paragraph(pdf_text(str(max(1, int(lesson.get("duration_periods") or 1))) + "P"), resource_period_style) if view_type == "teacher" else "",
                                     ],
                                 ]
                             else:
@@ -444,7 +445,7 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                             )
                             card.setStyle(TableStyle([
                                 ("SPAN", (0,1), (2,1)) if view_type in ("teacher", "room") else ("ALIGN", (0,0), (-1,-1), "CENTER"),
-                                ("ALIGN", (0,2), (-1,2), "MIDDLE") if view_type in ("teacher", "room") else ("ALIGN", (0,0), (-1,-1), "CENTER"),
+                                ("VALIGN", (0,2), (-1,2), "MIDDLE") if view_type in ("teacher", "room") else ("ALIGN", (0,0), (-1,-1), "CENTER"),
                                 ("BACKGROUND", (0,0), (-1,-1), tint),
                                 ("BOX", (0,0), (-1,-1), 0.45, accent),
                                 ("LINEBEFORE", (0,0), (0,-1), 3, accent),
@@ -690,13 +691,13 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                             period_label=str(max(1,int(lesson.get("duration_periods") or 1)))+"P"
                             subject_label=str(lesson.get("subject_initial") or "").strip().upper()
                             detail=CellRichText([
-                                TextBlock(InlineFont(rFont="Consolas",sz=9,b=True), subject_label),
+                                TextBlock(InlineFont(rFont="Consolas",sz=9,b=True), subject_label + (" " * 8 + period_label if view_type == "room" else "")),
                                 "\n",
                                 TextBlock(InlineFont(rFont="Arial",sz=25,b=True,color="263F30"), class_initials),
                                 "\n",
                                 TextBlock(InlineFont(rFont="Arial",sz=8,b=True,color="536B58"), resource_meta or ""),
                                 "\n",
-                                TextBlock(InlineFont(rFont="Arial",sz=8,b=True,color="536B58"), " " * 8 + period_label),
+                                TextBlock(InlineFont(rFont="Arial",sz=8,b=True,color="536B58"), (" " * 8 + period_label) if view_type == "teacher" else ""),
                             ])
                         else:
                             detail=str(max(1,int(lesson.get("duration_periods") or 1)))+"P\n"+str(lesson.get("subject_initial") or "").strip().upper()+"\n"
