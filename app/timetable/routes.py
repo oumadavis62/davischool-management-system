@@ -169,6 +169,54 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
           .tt-home-empty{{text-align:center;padding:54px 25px;margin-top:18px}}.tt-home-empty-icon{{width:66px;height:66px;border-radius:20px;background:#eaf4ed;color:#24704b;display:grid;place-items:center;margin:0 auto 18px;font-size:30px}}.tt-home-empty h2{{font-size:24px;color:#1b4935;margin:8px 0}}.tt-home-empty p{{max-width:600px;margin:0 auto 22px;color:#718379;font-size:13px;line-height:1.7}}.tt-home-primary{{display:inline-flex;gap:12px;align-items:center;background:#176344;color:white!important;text-decoration:none!important;padding:12px 18px;border-radius:10px;font-weight:750;font-size:12px}}
           @media(max-width:800px){{.tt-home-hero{{padding:25px 22px}}.tt-home-hero-mark{{width:68px;height:68px;font-size:30px;border-radius:19px}}.tt-home-metrics{{grid-template-columns:repeat(2,minmax(0,1fr))}}}}
           @media(max-width:480px){{.tt-home-hero-mark{{display:none}}.tt-home-profile{{align-items:stretch;flex-direction:column;gap:7px}}.tt-home-profile select{{width:100%;min-width:0}}.tt-home-profile-card{{padding:18px 16px}}.tt-home-profile-top{{align-items:flex-start;flex-direction:column}}.tt-home-metrics div{{padding:11px}}.tt-home-metrics span{{font-size:10px}}.tt-home-empty{{padding:38px 18px}}}}
+
+          /* Premium timetable overview refresh */
+          .tt-home{max-width:1540px;padding:10px 0 42px;color:#173d2c}
+          .tt-home-hero{min-height:220px;padding:38px 42px;border:0;border-radius:26px;background:radial-gradient(circle at 83% 12%,rgba(195,226,194,.24),transparent 27%),linear-gradient(115deg,#103d2b 0%,#176344 52%,#2b7954 100%);color:#fff;box-shadow:0 18px 42px rgba(19,75,48,.19)}
+          .tt-home-hero:after{width:310px;height:310px;right:9%;top:-195px;border-color:rgba(255,255,255,.16);box-shadow:0 0 0 34px rgba(255,255,255,.045),0 0 0 70px rgba(255,255,255,.035)}
+          .tt-home-hero .tt-home-eyebrow{color:#c3e5cd;letter-spacing:2.1px;font-size:10px}
+          .tt-home-hero h1{font-size:clamp(30px,4vw,43px);color:#fff;letter-spacing:-1.25px;margin:12px 0 10px}
+          .tt-home-hero p{color:#d8e9dd;font-size:14px;max-width:620px;line-height:1.75}
+          .tt-home-hero-mark{width:112px;height:112px;border-radius:30px;background:linear-gradient(145deg,rgba(255,255,255,.2),rgba(255,255,255,.08));border:1px solid rgba(255,255,255,.24);color:#fff;font-size:48px;box-shadow:0 12px 30px rgba(0,0,0,.12);backdrop-filter:blur(8px)}
+          .tt-home-profile{justify-content:space-between;margin:22px 2px 16px;padding:13px 16px;border:1px solid #e0ebe2;border-radius:15px;background:#fff;box-shadow:0 5px 18px rgba(24,67,47,.045)}
+          .tt-home-profile label{color:#42634e;font-size:12px;font-weight:800}
+          .tt-home-profile select{min-width:min(430px,60vw);padding:11px 14px;border:1px solid #d7e5da;border-radius:10px;background:#f9fcf9;color:#214b35;font-size:12px;font-weight:700;outline:none}
+          .tt-home-profile select:focus,.tt-home-profile-form input:focus,.tt-home-profile-form select:focus{border-color:#4c9568;box-shadow:0 0 0 3px rgba(61,137,87,.12)}
+          .tt-home-profile-card{padding:27px 28px;margin-bottom:20px;border:1px solid #e0ebe2;border-radius:21px;box-shadow:0 10px 30px rgba(24,67,47,.065)}
+          .tt-home-profile-top{align-items:center}
+          .tt-home-profile-top h2{font-size:25px;letter-spacing:-.45px;margin:8px 0;color:#17452f}
+          .tt-home-profile-top p{font-size:12px;color:#718579}
+          .tt-home-profile-card .tt-home-eyebrow,.tt-home-catalog .tt-home-eyebrow{color:#668b70;letter-spacing:1.7px}
+          .tt-home-outline{border:1px solid #d7e6da;border-radius:11px;padding:11px 15px;color:#205f3e!important;font-size:12px;font-weight:800;transition:all .18s ease}
+          .tt-home-outline:hover{background:#edf7ef;border-color:#9fc5a8;transform:translateY(-1px)}
+          .tt-home-profile-top>div:last-child{gap:9px!important}
+          .tt-home-profile-top>div:last-child .tt-home-outline:first-child{background:#176344;border-color:#176344;color:#fff!important}
+          .tt-home-profile-top>div:last-child .tt-home-outline:first-child:hover{background:#104b32}
+          .tt-home-status{color:#17633b;background:#e9f6ec;padding:6px 11px}
+          .tt-home-metrics{gap:12px;margin-top:25px}
+          .tt-home-metrics div{min-height:83px;padding:16px 17px;border:1px solid #e7f0e8;border-radius:15px;background:linear-gradient(145deg,#f7fbf7,#eff7f0);align-items:flex-start;flex-direction:column;justify-content:center;gap:5px}
+          .tt-home-metrics span{font-size:11px;color:#708276;font-weight:750}
+          .tt-home-metrics b{font-size:27px;line-height:1;color:#1b6843;letter-spacing:-.6px}
+          .tt-home-catalog{margin-top:20px;padding:25px 27px;border:1px solid #e0ebe2;border-radius:21px;box-shadow:0 10px 28px rgba(24,67,47,.05)}
+          .tt-home-catalog h3{font-size:20px;letter-spacing:-.4px;margin:7px 0 5px;color:#194a32}
+          .tt-home-catalog p{font-size:12px;color:#738579;line-height:1.6}
+          .tt-home-catalog-list{gap:11px;margin-top:19px}
+          .tt-home-catalog-list a{min-height:75px;padding:15px 17px;border:1px solid #e4eee5;border-radius:14px;background:#fbfdfb;transition:all .18s ease}
+          .tt-home-catalog-list a:hover{background:#f1f8f2;border-color:#b8d4bd;transform:translateY(-2px);box-shadow:0 8px 18px rgba(32,94,57,.07)}
+          .tt-home-catalog-list b{font-size:13px;color:#214d35}
+          .tt-home-catalog-list small{font-size:10px;color:#7a8c7f}
+          .tt-home-catalog-list em{font-size:9px;letter-spacing:.45px;background:#eaf5ec;color:#276643;padding:6px 9px}
+          .tt-home-empty{padding:66px 28px;margin-top:20px;border:1px solid #e0ebe2;border-radius:23px;box-shadow:0 12px 32px rgba(24,67,47,.06)}
+          .tt-home-empty-icon{width:76px;height:76px;border-radius:23px;background:linear-gradient(145deg,#e8f5e9,#d8ecdc);color:#176344;box-shadow:inset 0 0 0 1px #d0e6d4;font-size:34px}
+          .tt-home-empty h2{font-size:27px;letter-spacing:-.6px;color:#194a32}
+          .tt-home-empty p{font-size:13px;line-height:1.8}
+          .tt-home-primary{background:linear-gradient(110deg,#176344,#278052);border-radius:11px;padding:13px 20px;box-shadow:0 7px 16px rgba(23,99,68,.16);transition:transform .18s ease,box-shadow .18s ease}
+          .tt-home-primary:hover{transform:translateY(-2px);box-shadow:0 10px 20px rgba(23,99,68,.22)}
+          .tt-home-notice{border-radius:12px;padding:12px 15px}
+          @media(max-width:800px){.tt-home-hero{padding:29px 25px;min-height:190px}.tt-home-hero-mark{width:78px;height:78px;font-size:34px;border-radius:22px}.tt-home-profile-card{padding:22px}.tt-home-catalog{padding:21px}}
+          @media(max-width:600px){.tt-home-profile{align-items:stretch;flex-direction:column;gap:8px;padding:12px}.tt-home-profile select{width:100%;min-width:0}.tt-home-profile-top{gap:14px}.tt-home-profile-top>div:last-child{width:100%;display:grid!important;grid-template-columns:1fr 1fr}.tt-home-profile-top>div:last-child a,.tt-home-profile-top>div:last-child button{text-align:center;white-space:normal}.tt-home-metrics{gap:9px}.tt-home-metrics div{min-height:75px;padding:12px}.tt-home-metrics b{font-size:24px}.tt-home-catalog-list a{min-height:70px}.tt-home-hero h1{font-size:29px}.tt-home-hero p{font-size:12px}.tt-home-empty h2{font-size:22px}}
+          @media(max-width:390px){.tt-home-profile-top>div:last-child{grid-template-columns:1fr}.tt-home-metrics span{font-size:9px}}
+
         </style>
         <main class='tt-home'>
           <section class='tt-home-hero'><div class='tt-home-hero-copy'><span class='tt-home-eyebrow'>MABALE_ICT · ACADEMIC OPERATIONS</span><h1>Smart Timetable</h1><p>Plan, organise and publish a balanced school timetable. Manage teaching requirements, build schedules and keep every class and teacher in sync.</p></div><div class='tt-home-hero-mark'>▦</div></section>
