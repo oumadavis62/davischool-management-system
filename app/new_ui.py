@@ -7151,7 +7151,7 @@ main{{width:min(1100px,92%);margin:28px auto 50px}}.welcome{{margin-bottom:20px}
 {parent_section_fees_html}
 {parent_section_notices_html}
 {parent_section_messages_html}
-{parent_section_contact_html}<p class='muted' style='text-align:center;margin-top:18px'>Your access is limited to the learner or learners explicitly linked to this parent account.</p><footer class='parent-platform-footer' aria-label='Mabale_ICT platform branding'><span class='parent-platform-logo' aria-hidden='true'><span class='davi-mark'></span></span><span>Powered by <strong>Mabale_ICT</strong></span></footer></main>
+{parent_section_contact_html}<p class='muted' style='text-align:center;margin-top:18px'>Your access is limited to the learner or learners explicitly linked to this parent account.</p><footer class='parent-platform-footer' aria-label='Mabale_ICT platform branding'><span class='parent-platform-logo' aria-hidden='true'><span class='davi-mark'></span></span><span>Powered by <strong>Mabale_ICT Software</strong></span></footer></main>
 <script>function parentShow(view){{document.querySelectorAll('.parent-view').forEach(function(section){{section.hidden=section.id!=='parent-'+view;}});document.querySelectorAll('.parent-tab').forEach(function(tab){{tab.classList.toggle('active',tab.dataset.view===view);}});window.scrollTo({{top:0,behavior:'smooth'}});}}</script></body></html>"""
     return HTMLResponse(body)
 
