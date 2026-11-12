@@ -100,7 +100,7 @@ def timetable_workspace(request, body):
           // Configure section in the tab strip so users can still navigate away;
           // the availability workspace itself is selected below.
           if(requested==='availability') return true;
-          if(requested==='setup') return !/teacher availability|subject availability|requirement|workload|allocation/i.test(label);
+          if(requested==='setup') return !/teacher availability|subject availability|requirement|workload/i.test(label) && (!/allocation/i.test(label) || /^allocation limits$/i.test(label));
           return true;
         });
         const visibleSections=sections.filter((section,index)=>keep[index]);
