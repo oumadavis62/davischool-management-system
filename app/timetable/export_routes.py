@@ -433,22 +433,11 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                                     if room_text:
                                         line += "<br/>⌂ " + room_text
                                     line += "<br/>" + pdf_text(teacher_initials)
-                                plain_lines.append(Paragraph(line, ParagraphStyle(
-                                    "PlainPrintTimetableCell", parent=cell_style, alignment=TA_CENTER,
-                                    fontSize=6, leading=7, textColor=colors.black,
-                                )))
-                            if len(plain_lines) == 1:
-                                cells.append(plain_lines[0])
-                            else:
-                                cells.append(Table([[item] for item in plain_lines], colWidths=[max(1, slot_width * cell["span"])], style=TableStyle([
-                                    ("BOX", (0,0), (-1,-1), 0, colors.white),
-                                    ("INNERGRID", (0,0), (-1,-1), 0, colors.white),
-                                    ("LEFTPADDING", (0,0), (-1,-1), 1),
-                                    ("RIGHTPADDING", (0,0), (-1,-1), 1),
-                                    ("TOPPADDING", (0,0), (-1,-1), 1),
-                                    ("BOTTOMPADDING", (0,0), (-1,-1), 1),
-                                    ("VALIGN", (0,0), (-1,-1), "MIDDLE"),
-                                ])))
+                                plain_lines.append(line)
+                            cells.append(Paragraph("<br/><br/>".join(plain_lines), ParagraphStyle(
+                                "PlainPrintTimetableCell", parent=cell_style, alignment=TA_CENTER,
+                                fontSize=6, leading=7, textColor=colors.black,
+                            )))
                             if cell["span"] > 1:
                                 col = len(cells) - 1
                                 span_commands.append(("SPAN", (col, row_index), (col + cell["span"] - 1, row_index)))
