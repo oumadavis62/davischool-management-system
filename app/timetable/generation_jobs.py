@@ -11,7 +11,7 @@ import threading
 import time
 from typing import Callable
 
-from app.timetable.time_utils import now_eat
+from app.timetable.time_utils import format_eat, now_eat
 
 from app.timetable.generator import (
     GENERATION_TIME_LIMIT_SECONDS,
@@ -88,7 +88,9 @@ def get_generation_job(get_db: Callable, school_id: int, job_id: int):
             return None
         result = dict(row)
         for key, value in result.items():
-            if hasattr(value, "isoformat"):
+            if key in ("created_at", "started_at", "finished_at"):
+                result[key] = format_eat(value)
+            elif hasattr(value, "isoformat"):
                 result[key] = value.isoformat()
         return result
     finally:
