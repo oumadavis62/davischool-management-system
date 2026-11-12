@@ -87,7 +87,7 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
         if selected:
             pid = int(selected["id"])
             profile_options = "".join(
-                f"<option value='{int(p['id'])}' {'selected' if int(p['id']) == pid else ''}>{esc(p['academic_year'])} · {esc(p['term'])} — {esc(profile_display_name(p['name']))} · {esc(str(p['profile_type'] or 'main').replace('_',' ').title())}</option>"
+                f"<option value='{int(p['id'])}' {'selected' if int(p['id']) == pid else ''}>{esc(p['academic_year'])} · {esc(p['term'])} — {esc(profile_display_name(p['name'], p['status']))} · {esc(str(p['profile_type'] or 'main').replace('_',' ').title())}</option>"
                 for p in profiles
             )
             profile_control = f"<form class='tt-home-profile' method='get' action='/app/timetable'><label for='tt-home-profile'>Working timetable</label><select id='tt-home-profile' name='profile_id' onchange='this.form.submit()'>{profile_options}</select></form>"
@@ -133,7 +133,7 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
             + "".join(
                 "<a href='/app/timetable?profile_id=" + str(int(p["id"])) + "'><span><b>" + esc(profile_display_name(p["name"])) + "</b><small>"
                 + esc(p["academic_year"]) + " · " + esc(p["term"]) + " · " + esc(str(p["profile_type"] or "main").replace("_", " ").title())
-                + "</small></span><em>" + esc(str(p["status"]).replace("_", " ").title()) + "</em></a>"
+                + "</small></span><em>" + esc('Revised' if str(p['status']).lower() in ('published','archived') else str(p['status']).replace('_', ' ').title()) + "</em></a>"
                 for p in profiles
             ) + "</div></section>"
         ) if profiles else ""
@@ -511,7 +511,7 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
         teacher_color_tab_field = f"<input type='hidden' name='ds_tab' value='{esc(teacher_color_tab_id)}'>"
         selector = f"<form method='get' action='/app/timetable/setup' class='tt-select'><label for='profile_id'>Timetable profile</label><select id='profile_id' name='profile_id' onchange='this.form.submit()'>{profile_options}</select></form>" if profiles else ""
         profile_summary = (
-            f"<div class='tt-profile'><div><span class='tt-kicker'>ACTIVE CONFIGURATION</span><h2>{esc(profile_display_name(selected['name']))}</h2><p>{esc(selected['academic_year'])} · {esc(selected['term'])} · {esc(str(selected['profile_type'] or 'main').replace('_',' ').title())} · {esc(selected['academic_start_date'] or 'Start date not set')} – {esc(selected['academic_end_date'] or 'End date not set')} · <span class='tt-status'>{esc(selected_status).upper()}</span></p></div><div class='tt-stats'><span><b>{len(days)}</b>Days</span><span><b>{len(periods)}</b>Periods</span><span><b>{len(rooms)}</b>Rooms</span></div></div>"
+            f"<div class='tt-profile'><div><span class='tt-kicker'>ACTIVE CONFIGURATION</span><h2>{esc(profile_display_name(selected['name'], selected['status']))}</h2><p>{esc(selected['academic_year'])} · {esc(selected['term'])} · {esc(str(selected['profile_type'] or 'main').replace('_',' ').title())} · {esc(selected['academic_start_date'] or 'Start date not set')} – {esc(selected['academic_end_date'] or 'End date not set')} · <span class='tt-status'>{esc(selected_status).upper()}</span></p></div><div class='tt-stats'><span><b>{len(days)}</b>Days</span><span><b>{len(periods)}</b>Periods</span><span><b>{len(rooms)}</b>Rooms</span></div></div>"
             if selected else "<div class='tt-empty'><b>No timetable configuration yet</b><p>Create an academic-year and term profile to begin.</p></div>"
         )
         day_rows = "".join(
