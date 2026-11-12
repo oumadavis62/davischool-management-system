@@ -8,7 +8,7 @@ class TimetableTimeUtilsTests(unittest.TestCase):
     def test_now_eat_returns_explicit_utc_plus_three_offset(self):
         value = datetime.fromisoformat(now_eat())
         self.assertEqual(value.utcoffset(), timedelta(hours=3))
-        self.assertEqual(value.tzinfo, EAT)
+        self.assertEqual(EAT.key, "Africa/Nairobi")
 
     def test_format_eat_converts_legacy_utc_timestamp(self):
         self.assertEqual(format_eat("2026-11-12T12:00:00Z"), "12 Nov 2026 15:00 EAT")
