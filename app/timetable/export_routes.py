@@ -425,7 +425,7 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                         if print_sheet:
                             # Plain text only: no nested lesson-card backgrounds, borders, or badges.
                             if view_type in ("teacher", "room"):
-                                plain_lines = []
+                                resource_rows = []
                                 for lesson in cell["lessons"]:
                                     subject_initial = pdf_text(str(lesson.get("subject_initial") or "").strip().upper() or "—")
                                     teacher_initials = str(lesson.get("teacher_initials") or "").strip().upper()
@@ -436,15 +436,29 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                                     stream_label = str(lesson.get("stream") or "").strip()
                                     class_initials = str(lesson.get("class_initials") or "").strip().upper() or (class_label + ((" " + stream_label) if stream_label else "") or "—")
                                     resource_meta = allocated_room_name(lesson) if view_type == "teacher" else teacher_initials
-                                    line = "<b>" + subject_initial + "</b><br/><b>" + pdf_text(class_initials) + "</b>"
-                                    if resource_meta:
-                                        line += "<br/>" + pdf_text(resource_meta)
-                                    line += "<br/>" + str(max(1, int(lesson.get("duration_periods") or 1))) + "P"
-                                    plain_lines.append(line)
-                                cells.append(Paragraph("<br/><br/>".join(plain_lines), ParagraphStyle(
-                                    "PlainPrintResourceCell", parent=cell_style, alignment=TA_CENTER,
-                                    fontSize=6, leading=7, textColor=colors.black,
-                                )))
+                                    duration = pdf_text(str(max(1, int(lesson.get("duration_periods") or 1))) + "P")
+                                    resource_width = max(1, slot_width * cell["span"] - 6)
+                                    subject_style = ParagraphStyle("PrintResourceSubject", parent=cell_style, alignment=TA_LEFT, fontSize=10, leading=11, wordWrap=None, splitLongWords=0, textColor=colors.black)
+                                    class_style = ParagraphStyle("PrintResourceClass", parent=cell_style, alignment=TA_CENTER, fontSize=14, leading=15, textColor=colors.black)
+                                    meta_style = ParagraphStyle("PrintResourceMeta", parent=cell_style, alignment=TA_LEFT, fontSize=5, leading=6, textColor=colors.black)
+                                    period_style = ParagraphStyle("PrintResourcePeriod", parent=cell_style, alignment=TA_RIGHT, fontSize=6, leading=7, textColor=colors.black)
+                                    resource_table = Table([
+                                        [Paragraph("<b>" + subject_initial + "</b>", subject_style)],
+                                        [Paragraph("<b>" + pdf_text(class_initials) + "</b>", class_style)],
+                                        [Paragraph(pdf_text(resource_meta), meta_style) if resource_meta else Paragraph("&nbsp;", meta_style)],
+                                        [Paragraph(duration, period_style)],
+                                    ], colWidths=[resource_width])
+                                    resource_table.setStyle(TableStyle([
+                                        ("ALIGN", (0, 0), (-1, -1), "LEFT"),
+                                        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                                        ("LEFTPADDING", (0, 0), (-1, -1), 0),
+                                        ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+                                        ("TOPPADDING", (0, 0), (-1, -1), 0),
+                                        ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
+                                        ("ALIGN", (0, 3), (0, 3), "RIGHT"),
+                                    ]))
+                                    resource_rows.append([resource_table])
+                                cells.append(Table(resource_rows, colWidths=[max(1, slot_width * cell["span"] - 6)]))
                             else:
                                 # A borderless text-only layout keeps each lesson cell free of
                                 # cards while independently aligning its top and bottom labels.
