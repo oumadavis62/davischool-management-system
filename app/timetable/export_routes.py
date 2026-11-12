@@ -154,10 +154,10 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                                 ("<span class='resource-teacher'>" + escape(teacher_initials) + "</span>" if view_type == "room" else "")
                             )
                             detail = (
-                                "<span class='resource-duration'>" + str(max(1, int(lesson.get("duration_periods") or 1))) + "P</span>"
                                 "<small class='resource-subject'>" + subject_initial + "</small>"
                                 "<b class='resource-class'>" + class_initials + "</b>"
                                 "<span class='resource-footer'>" + footer_detail + "</span>"
+                                "<span class='resource-duration'>" + str(max(1, int(lesson.get("duration_periods") or 1))) + "P</span>"
                             )
                             cards.append("<div class='lesson resource-lesson' style='--teacher-color:" + card_color + "' title='" + escape(class_full) + "'>" + detail + "</div>")
                         else:
@@ -226,7 +226,7 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
         body.individual-sheet .lesson{{position:relative;box-sizing:border-box;flex:1 1 0;width:100%;height:100%;min-height:0;margin:0;border-radius:0;padding:13px 5px 5px}}
         body.individual-sheet .lesson+.lesson{{border-left-width:3px}}
         body.individual-sheet table.specialized-timetable td.slot{{height:100%}}
-        td.slot{{background:#fff}}.resource-lesson{{position:relative;min-height:0;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:12px 4px 14px;border-radius:0;background:color-mix(in srgb,var(--teacher-color) 12%,white);border:1px solid color-mix(in srgb,var(--teacher-color) 42%,white);border-left:3px solid var(--teacher-color);margin:0}}.resource-subject{{position:absolute;top:4px;right:5px;left:auto;font-size:11px;line-height:1;font-weight:900;color:#365b40}}.resource-class{{display:flex;flex:1;align-items:center;justify-content:center;width:100%;min-height:0;text-align:center;font-size:clamp(25px,2.2vw,34px);line-height:.95;font-weight:950;letter-spacing:-.04em;color:#263f30;overflow-wrap:anywhere}}.resource-duration{{position:absolute;top:4px;left:5px;right:auto;font-size:10px;line-height:1;font-weight:900;color:#536b58}}.resource-footer{{position:absolute;bottom:3px;left:4px;right:4px;display:flex;justify-content:space-between;font-size:7px;color:#637968}}.resource-teacher{{margin-left:auto;font-weight:800;color:#245b39}}.lesson{{position:relative;min-height:66px;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;background:color-mix(in srgb,var(--teacher-color) 17%,white);border:1px solid color-mix(in srgb,var(--teacher-color) 48%,white);border-left:4px solid var(--teacher-color);border-radius:6px;padding:13px 5px 5px;margin:2px;font-size:9px;line-height:1.2}}
+        td.slot{{background:#fff}}.resource-lesson{{position:relative;min-height:0;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:12px 4px 14px;border-radius:0;background:color-mix(in srgb,var(--teacher-color) 12%,white);border:1px solid color-mix(in srgb,var(--teacher-color) 42%,white);border-left:3px solid var(--teacher-color);margin:0}}.resource-subject{{position:absolute;top:4px;left:5px;right:auto;font-size:11px;line-height:1;font-weight:900;color:#365b40}}.resource-class{{display:flex;flex:1;align-items:center;justify-content:center;width:100%;min-height:0;text-align:center;font-size:clamp(25px,2.2vw,34px);line-height:.95;font-weight:950;letter-spacing:-.04em;color:#263f30;overflow-wrap:anywhere}}.resource-duration{{position:absolute;bottom:3px;right:5px;left:auto;font-size:9px;line-height:1;font-weight:900;color:#536b58}}.resource-footer{{position:absolute;bottom:3px;left:4px;right:4px;display:flex;justify-content:space-between;font-size:7px;color:#637968}}.resource-teacher{{margin-left:auto;font-weight:800;color:#245b39}}.lesson{{position:relative;min-height:66px;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;background:color-mix(in srgb,var(--teacher-color) 17%,white);border:1px solid color-mix(in srgb,var(--teacher-color) 48%,white);border-left:4px solid var(--teacher-color);border-radius:6px;padding:13px 5px 5px;margin:2px;font-size:9px;line-height:1.2}}
         .lesson .duration-label{{position:absolute;top:3px;right:5px;font-size:8px;font-weight:bold;background:#d5e9d9;border-radius:8px;padding:2px 4px}}.lesson .subject-initials{{display:block;text-align:center;font-size:12px;font-weight:900;letter-spacing:.4px}}.lesson .room-detail{{display:block;color:#55705d;font-size:8px;margin-top:4px;max-width:100%;overflow-wrap:anywhere}}.lesson .teacher-initials,.lesson .class-detail{{align-self:flex-end;margin-top:auto;background:#245b39;color:#fff;border-radius:4px;padding:2px 5px;font-size:8px;font-weight:900}}.lesson .class-detail{{max-width:100%;text-align:right;overflow-wrap:anywhere}}th.break-header{{width:90%}}td.break{{width:90%;background:#f1ead8;color:#75551d;vertical-align:middle;text-align:center;min-width:24px;padding:0;position:relative}}td.break>span{{display:flex;flex-direction:column;justify-content:center;align-items:center;min-height:100%;height:100%;font-size:18px;font-weight:950;line-height:1}}td.break>span i{{display:block;font-style:normal;line-height:1}}td.free{{background:#fbfdfb}}td.continued{{background:#f6faf6;color:#7b9480;font-size:8px}}
         .actions{{text-align:center;margin-bottom:10px}}button{{padding:8px 15px;background:#17633b;color:#fff;border:0;border-radius:7px}}
         .extra-section{{margin-top:18px;break-inside:avoid}}.extra-section h3{{font-size:12px;color:#1d563b;margin:0 0 8px}}.session-table{{width:100%;border-collapse:collapse;table-layout:fixed;min-width:0;font-size:8px}}.session-table th{{background:#17633b;color:#fff;padding:5px}}.session-table td{{padding:5px;border:1px solid #dce7de;text-align:left}}.empty{{color:#64748b;font-size:9px}}
@@ -411,10 +411,14 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                                     [
                                         Paragraph("<b>" + subject_initial + "</b>", resource_subject_style),
                                         "",
-                                        Paragraph(pdf_text(str(max(1, int(lesson.get("duration_periods") or 1))) + "P"), resource_period_style),
+                                        "",
                                     ],
                                     [Paragraph("<b>" + pdf_text(class_initials) + "</b>", resource_class_style), "", ""],
-                                    [Paragraph(pdf_text(resource_meta), footer_style) if resource_meta else "", "", ""],
+                                    [
+                                        Paragraph(pdf_text(resource_meta), footer_style) if resource_meta else "",
+                                        "",
+                                        Paragraph(pdf_text(str(max(1, int(lesson.get("duration_periods") or 1))) + "P"), resource_period_style),
+                                    ],
                                 ]
                             else:
                                 card_rows = [
@@ -673,11 +677,11 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                             period_label=str(max(1,int(lesson.get("duration_periods") or 1)))+"P"
                             subject_label=str(lesson.get("subject_initial") or "").strip().upper()
                             detail=CellRichText([
-                                TextBlock(InlineFont(rFont="Consolas",sz=9,b=True), subject_label + " " * 8 + period_label),
+                                TextBlock(InlineFont(rFont="Consolas",sz=9,b=True), subject_label),
                                 "\n",
                                 TextBlock(InlineFont(rFont="Arial",sz=25,b=True,color="263F30"), class_initials),
                                 "\n",
-                                TextBlock(InlineFont(rFont="Arial",sz=8,b=True,color="536B58"), resource_meta or ""),
+                                TextBlock(InlineFont(rFont="Arial",sz=8,b=True,color="536B58"), (resource_meta or "") + " " * 10 + period_label),
                             ])
                         else:
                             detail=str(max(1,int(lesson.get("duration_periods") or 1)))+"P\n"+str(lesson.get("subject_initial") or "").strip().upper()+"\n"
