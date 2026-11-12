@@ -2138,7 +2138,7 @@ def dean_settings(request: Request, tab: str = "terms", class_id: int | None = N
     con = get_db(); cur = con.cursor()
     cur.execute("SELECT * FROM terms WHERE school_id=? ORDER BY year DESC, id DESC", (school["id"],)); terms = cur.fetchall()
     cur.execute("SELECT * FROM subjects WHERE school_id=? ORDER BY name", (school["id"],)); subjects = cur.fetchall()
-    cur.execute("SELECT * FROM teachers WHERE school_id=? ORDER BY name", (school["id"],)); teachers = cur.fetchall()
+    cur.execute("SELECT * FROM teachers WHERE school_id=? AND lower(trim(COALESCE(role, ''))) = 'teacher' ORDER BY name", (school["id"],)); teachers = cur.fetchall()
     cur.execute("SELECT * FROM classes WHERE school_id=? ORDER BY name, stream", (school["id"],)); classes = cur.fetchall()
     if class_id is not None:
         cur.execute("SELECT ta.*, t.name as tname, s.name as sname, c.name as cname FROM teacher_allocations ta LEFT JOIN teachers t ON ta.teacher_id=t.id LEFT JOIN subjects s ON ta.subject_id=s.id LEFT JOIN classes c ON ta.class_id=c.id WHERE ta.school_id=? AND ta.class_id=? ORDER BY s.name, t.name", (school["id"], class_id))
@@ -2176,7 +2176,7 @@ def school_dean_del_subject(sid: int, request: Request):
 def school_dean_allocate(request: Request, teacher_id: int = Form(...), subject_id: int = Form(...), class_id: int = Form(...)):
     school = get_school_obj(request); con = get_db(); cur = con.cursor()
     sid=school["id"]
-    valid_teacher=cur.execute("SELECT id FROM teachers WHERE id=? AND school_id=?",(teacher_id,sid)).fetchone()
+    valid_teacher=cur.execute("SELECT id FROM teachers WHERE id=? AND school_id=? AND lower(trim(COALESCE(role, ''))) = 'teacher'",(teacher_id,sid)).fetchone()
     valid_subject=cur.execute("SELECT id FROM subjects WHERE id=? AND school_id=?",(subject_id,sid)).fetchone()
     valid_class=cur.execute("SELECT id FROM classes WHERE id=? AND school_id=?",(class_id,sid)).fetchone()
     if not (valid_teacher and valid_subject and valid_class):
@@ -2455,7 +2455,7 @@ def school_system_settings(sub: str, request: Request):
     con = get_db(); cur = con.cursor()
     cur.execute("SELECT * FROM schools WHERE id=?", (school_obj["id"],)); school = cur.fetchone()
     cur.execute("SELECT * FROM users WHERE school_id=? ORDER BY id DESC", (school_obj["id"],)); users = cur.fetchall()
-    cur.execute("SELECT * FROM teachers WHERE school_id=? ORDER BY name", (school_obj["id"],)); teachers_for_users = cur.fetchall()
+    cur.execute("SELECT * FROM teachers WHERE school_id=? AND lower(trim(COALESCE(role, ''))) = 'teacher' ORDER BY name", (school_obj["id"],)); teachers_for_users = cur.fetchall()
     cur.execute("SELECT * FROM students WHERE school_id=? ORDER BY name", (school_obj["id"],)); students_for_users = cur.fetchall()
     cur.execute("SELECT * FROM classes WHERE school_id=? ORDER BY name, stream", (school_obj["id"],)); classes = cur.fetchall()
     cur.execute("SELECT * FROM system_audit WHERE school_id=? ORDER BY id DESC LIMIT 200", (school_obj["id"],)); audit = cur.fetchall()
@@ -2595,7 +2595,7 @@ def sys_add_user(request: Request, full_name: str = Form(...), email: str = Form
         return HTMLResponse("That email is already registered.",409)
     tid=int(teacher_id) if teacher_id.strip() else None
     stid=int(student_id) if student_id.strip() else None
-    if tid is not None and not cur.execute("SELECT id FROM teachers WHERE id=? AND school_id=?",(tid,school_obj["id"])).fetchone():
+    if tid is not None and not cur.execute("SELECT id FROM teachers WHERE id=? AND school_id=? AND lower(trim(COALESCE(role, ''))) = 'teacher'",(tid,school_obj["id"])).fetchone():
         con.close(); return HTMLResponse("Invalid teacher for this school.",403)
     if stid is not None and not cur.execute("SELECT id FROM students WHERE id=? AND school_id=?",(stid,school_obj["id"])).fetchone():
         con.close(); return HTMLResponse("Invalid student for this school.",403)
