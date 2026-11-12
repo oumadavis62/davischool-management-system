@@ -4,7 +4,7 @@ from __future__ import annotations
 from html import escape
 import json
 import logging
-from urllib.parse import quote
+from urllib.parse import parse_qs, quote, urlsplit
 
 logger = logging.getLogger(__name__)
 
@@ -43,10 +43,24 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
 
     def redirect_setup(profile_id=0, message="", error=False, focus="", request=None, tab="", section=""):
         if request is not None:
+            # Native form submissions can bypass the Configure tab submit
+            # listener, so the POST URL may not contain the active tab/section.
+            # Recover them from the same-page Referer as a server-side fallback.
+            referer_query = {}
+            if not tab or not section:
+                referer = str(request.headers.get("referer", "") or "")
+                try:
+                    referer_parts = urlsplit(referer)
+                    if referer_parts.path == "/app/timetable/setup":
+                        referer_query = parse_qs(referer_parts.query)
+                except Exception:
+                    referer_query = {}
             if not tab:
-                tab = str(request.query_params.get("tab", "") or "")
+                tab = str(request.query_params.get("tab", "") or
+                          next(iter(referer_query.get("tab", [])), ""))
             if not section:
-                section = str(request.query_params.get("section", "") or "")
+                section = str(request.query_params.get("section", "") or
+                              next(iter(referer_query.get("section", [])), ""))
         parts = []
         if profile_id:
             parts.append("profile_id=" + str(int(profile_id)))
