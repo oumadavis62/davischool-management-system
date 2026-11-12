@@ -378,7 +378,7 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                             col = len(cells) - 1
                             span_commands.append(("SPAN", (col, row_index), (col, row_index + cell["rowspan"] - 1)))
                     elif cell["kind"] == "free":
-                        cells.append(Paragraph("—", cell_style))
+                        cells.append(Paragraph("", cell_style) if view_type in ("teacher", "room") else Paragraph("—", cell_style))
                     elif cell["kind"] == "continued":
                         cells.append(Paragraph("<br/>".join("↳ " + pdf_text(str(x.get("subject_initial") or "").strip().upper() or "—") + " continues" for x in cell["lessons"]), cell_style))
                     else:
