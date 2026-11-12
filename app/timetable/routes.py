@@ -125,7 +125,6 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
                 <div class='tt-home-empty-icon'>▦</div><span class='tt-home-eyebrow'>GET STARTED</span>
                 <h2>Create your first timetable profile</h2>
                 <p>Start by choosing the academic year and term. Then configure school days, lesson periods, rooms and teaching requirements before building your timetable.</p>
-                <a class='tt-home-primary' href='/app/timetable/setup'>Create timetable profile <span>→</span></a>
               </section>"""
         notice = f"<div class='tt-home-notice {'error' if error else 'success'}'>{escape(message)}</div>" if message else ""
         profile_catalog_html = (
@@ -137,6 +136,23 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
                 for p in profiles
             ) + "</div></section>"
         ) if profiles else ""
+        create_profile_modal = """
+          <dialog class='tt-home-profile-modal' id='tt-home-create-profile-modal' aria-labelledby='tt-home-create-profile-title'>
+            <div class='tt-home-profile-modal-head'>
+              <div><span class='tt-home-eyebrow'>NEW TIMETABLE</span><h3 id='tt-home-create-profile-title'>Create timetable profile</h3><p>Choose the programme, academic year and term for this timetable.</p></div>
+              <button type='button' data-close-create-profile aria-label='Close'>×</button>
+            </div>
+            <form method='post' data-native-post='true' action='/app/timetable/setup/profile' class='tt-home-profile-form'>
+              <label>Timetable type<select name='profile_type' required><option value='main'>Main School Timetable</option><option value='weekend'>Weekend Lessons</option><option value='remedial'>Weekday Remedials</option><option value='special'>Other / Special Timetable</option></select></label>
+              <label>Profile name<input name='name' required maxlength='80' placeholder='e.g. 2027 Term 1 Weekend Lessons'></label>
+              <label>Academic year<input name='academic_year' required maxlength='20' placeholder='2027'></label>
+              <label>Term / semester<input name='term' required maxlength='40' placeholder='Term 1, Semester 1, Quarter 1…'></label>
+              <label>Academic start date<input name='academic_start_date' type='date'></label>
+              <label>Academic end date<input name='academic_end_date' type='date'></label>
+              <div class='tt-home-profile-modal-actions'><button type='button' class='tt-home-profile-cancel' data-close-create-profile>Cancel</button><button type='submit' class='tt-home-profile-save'>Create profile</button></div>
+            </form>
+          </dialog>
+        """
         body = f"""
         <style>
            .tt-home-notice{{padding:10px 14px;border-radius:10px;margin:0 0 14px;font-size:12px;font-weight:700;background:#eaf5ec;color:#17633b}}.tt-home-notice.error{{background:#fff1f0;color:#a12828}}
@@ -279,14 +295,15 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
 
         </style>
         <main class='tt-home'>
-          <section class='tt-home-hero'><div class='tt-home-hero-copy'><span class='tt-home-eyebrow'>MABALE_ICT · ACADEMIC OPERATIONS</span><h1>Smart Timetable</h1><p>Plan, organise and publish a balanced school timetable. Manage teaching requirements, build schedules and keep every class and teacher in sync.</p><div class='tt-home-hero-actions'><a class='tt-home-primary' href='/app/timetable/setup#tt-profile-create-modal'>＋ Create New Timetable</a></div></div><div class='tt-home-hero-mark'>▦</div></section>
+          <section class='tt-home-hero'><div class='tt-home-hero-copy'><span class='tt-home-eyebrow'>MABALE_ICT · ACADEMIC OPERATIONS</span><h1>Smart Timetable</h1><p>Plan, organise and publish a balanced school timetable. Manage teaching requirements, build schedules and keep every class and teacher in sync.</p><div class='tt-home-hero-actions'><button class='tt-home-primary' type='button' data-open-create-profile>＋ Create Timetable Profile</button></div></div><div class='tt-home-hero-mark'>▦</div></section>
           {profile_control}
           {notice}
           {profile_panel}
           {profile_catalog_html}
           {profile_edit_modal}
+          {create_profile_modal}
         </main>
-        <script>(function(){{const dialog=document.getElementById('tt-home-profile-edit-modal');if(!dialog)return;document.querySelector('[data-open-profile-edit]')?.addEventListener('click',()=>dialog.showModal());dialog.querySelectorAll('[data-close-profile-edit]').forEach(b=>b.addEventListener('click',()=>dialog.close()));dialog.addEventListener('click',e=>{{if(e.target===dialog)dialog.close();}});}})();</script>"""
+        <script>(function(){{const editDialog=document.getElementById('tt-home-profile-edit-modal');if(editDialog){{document.querySelector('[data-open-profile-edit]')?.addEventListener('click',()=>editDialog.showModal());editDialog.querySelectorAll('[data-close-profile-edit]').forEach(b=>b.addEventListener('click',()=>editDialog.close()));editDialog.addEventListener('click',e=>{{if(e.target===editDialog)editDialog.close();}});}}const createDialog=document.getElementById('tt-home-create-profile-modal');if(createDialog){{document.querySelector('[data-open-create-profile]')?.addEventListener('click',()=>createDialog.showModal());createDialog.querySelectorAll('[data-close-create-profile]').forEach(b=>b.addEventListener('click',()=>createDialog.close()));createDialog.addEventListener('click',e=>{{if(e.target===createDialog)createDialog.close();}});}}}})();</script>"""
         return module_page(request, "Smart Timetable", "timetable", body)
 
     @app.get("/app/timetable/room-allocation", response_class=HTMLResponse)
@@ -951,7 +968,7 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
           </script>
         """
 
-        create_profile_html = """<span id='tt-profile-create-close'></span><div class='tt-modal' id='tt-profile-create-modal' role='dialog' aria-modal='true' aria-labelledby='tt-profile-create-title'><div class='tt-modal-dialog'><div class='tt-modal-head'><div><span class='tt-kicker'>FIRST STEP</span><h3 id='tt-profile-create-title'>Create timetable profile</h3><p>Choose the academic year and term for this schedule.</p></div><a class='tt-modal-close' href='#tt-profile-create-close' aria-label='Close'>&times;</a></div><form method='post' data-native-post='true' action='/app/timetable/setup/profile' class='tt-form'><label>Timetable type<select name='profile_type' required><option value='main'>Main School Timetable</option><option value='weekend'>Weekend Lessons</option><option value='remedial'>Weekday Remedials</option><option value='special'>Other / Special Timetable</option></select></label><label>Profile name<input name='name' required maxlength='80' placeholder='e.g. 2027 Term 1 Weekend Lessons'></label><label>Academic year<input name='academic_year' required maxlength='20' placeholder='2027'></label><label>Term / semester<input name='term' required maxlength='40' placeholder='Term 1, Semester 1, Quarter 1…'></label><label>Academic start date<input name='academic_start_date' type='date'></label><label>Academic end date<input name='academic_end_date' type='date'></label><button class='tt-btn' type='submit'>Create profile</button></form></div></div>"""
+        create_profile_html = ""
         read_only_html = (
             f"<div class='tt-alert success'>This profile is {esc(selected['status']).replace('_',' ')} and cannot be edited. Create a new draft revision from <a href='/app/timetable/publishing?profile_id={pid}'>Publishing & Versions</a>.</div>"
             if selected and selected_status != "draft" else ""
