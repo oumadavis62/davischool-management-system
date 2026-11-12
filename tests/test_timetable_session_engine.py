@@ -19,7 +19,7 @@ class TimetableSessionEngineTests(unittest.TestCase):
         self.db = sqlite3.connect(":memory:")
         self.db.row_factory = sqlite3.Row
         ensure_timetable_schema(self.db)
-        self.db.execute("CREATE TABLE classes (id INTEGER PRIMARY KEY, school_id INTEGER NOT NULL, name TEXT)")
+        self.db.execute("CREATE TABLE classes (id INTEGER PRIMARY KEY, school_id INTEGER NOT NULL, name TEXT, initials TEXT)")
         self.db.execute("CREATE TABLE teachers (id INTEGER PRIMARY KEY, school_id INTEGER NOT NULL, name TEXT)")
         self.db.execute("CREATE TABLE subjects (id INTEGER PRIMARY KEY, school_id INTEGER NOT NULL, name TEXT)")
         self.db.executemany("INSERT INTO subjects(id,school_id,name) VALUES(?,?,?)", [(5,8,"Science"),(9,8,"Mathematics")])
