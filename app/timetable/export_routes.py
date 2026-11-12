@@ -334,6 +334,18 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
             meta_style,
         )
         story.extend([meta_line, Spacer(1,6)])
+        if view_type == "class":
+            class_teacher_names = result.get("class_teacher_names") or []
+            class_teacher_label = ", ".join(class_teacher_names) if class_teacher_names else "____________________________"
+            class_teacher_style = ParagraphStyle(
+                "ClassTeacherLine", parent=styles["Normal"],
+                alignment=TA_LEFT, fontSize=9, leading=11,
+            )
+            story.append(Paragraph(
+                "<b>Class Teacher:</b> " + pdf_text(class_teacher_label),
+                class_teacher_style,
+            ))
+            story.append(Spacer(1, 5))
         layout = build_export_grid(result, view_type)
         timeline = layout["timeline"]
         individual_row_height = max(24, (doc.height - 82 - 22) / max(1, len(layout["rows"]))) if view_type in ("class", "teacher", "room") else 58
@@ -650,8 +662,9 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
         if print_sheet and view_type in ("class", "teacher", "room"):
             timetable_flowables = story[timetable_story_start:]
             del story[timetable_story_start:]
+            reserved_height = 98 if view_type == "class" else 82
             story.append(KeepInFrame(
-                doc.width, max(1, doc.height - 82), timetable_flowables,
+                doc.width, max(1, doc.height - reserved_height), timetable_flowables,
                 mode="shrink", hAlign="LEFT", vAlign="TOP",
             ))
 
