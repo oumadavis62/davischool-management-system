@@ -355,8 +355,11 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
         first_day_rows = layout["rows"][:max(1, layout["rows"][0]["day_rowspan"])]
         # Individual class, teacher, and room sheets use one continuous table so
         # each merged break label spans every instructional day.
-        rows_per_day = (len(layout["rows"]) if view_type in ("class", "teacher", "room")
-                        else max(1, len(first_day_rows)))
+        rows_per_day = (
+            len(layout["rows"])
+            if print_sheet or view_type in ("class", "teacher", "room")
+            else max(1, len(first_day_rows))
+        )
         widths = [first_width] + ([class_width] if layout["show_class_column"] else []) + timeline_widths
 
         # Render each day as its own full-width table. This keeps each day's
@@ -387,15 +390,15 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                     cell = original_cell
                     if cell["kind"] == "break_placeholder":
                         timeline_entry = timeline[timeline_cursor]
-                        if timeline_entry[1] == "break" and day_row_index == 0:
-                            cell = {"kind": "break", "item": timeline_entry[2], "rowspan": len(day_rows)}
+                        if timeline_entry[1] == "break" and row["day_first"]:
+                            cell = {"kind": "break", "item": timeline_entry[2], "rowspan": row["day_rowspan"]}
                         else:
                             cells.append("")
                             timeline_cursor += 1
                             continue
                     if cell["kind"] == "break":
-                        if day_row_index == 0:
-                            cell = dict(cell, rowspan=len(day_rows))
+                        if row["day_first"]:
+                            cell = dict(cell, rowspan=row["day_rowspan"])
                         b = cell["item"]
                         break_label = "<br/>".join(pdf_text(ch) for ch in str(b["label"]))
                         break_style = ParagraphStyle("ExportBreak", parent=cell_style, alignment=TA_CENTER, fontSize=10, leading=11, textColor=colors.black if print_sheet else colors.HexColor("#75551d"))
