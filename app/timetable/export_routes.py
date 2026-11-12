@@ -499,11 +499,6 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                                     ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
                                 ]))
                                 cells.append(text_layout)
-                                if view_type == "school":
-                                    # Anchor whole-school print cell content at the top so
-                                    # its period marker sits in the top-left corner.
-                                    print_cell_col = len(cells) - 1
-                                    span_commands.append(("VALIGN", (print_cell_col, row_index), (print_cell_col, row_index), "TOP"))
                             if cell["span"] > 1:
                                 col = len(cells) - 1
                                 span_commands.append(("SPAN", (col, row_index), (col + cell["span"] - 1, row_index)))
