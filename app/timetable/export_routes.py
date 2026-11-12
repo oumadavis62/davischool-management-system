@@ -427,7 +427,7 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                                 card_rows.append([Paragraph("<font backColor='#245b39' color='white'><b>" + pdf_text(footer_label) + "</b></font>", footer_style)])
                             card = Table(
                                 card_rows,
-                                colWidths=[card_width],
+                                colWidths=([card_width * 0.20, card_width * 0.60, card_width * 0.20] if view_type in ("teacher", "room") else [card_width]),
                                 rowHeights=(
                                     [resource_card_height * 0.15, resource_card_height * 0.70, resource_card_height * 0.15]
                                     if view_type in ("teacher", "room") else
