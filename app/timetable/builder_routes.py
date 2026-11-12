@@ -730,7 +730,7 @@ def register_timetable_builder_routes(app, get_db, get_school_obj, module_page):
             
         }}
         </style>
-        <div class='tb-wrap'><header class='tb-hero'><div><span class='tb-kicker'>D-SCHOOL · TIMETABLE WORKSPACE</span><h2>Manual Timetable Builder</h2><p>Drag to move · Select a tool for other actions.</p></div></header>{notice}<div class='tb-toolbar'>{profile_selector}<div class='tb-profile-context'><strong>{esc(profile_display_name(selected['name']))}</strong><span>{esc(selected['academic_year'])} · {esc(selected['term'])}</span></div></div><nav class='tb-toolbar' aria-label='Builder tools'>{builder_tool_buttons}</nav>{grid}{builder_modals}</div>
+        <div class='tb-wrap'><header class='tb-hero'><div><span class='tb-kicker'>MABALE_ICT · TIMETABLE WORKSPACE</span><h2>Manual Timetable Builder</h2><p>Drag to move · Select a tool for other actions.</p></div></header>{notice}<div class='tb-toolbar'>{profile_selector}<div class='tb-profile-context'><strong>{esc(profile_display_name(selected['name']))}</strong><span>{esc(selected['academic_year'])} · {esc(selected['term'])}</span></div></div><nav class='tb-toolbar' aria-label='Builder tools'>{builder_tool_buttons}</nav>{grid}{builder_modals}</div>
         <script>
         (function(){{
           const modals=Array.from(document.querySelectorAll('.tb-modal'));

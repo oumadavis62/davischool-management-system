@@ -1,4 +1,4 @@
-# D-School Management System
+# Mabale_ICT Management System
 
 A secure browser-based school management platform designed for online deployment.
 
