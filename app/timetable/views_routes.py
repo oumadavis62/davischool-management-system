@@ -222,7 +222,7 @@ def register_timetable_view_routes(app, get_db, get_school_obj, module_page):
                                 teacher_initials = str(lesson["teacher_initials"] or "").strip().upper()
                                 if not teacher_initials:
                                     name_parts = [part for part in str(lesson["teacher_name"] or "").split() if part]
-                                    teacher_initials = "".join(part[0] for part in (name_parts[:1] + (name_parts[-1:] if len(name_parts) > 1 else []))).upper()[:4] or "—"
+                                    teacher_initials = "".join(part[0] for part in (name_parts[:1] + (name_parts[-1:] if len(name_parts) > 1 else []))).upper()[:4] or ""
                                 subject_initial = str(lesson["subject_initial"] or "").strip().upper() or "—"
                                 room_html = "" if view_type == "room" else f"<div class='tb-meta tb-room-label'>⌂ {esc(lesson['room_name'] or 'Room not assigned')}</div>"
                                 class_label = esc(str(lesson["class_name"]) + ((" " + str(lesson["stream"])) if lesson["stream"] else ""))
@@ -330,7 +330,7 @@ def register_timetable_view_routes(app, get_db, get_school_obj, module_page):
         .tv-wrap .tb-grid .tb-lesson{{--teacher-color:#2563EB;position:relative;box-sizing:border-box;background:color-mix(in srgb,var(--teacher-color) 17%,white);border:1px solid color-mix(in srgb,var(--teacher-color) 48%,white);border-left:4px solid var(--teacher-color);border-radius:8px;padding:5px 7px;min-height:66px;color:#234638;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;text-align:center;gap:2px;box-shadow:0 2px 7px rgba(35,83,51,.07)}}
         .tv-wrap .tb-grid .tb-lesson-top{{position:static;display:flex;justify-content:center;align-items:center;gap:9px;font-size:10px;width:100%}}
         .tv-wrap .tb-grid .tb-lesson-top span{{position:absolute;top:4px;right:5px;font-size:9px;background:#d5e9d9;border-radius:10px;padding:2px 5px}}
-        .tv-wrap .tb-grid .tb-subject-initials{{font-size:12px;letter-spacing:.5px;font-weight:950}}
+        .tv-wrap .tb-grid .tb-subject-initials{{font-size:11.4px;letter-spacing:.5px;font-weight:950}}
         .tv-wrap .tb-grid .tb-meta{{font-size:8px;color:#55705d;margin-top:2px}}
         .tv-wrap .tb-grid .tb-room-label{{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}}
         .tv-wrap .tb-grid .tb-class-label{{font-size:9px;font-weight:850;color:#315f43;line-height:1.15;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}}
@@ -376,7 +376,7 @@ def register_timetable_view_routes(app, get_db, get_school_obj, module_page):
         .tv-wrap .tb-grid .tb-break-cell>span i{{display:block;font-style:normal;font-size:clamp(20px,3.4vh,34px);font-weight:950;line-height:1;letter-spacing:0}}
         /* Keep the requested teacher/room cell hierarchy active in compact and main views. */
         .tv-wrap .tb-grid-resource .tb-resource-lesson{{position:relative;min-height:80px;height:100%;padding:12px 3px 7px;display:flex;flex-direction:column;align-items:center;justify-content:center}}
-        .tv-wrap .tb-grid-resource .tb-resource-subject{{position:absolute;top:4px;left:5px;right:auto;font-size:12px;line-height:1;font-weight:900}}
+        .tv-wrap .tb-grid-resource .tb-resource-subject{{position:absolute;top:4px;left:5px;right:auto;font-size:11.4px;line-height:1;font-weight:900}}
         .tv-wrap .tb-grid-resource .tb-resource-duration{{position:absolute;top:4px;right:5px;left:auto;font-size:11px;line-height:1;font-weight:900}}
         .tv-wrap .tb-grid-resource .tb-resource-class{{display:flex;flex:1;align-items:center;justify-content:center;width:100%;min-height:0;text-align:center;font-size:clamp(25px,2.2vw,34px);line-height:.95;font-weight:950;letter-spacing:-.04em;overflow-wrap:anywhere}}
         .tv-wrap .tb-grid-resource .tb-resource-cell-footer{{position:absolute;bottom:3px;left:4px;right:4px;display:flex;justify-content:space-between;gap:2px;font-size:7px}}
