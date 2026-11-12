@@ -6,11 +6,12 @@ session can serve combined classes and be delivered by a teaching team.
 """
 from __future__ import annotations
 
-from datetime import date, timedelta, datetime
+from datetime import date, timedelta
 import re
 from typing import Any, Iterable
 
 from app.timetable.setup import TimetableSetupError, _profile
+from app.timetable.time_utils import now_eat
 from app.timetable.advanced_setup import resolve_calendar_occurrence
 
 _TIME_RE = re.compile(r"^(?:[01]\d|2[0-3]):[0-5]\d$")
@@ -738,7 +739,7 @@ def create_scheduled_session(connection: Any, school_id: int, profile_id: int,
             for item in conflicts
         )
         raise TimetableSetupError("This session conflicts with " + summary + ".")
-    now = datetime.utcnow().replace(microsecond=0).isoformat() + "Z"
+    now = now_eat()
     try:
         cur.execute(
             """INSERT INTO ds_timetable_sessions
