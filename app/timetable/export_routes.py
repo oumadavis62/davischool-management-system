@@ -286,12 +286,12 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                 self.canv.saveState()
                 self.canv.setFont("Helvetica", 7)
                 self.canv.setFillColor(colors.HexColor("#536b58"))
-                self.canv.drawString(self.leftMargin, 28, self.footer_left)
-                self.canv.drawRightString(self.pagesize[0] - self.rightMargin, 28, self.footer_right)
+                self.canv.drawString(self.leftMargin, 52, self.footer_left)
+                self.canv.drawRightString(self.pagesize[0] - self.rightMargin, 52, self.footer_right)
                 self.canv.restoreState()
                 super().afterPage()
 
-        doc = FooterSimpleDocTemplate(buffer, pagesize=landscape(A4), leftMargin=18, rightMargin=18, topMargin=18, bottomMargin=44)
+        doc = FooterSimpleDocTemplate(buffer, pagesize=landscape(A4), leftMargin=18, rightMargin=18, topMargin=18, bottomMargin=68)
         doc.footer_left = ""
         doc.footer_right = ""
         styles = getSampleStyleSheet()
