@@ -596,8 +596,8 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
             story.append(KeepInFrame(doc.width, doc.height - 34, [weekend_table], mode="shrink", hAlign="LEFT", vAlign="TOP"))
         generated_at = datetime.now(EAT).strftime("%d %b %Y %H:%M EAT")
         def draw_export_footer(canvas, document):
-            if view_type not in ("teacher", "room"):
-                return
+            # Keep the same generated footer on every PDF sheet. The Print
+            # button opens this exact PDF inline, so its printed pages inherit it.
             canvas.saveState()
             canvas.setFont("Helvetica", 7)
             canvas.setFillColor(colors.HexColor("#536b58"))
