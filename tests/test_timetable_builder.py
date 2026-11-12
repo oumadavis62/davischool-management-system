@@ -31,7 +31,7 @@ class TimetableBuilderTests(unittest.TestCase):
             );
         """)
         self.db.executemany("INSERT INTO teachers VALUES(?,?,?)", [(10,1,"Teacher A"),(11,1,"Teacher B")])
-        self.db.executemany("INSERT INTO classes VALUES(?,?,?,?)", [(20,1,"Grade 7","Blue"),(21,1,"Grade 8","Green")])
+        self.db.executemany("INSERT INTO classes VALUES(?,?,?,?,?)", [(20,1,"Grade 7","Blue","G7"),(21,1,"Grade 8","Green","G8")])
         self.db.executemany("INSERT INTO subjects VALUES(?,?,?)", [(30,1,"Mathematics"),(31,1,"English")])
         self.db.executemany(
             "INSERT INTO teacher_allocations VALUES(?,?,?,?,?)",
