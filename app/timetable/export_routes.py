@@ -15,6 +15,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
 from app.timetable.views import get_timetable_view
 from app.timetable.setup import TimetableSetupError
 from app.timetable.export_grid import build_export_grid
+from app.timetable.time_utils import EAT
 
 logger = logging.getLogger(__name__)
 
@@ -215,7 +216,7 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
         header_html = "<th>" + headers[0] + "</th>" + (("<th>" + headers[1] + "</th>") if layout["show_class_column"] else "") + "".join("<th class='" + ("break-header" if kind == "break" else "period-header") + "'>" + (str(item["start_time"]) + "–" + str(item["end_time"]) if kind == "break" else str(item["label"]) + "<br>" + str(item["start_time"]) + "–" + str(item["end_time"])) + "</th>" for _, kind, item in timeline)
         specialized_export = view_type != "school"
         timetable_table_class = "specialized-timetable" if specialized_export else "main-timetable"
-        generated_at = datetime.now().astimezone().strftime("%d %b %Y %H:%M %Z")
+        generated_at = datetime.now(EAT).strftime("%d %b %Y %H:%M EAT")
         export_footer = ("<footer class='export-footer'><span>Mabale_ICT Management System · Generated: " + escape(generated_at) + "</span><span>Total scheduled lessons: " + str(len(result["lessons"])) + "</span></footer>") if view_type in ("teacher", "room") else ""
         room_period_css = ".resource-duration{top:3px;bottom:auto;right:5px}" if view_type == "room" else ""
         html=f"""<!doctype html><html><head><meta charset="utf-8"><title>{title}</title>
@@ -580,7 +581,7 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
             # Keep both weekend rotations together on one A4 landscape page.
             # Shrink only this consolidated sheet when a school has many entries.
             story.append(KeepInFrame(doc.width, doc.height - 34, [weekend_table], mode="shrink", hAlign="LEFT", vAlign="TOP"))
-        generated_at = datetime.now().astimezone().strftime("%d %b %Y %H:%M %Z")
+        generated_at = datetime.now(EAT).strftime("%d %b %Y %H:%M EAT")
         def draw_export_footer(canvas, document):
             if view_type not in ("teacher", "room"):
                 return
@@ -835,7 +836,7 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                 ws.page_setup.fitToHeight = 0
 
         if view_type in ("teacher", "room"):
-            generated_at = datetime.now().astimezone().strftime("%d %b %Y %H:%M %Z")
+            generated_at = datetime.now(EAT).strftime("%d %b %Y %H:%M EAT")
             sheet.oddFooter.left.text = "Mabale_ICT Management System · Generated: " + generated_at
             sheet.oddFooter.right.text = "Total scheduled lessons: " + str(len(result["lessons"]))
             sheet.oddFooter.left.size = 8

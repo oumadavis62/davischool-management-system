@@ -9,6 +9,7 @@ from fastapi import Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 
 from app.timetable.setup import TimetableSetupError
+from app.timetable.time_utils import format_eat
 from app.timetable.publishing import profile_display_name
 from app.timetable.generator import (
     generate_timetable, generate_advanced_instructional_sessions,
@@ -278,10 +279,10 @@ def register_timetable_generator_routes(app, get_db, get_school_obj, module_page
             row_status = str(r["status"] or "unknown")
             active_run = row_status.lower() in ("queued", "running", "processing")
             return (
-                f"<tr><td>#{int(r['id'])}</td><td>{esc(r['created_at'])}</td>"
+                f"<tr><td>#{int(r['id'])}</td><td>{esc(format_eat(r['created_at']))}</td>"
                 f"<td><span class='ag-state {'good' if row_status.lower()=='completed' else 'bad'}'>{esc(row_status)}</span></td>"
                 f"<td>{esc(r['engine_version'])}</td>"
-                f"<td><button type='button' class='ag-view-result' data-run-id='{int(r['id'])}' data-run-status='{esc(row_status)}' data-run-created='{esc(r['created_at'])}' data-run-engine='{esc(r['engine_version'])}' data-run-summary='{summary_attr}'>View result</button></td>"
+                f"<td><button type='button' class='ag-view-result' data-run-id='{int(r['id'])}' data-run-status='{esc(row_status)}' data-run-created='{esc(format_eat(r['created_at']))}' data-run-engine='{esc(r['engine_version'])}' data-run-summary='{summary_attr}'>View result</button></td>"
                 f"""<td><form method="post" action="/app/timetable/automatic/generation-report/delete" class="ag-delete-form" onsubmit="return confirm('Delete generation report run #{int(r['id'])}? This removes only the audit report. Existing timetable lessons will remain unchanged.');">"""
                 f"<input type='hidden' name='profile_id' value='{pid}'><input type='hidden' name='run_id' value='{int(r['id'])}'>{tab_field}<button type='submit' class='ag-delete-btn' {'disabled' if active_run else ''}>Delete</button></form></td></tr>"
             )

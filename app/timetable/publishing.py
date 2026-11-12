@@ -1,7 +1,8 @@
 """Timetable approval, publication, immutable snapshots and revisions."""
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime
+from app.timetable.time_utils import now_eat
 import json
 import re
 from typing import Any
@@ -10,7 +11,7 @@ from app.timetable.setup import TimetableSetupError
 
 
 def _now() -> str:
-    return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+    return now_eat()
 
 
 def _row_dict(row):

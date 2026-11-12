@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from app.timetable.time_utils import now_eat
 import re
 from typing import Any
 
@@ -14,7 +15,7 @@ class TimetableSetupError(ValueError):
 
 
 def _now() -> str:
-    return datetime.utcnow().replace(microsecond=0).isoformat() + "Z"
+    return now_eat()
 
 
 def _profile(cursor: Any, school_id: int, profile_id: int):
@@ -412,16 +413,16 @@ def save_class_limits(connection: Any, school_id: int, profile_id: int,
     if existing:
         cur.execute(
             """UPDATE ds_timetable_class_limits
-               SET max_lessons_per_week=?,max_periods_per_day=?,notes=?,updated_at=CURRENT_TIMESTAMP
+               SET max_lessons_per_week=?,max_periods_per_day=?,notes=?,updated_at=?
                WHERE id=? AND school_id=?""",
-            values + (existing["id"], school_id),
+            values + (now_eat(), existing["id"], school_id),
         )
     else:
         cur.execute(
             """INSERT INTO ds_timetable_class_limits
-               (school_id,profile_id,class_id,max_lessons_per_week,max_periods_per_day,notes)
-               VALUES(?,?,?,?,?,?)""",
-            (school_id, profile_id, class_id) + values,
+               (school_id,profile_id,class_id,max_lessons_per_week,max_periods_per_day,notes,updated_at)
+               VALUES(?,?,?,?,?,?,?)""",
+            (school_id, profile_id, class_id) + values + (now_eat(),),
         )
     connection.commit()
 
