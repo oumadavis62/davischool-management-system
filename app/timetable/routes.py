@@ -970,7 +970,7 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
 
         create_profile_html = ""
         read_only_html = (
-            f"<div class='tt-alert success'>This profile is {esc(selected['status']).replace('_',' ')} and cannot be edited. Create a new draft revision from <a href='/app/timetable/publishing?profile_id={pid}'>Publishing & Versions</a>.</div>"
+            f"<div class='tt-alert success'>This profile is {esc(selected['status']).replace('_',' ')} and cannot be edited.</div>"
             if selected and selected_status != "draft" else ""
         )
         sections = ""
