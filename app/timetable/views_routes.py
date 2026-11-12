@@ -229,7 +229,7 @@ def register_timetable_view_routes(app, get_db, get_school_obj, module_page):
                                 class_initials = esc(str(lesson.get("class_initials") or "").strip().upper() or class_label)
                                 if view_type in ("teacher", "room"):
                                     resource_footer = (
-                                        f"<div class='tb-resource-cell-footer'><span class='tb-resource-room'>{esc(lesson['room_name'] or 'Room not assigned') if view_type == 'teacher' else ''}</span>"
+                                        f"<div class='tb-resource-cell-footer'>{('<span class=\'tb-resource-room\'>' + esc(lesson['room_name']) + '</span>') if view_type == 'teacher' and lesson.get('room_name') else ''}"
                                         f"<span class='tb-resource-teacher'>{esc(teacher_initials) if view_type == 'room' else ''}</span></div>"
                                     )
                                     cards.append(
