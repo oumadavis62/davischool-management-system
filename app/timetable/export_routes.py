@@ -501,9 +501,10 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
             if day_start + rows_per_day < len(layout["rows"]):
                 story.append(Spacer(1, 5))
 
-        if view_type in ("class", "teacher", "room"):
-            # Keep cover, metadata, and the complete individual timetable together.
-            story = [KeepInFrame(doc.width, doc.height, story, mode="shrink", hAlign="CENTER", vAlign="TOP")]
+        # Do not wrap the timetable in KeepInFrame(mode="shrink"). Individual
+        # timetables can contain more rows than one landscape page; shrinking the
+        # complete sheet makes every cell tiny and causes its contents to collide.
+        # Let ReportLab paginate the table at its natural A4 landscape size.
 
         if result.get("dated_instructional_sessions"):
             from reportlab.platypus import PageBreak
@@ -830,8 +831,9 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                 ws.sheet_properties.pageSetUpPr.autoPageBreaks = False
                 ws.print_area = "A1:J" + str(ws.max_row)
             elif view_type in ("class", "teacher", "room") and ws is sheet:
-                ws.page_setup.fitToHeight = 1
-                ws.sheet_properties.pageSetUpPr.autoPageBreaks = False
+                # Keep the grid one page wide, but allow additional landscape
+                # pages vertically instead of shrinking all rows onto one page.
+                ws.page_setup.fitToHeight = 0
                 ws.print_area = "A1:" + get_column_letter(last_col) + str(row_index - 1)
             else:
                 ws.page_setup.fitToHeight = 0
