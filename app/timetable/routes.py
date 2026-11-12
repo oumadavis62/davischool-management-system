@@ -482,7 +482,7 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
 
             calendar_events = cur.execute("SELECT * FROM ds_timetable_calendar_exceptions WHERE school_id=? AND profile_id=? ORDER BY exception_date,label", (school_id,pid)).fetchall()
             rooms = cur.execute("SELECT * FROM ds_timetable_rooms WHERE school_id=? AND is_active=1 ORDER BY name", (school_id,)).fetchall()
-            teachers = cur.execute("SELECT id,name,teacher_color,teacher_initials FROM teachers WHERE school_id=? ORDER BY name", (school_id,)).fetchall()
+            teachers = cur.execute("SELECT id,name,teacher_color,teacher_initials FROM teachers WHERE school_id=? AND lower(trim(COALESCE(role, ''))) = 'teacher' ORDER BY name", (school_id,)).fetchall()
             class_records = cur.execute("SELECT id,name,stream FROM classes WHERE school_id=? ORDER BY name,stream", (school_id,)).fetchall()
             allocations = cur.execute(
                 """SELECT DISTINCT ta.class_id,ta.subject_id,ta.teacher_id,c.name class_name,c.stream,
@@ -491,7 +491,7 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
                    JOIN classes c ON c.id=ta.class_id AND c.school_id=ta.school_id
                    JOIN subjects s ON s.id=ta.subject_id AND s.school_id=ta.school_id
                    JOIN teachers t ON t.id=ta.teacher_id AND t.school_id=ta.school_id
-                   WHERE ta.school_id=? ORDER BY c.name,c.stream,s.name,t.name""",
+                   WHERE ta.school_id=? AND lower(trim(COALESCE(t.role, ''))) = 'teacher' ORDER BY c.name,c.stream,s.name,t.name""",
                 (school_id,),
             ).fetchall()
             availability = cur.execute(
@@ -500,7 +500,7 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
                    JOIN teachers t ON t.id=a.teacher_id AND t.school_id=a.school_id
                    JOIN ds_timetable_days d ON d.id=a.day_id AND d.profile_id=a.profile_id
                    JOIN ds_timetable_periods p ON p.id=a.period_id AND p.profile_id=a.profile_id
-                   WHERE a.school_id=? AND a.profile_id=? AND a.availability IN ('fallback','unavailable') ORDER BY d.day_order,p.period_no,t.name""",
+                   WHERE a.school_id=? AND a.profile_id=? AND lower(trim(COALESCE(t.role, ''))) = 'teacher' AND a.availability IN ('fallback','unavailable') ORDER BY d.day_order,p.period_no,t.name""",
                 (school_id,pid),
             ).fetchall()
             subjects = cur.execute("SELECT id,name FROM subjects WHERE school_id=? ORDER BY name", (school_id,)).fetchall()
@@ -519,7 +519,7 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
                    JOIN classes c ON c.id=r.class_id AND c.school_id=r.school_id
                    JOIN subjects s ON s.id=r.subject_id AND s.school_id=r.school_id
                    JOIN teachers t ON t.id=r.teacher_id AND t.school_id=r.school_id
-                   WHERE r.school_id=? AND r.profile_id=? ORDER BY c.name,c.stream,s.name""",
+                   WHERE r.school_id=? AND r.profile_id=? AND lower(trim(COALESCE(t.role, ''))) = 'teacher' ORDER BY c.name,c.stream,s.name""",
                 (school_id,pid),
             ).fetchall()
             class_limits = cur.execute(
@@ -1729,7 +1729,7 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
         days = cur.execute("SELECT id,day_name FROM ds_timetable_days WHERE school_id=? AND profile_id=? ORDER BY day_order", (school_id,pid)).fetchall()
         periods = cur.execute("SELECT id,label FROM ds_timetable_periods WHERE school_id=? AND profile_id=? ORDER BY period_no", (school_id,pid)).fetchall()
         classes = cur.execute("SELECT id,name,stream FROM classes WHERE school_id=? ORDER BY name,stream", (school_id,)).fetchall()
-        teachers = cur.execute("SELECT id,name FROM teachers WHERE school_id=? ORDER BY name", (school_id,)).fetchall()
+        teachers = cur.execute("SELECT id,name FROM teachers WHERE school_id=? AND lower(trim(COALESCE(role, ''))) = 'teacher' ORDER BY name", (school_id,)).fetchall()
         subjects = cur.execute("SELECT id,name FROM subjects WHERE school_id=? ORDER BY name", (school_id,)).fetchall()
         rooms = cur.execute("SELECT id,name FROM ds_timetable_rooms WHERE school_id=? AND is_active=1 ORDER BY name", (school_id,)).fetchall()
         rules = cur.execute(
@@ -1886,6 +1886,13 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
             return RedirectResponse("/", 303)
         con = get_db()
         try:
+            if teacher_id:
+                valid_teacher = con.execute(
+                    "SELECT id FROM teachers WHERE id=? AND school_id=? AND lower(trim(COALESCE(role, ''))) = 'teacher'",
+                    (int(teacher_id), int(school["id"])),
+                ).fetchone()
+                if not valid_teacher:
+                    raise TimetableSetupError("Select a staff member designated as Teacher in the Staff List.")
             save_timetable_constraint(
                 con, int(school["id"]), profile_id, name, constraint_type, applies_to, schedule_layer,
                 int(subject_id) if subject_id else None, int(teacher_id) if teacher_id else None,
@@ -2162,7 +2169,7 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
         if not school: return RedirectResponse("/", 303)
         con = get_db()
         try:
-            teacher = con.execute("SELECT id FROM teachers WHERE id=? AND school_id=?", (teacher_id, int(school["id"]))).fetchone()
+            teacher = con.execute("SELECT id FROM teachers WHERE id=? AND school_id=? AND lower(trim(COALESCE(role, ''))) = 'teacher'", (teacher_id, int(school["id"]))).fetchone()
             if not teacher:
                 raise TimetableSetupError("Select a valid teacher.")
             configured_days = {int(r["id"]) for r in con.execute("SELECT id FROM ds_timetable_days WHERE school_id=? AND profile_id=?", (int(school["id"]), profile_id)).fetchall()}
@@ -2236,6 +2243,12 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
         if not school: return RedirectResponse("/", 303)
         con = get_db()
         try:
+            valid_teacher = con.execute(
+                "SELECT id FROM teachers WHERE id=? AND school_id=? AND lower(trim(COALESCE(role, ''))) = 'teacher'",
+                (teacher_id, int(school["id"])),
+            ).fetchone()
+            if not valid_teacher:
+                raise TimetableSetupError("Select a staff member designated as Teacher in the Staff List.")
             save_teacher_availability(con, int(school["id"]), profile_id, teacher_id, day_id, period_id, availability, reason)
             return redirect_setup(profile_id, "Teacher availability saved.", request=request)
         except (TimetableSetupError, ValueError) as exc:
@@ -2339,8 +2352,10 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
             else:
                 class_id, teacher_id, subject_id = int(class_id or 0), int(teacher_id or 0), int(subject_id or 0)
             valid_allocation = con.execute(
-                """SELECT 1 FROM teacher_allocations
-                   WHERE school_id=? AND class_id=? AND teacher_id=? AND subject_id=? LIMIT 1""",
+                """SELECT 1 FROM teacher_allocations ta
+                   JOIN teachers t ON t.id=ta.teacher_id AND t.school_id=ta.school_id
+                   WHERE ta.school_id=? AND ta.class_id=? AND ta.teacher_id=? AND ta.subject_id=?
+                     AND lower(trim(COALESCE(t.role, ''))) = 'teacher' LIMIT 1""",
                 (int(school["id"]), class_id, teacher_id, subject_id),
             ).fetchone()
             if not valid_allocation:
