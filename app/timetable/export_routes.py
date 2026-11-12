@@ -408,9 +408,55 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                     elif cell["kind"] == "continued":
                         cells.append(Paragraph("<br/>".join("↳ " + pdf_text(str(x.get("subject_initial") or "").strip().upper() or "—") + " continues" for x in cell["lessons"]), cell_style))
                     else:
-                        card_tables = []
-                        card_width = max(1, slot_width * cell["span"] - 8)
-                        for lesson in cell["lessons"]:
+                        if print_sheet:
+                            # Plain text only: no nested lesson-card backgrounds, borders, or badges.
+                            plain_lines = []
+                            for lesson in cell["lessons"]:
+                                subject_initial = pdf_text(str(lesson.get("subject_initial") or "").strip().upper() or "—")
+                                teacher_initials = str(lesson.get("teacher_initials") or "").strip().upper()
+                                if not teacher_initials:
+                                    name_parts = [part for part in str(lesson.get("teacher_name") or "").split() if part]
+                                    teacher_initials = "".join(part[0] for part in (name_parts[:1] + (name_parts[-1:] if len(name_parts) > 1 else []))).upper()[:4] or "—"
+                                duration = str(max(1, int(lesson.get("duration_periods") or 1))) + "P"
+                                if view_type in ("teacher", "room"):
+                                    class_label = str(lesson.get("class_name") or "").strip()
+                                    stream_label = str(lesson.get("stream") or "").strip()
+                                    class_initials = str(lesson.get("class_initials") or "").strip().upper() or (class_label + ((" " + stream_label) if stream_label else "") or "—")
+                                    resource_meta = allocated_room_name(lesson) if view_type == "teacher" else teacher_initials
+                                    line = "<b>" + subject_initial + "</b><br/><b>" + pdf_text(class_initials) + "</b>"
+                                    if resource_meta:
+                                        line += "<br/>" + pdf_text(resource_meta)
+                                    line += "<br/>" + duration
+                                else:
+                                    line = "<b>" + duration + "</b><br/><b>" + subject_initial + "</b>"
+                                    room_text = "" if layout["room_view"] else pdf_text(allocated_room_name(lesson))
+                                    if room_text:
+                                        line += "<br/>⌂ " + room_text
+                                    line += "<br/>" + pdf_text(teacher_initials)
+                                plain_lines.append(Paragraph(line, ParagraphStyle(
+                                    "PlainPrintTimetableCell", parent=cell_style, alignment=TA_CENTER,
+                                    fontSize=6, leading=7, textColor=colors.black,
+                                )))
+                            if len(plain_lines) == 1:
+                                cells.append(plain_lines[0])
+                            else:
+                                cells.append(Table([[item] for item in plain_lines], colWidths=[max(1, slot_width * cell["span"])], style=TableStyle([
+                                    ("BOX", (0,0), (-1,-1), 0, colors.white),
+                                    ("INNERGRID", (0,0), (-1,-1), 0, colors.white),
+                                    ("LEFTPADDING", (0,0), (-1,-1), 1),
+                                    ("RIGHTPADDING", (0,0), (-1,-1), 1),
+                                    ("TOPPADDING", (0,0), (-1,-1), 1),
+                                    ("BOTTOMPADDING", (0,0), (-1,-1), 1),
+                                    ("VALIGN", (0,0), (-1,-1), "MIDDLE"),
+                                ])))
+                            if cell["span"] > 1:
+                                col = len(cells) - 1
+                                span_commands.append(("SPAN", (col, row_index), (col + cell["span"] - 1, row_index)))
+                                cells.extend([""] * (cell["span"] - 1))
+                        else:
+                            card_tables = []
+                            card_width = max(1, slot_width * cell["span"] - 8)
+                            for lesson in cell["lessons"]:
                             subject_initial = pdf_text(str(lesson.get("subject_initial") or "").strip().upper() or "—")
                             teacher_initials = str(lesson.get("teacher_initials") or "").strip().upper()
                             if not teacher_initials:
@@ -515,7 +561,7 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                 ("BACKGROUND", (0,0), (-1,-1), colors.white if print_sheet else colors.white),
                 ("BACKGROUND", (0,0), (-1,0), colors.white if print_sheet else colors.HexColor("#17633b")),
                 ("TEXTCOLOR", (0,0), (-1,-1), colors.black),
-                ("GRID", (0,0), (-1,-1), 0.35, colors.HexColor("#cbd8ce")),
+                ("GRID", (0,0), (-1,-1), 0.8 if print_sheet else 0.35, colors.black if print_sheet else colors.HexColor("#cbd8ce")),
                 ("BACKGROUND", (0,1), (0,-1), colors.white if print_sheet else colors.HexColor("#eef5ef")),
                 ("VALIGN", (0,0), (-1,-1), "MIDDLE"),
                 ("LEFTPADDING", (0,0), (-1,-1), 3), ("RIGHTPADDING", (0,0), (-1,-1), 3),
