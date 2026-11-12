@@ -67,7 +67,6 @@ def get_timetable_view(connection: Any, school_id: int, profile_id: int, view_ty
                FROM class_teacher_assignments a
                JOIN teachers t ON t.id=a.teacher_id AND t.school_id=a.school_id
                WHERE a.school_id=? AND a.class_id=?
-                 AND COALESCE(t.status,'active')='active'
                ORDER BY a.id DESC LIMIT 1""",
             (school_id, target_id),
         ).fetchone()
