@@ -150,8 +150,8 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                         class_initials = escape(str(lesson.get("class_initials") or "").strip().upper() or class_full or "—")
                         if view_type in ("teacher", "room"):
                             footer_detail = (
-                                ("<span class='resource-room'>" + escape(str(lesson.get("room_name"))) + "</span>" if view_type == "teacher" and lesson.get("room_name") else "")
-                                "<span class='resource-teacher'>" + (escape(teacher_initials) if view_type == "room" else "") + "</span>"
+                                ("<span class='resource-room'>" + escape(str(lesson.get("room_name"))) + "</span>" if view_type == "teacher" and lesson.get("room_name") else "") +
+                                ("<span class='resource-teacher'>" + escape(teacher_initials) + "</span>" if view_type == "room" else "")
                             )
                             detail = (
                                 "<span class='resource-duration'>" + str(max(1, int(lesson.get("duration_periods") or 1))) + "P</span>"
