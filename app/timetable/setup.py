@@ -419,9 +419,9 @@ def save_class_limits(connection: Any, school_id: int, profile_id: int,
     else:
         cur.execute(
             """INSERT INTO ds_timetable_class_limits
-               (school_id,profile_id,class_id,max_lessons_per_week,max_periods_per_day,notes)
-               VALUES(?,?,?,?,?,?)""",
-            (school_id, profile_id, class_id) + values,
+               (school_id,profile_id,class_id,max_lessons_per_week,max_periods_per_day,notes,updated_at)
+               VALUES(?,?,?,?,?,?,?)""",
+            (school_id, profile_id, class_id) + values + (now_eat(),),
         )
     connection.commit()
 
