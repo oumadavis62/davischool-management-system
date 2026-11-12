@@ -362,10 +362,10 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
         )
         widths = [first_width] + ([class_width] if layout["show_class_column"] else []) + timeline_widths
 
-        # Render each day as its own full-width table. This keeps each day's
-        # merged break column intact while allowing the timetable to continue
-        # onto further landscape pages without shrinking the whole grid.
+        # Render the timetable as one continuous table. Teacher/room print sheets
+        # are subsequently kept together and scaled to fit the first A4 page.
         from reportlab.platypus import PageBreak
+        timetable_story_start = len(story)
         for day_start in range(0, len(layout["rows"]), rows_per_day):
             day_rows = layout["rows"][day_start:day_start + rows_per_day]
             data = [[Paragraph("Day", header_style)] + ([Paragraph("Class / Stream", header_style)] if layout["show_class_column"] else [])]
@@ -625,10 +625,17 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
             if day_start + rows_per_day < len(layout["rows"]):
                 story.append(Spacer(1, 5))
 
-        # Do not wrap the timetable in KeepInFrame(mode="shrink"). Individual
-        # timetables can contain more rows than one landscape page; shrinking the
-        # complete sheet makes every cell tiny and causes its contents to collide.
-        # Let ReportLab paginate the table at its natural A4 landscape size.
+        # The teacher and room Print sheets must keep the complete timetable
+        # together on page one. KeepInFrame scales only this print-sheet content;
+        # Download PDF and class/whole-school exports retain their existing sizing
+        # and pagination behavior.
+        if print_sheet and view_type in ("teacher", "room"):
+            timetable_flowables = story[timetable_story_start:]
+            del story[timetable_story_start:]
+            story.append(KeepInFrame(
+                doc.width, doc.height, timetable_flowables,
+                mode="shrink", hAlign="LEFT", vAlign="TOP",
+            ))
 
         if result.get("dated_instructional_sessions"):
             from reportlab.platypus import PageBreak
