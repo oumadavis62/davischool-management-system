@@ -18,7 +18,7 @@ def now_eat() -> str:
 
 
 def format_eat(value: object) -> str:
-    """Format stored timestamps in EAT, treating legacy naive DB values as UTC."""
+    """Format timestamps in EAT with compatibility for legacy naive values."""
     if value is None or not str(value).strip():
         return ""
     if isinstance(value, datetime):
