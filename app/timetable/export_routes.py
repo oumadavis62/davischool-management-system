@@ -372,7 +372,7 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
             for _, kind, item in timeline:
                 label = (
                     pdf_text(str(item["start_time"])) + "–" + pdf_text(str(item["end_time"]))
-                    if kind == "break" and print_sheet else
+                    if print_sheet and view_type in ("class", "teacher", "room") else
                     (pdf_text(str(item["start_time"])) + "–" + pdf_text(str(item["end_time"])))
                     if kind == "break" else
                     "<b>" + pdf_text(str(item["label"])) + "</b><br/>" +
@@ -380,6 +380,7 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                 )
                 data[0].append(Paragraph(label, break_header_style if kind == "break" else header_style))
             span_commands = []
+            merged_print_break_columns = set()
             for day_row_index, row in enumerate(day_rows):
                 row_index = day_row_index + 1
                 cells = []
@@ -404,19 +405,35 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                             timeline_cursor += 1
                             continue
                     if cell["kind"] == "break":
-                        if row["day_first"]:
-                            cell = dict(cell, rowspan=row["day_rowspan"])
-                        b = cell["item"]
-                        break_label = "<br/>".join(pdf_text(ch) for ch in str(b["label"]))
-                        break_style = ParagraphStyle(
-                            "ExportBreak", parent=cell_style, alignment=TA_CENTER,
-                            fontSize=10, leading=11,
-                            textColor=colors.black if print_sheet else colors.HexColor("#75551d"),
-                        )
-                        cells.append(Paragraph("<b>" + break_label + "</b>", break_style))
-                        if cell["rowspan"] > 1:
-                            col = len(cells) - 1
-                            span_commands.append(("SPAN", (col, row_index), (col, row_index + cell["rowspan"] - 1)))
+                        col = len(cells)
+                        if print_sheet and view_type in ("class", "teacher", "room"):
+                            if col in merged_print_break_columns:
+                                cells.append("")
+                            else:
+                                merged_print_break_columns.add(col)
+                                b = cell["item"]
+                                break_label = "<br/>".join(pdf_text(ch) for ch in str(b["label"]))
+                                break_style = ParagraphStyle(
+                                    "ExportBreak", parent=cell_style, alignment=TA_CENTER,
+                                    fontSize=10, leading=11,
+                                    textColor=colors.black,
+                                )
+                                cells.append(Paragraph("<b>" + break_label + "</b>", break_style))
+                                if len(day_rows) > 1:
+                                    span_commands.append(("SPAN", (col, row_index), (col, len(day_rows))))
+                        else:
+                            if row["day_first"]:
+                                cell = dict(cell, rowspan=row["day_rowspan"])
+                            b = cell["item"]
+                            break_label = "<br/>".join(pdf_text(ch) for ch in str(b["label"]))
+                            break_style = ParagraphStyle(
+                                "ExportBreak", parent=cell_style, alignment=TA_CENTER,
+                                fontSize=10, leading=11,
+                                textColor=colors.black if print_sheet else colors.HexColor("#75551d"),
+                            )
+                            cells.append(Paragraph("<b>" + break_label + "</b>", break_style))
+                            if cell["rowspan"] > 1:
+                                span_commands.append(("SPAN", (col, row_index), (col, row_index + cell["rowspan"] - 1)))
                     elif cell["kind"] == "free":
                         cells.append(Paragraph("", cell_style) if view_type in ("teacher", "room") else Paragraph("—", cell_style))
                     elif cell["kind"] == "continued":
@@ -450,7 +467,8 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                                     ], colWidths=[resource_width])
                                     resource_table.setStyle(TableStyle([
                                         ("ALIGN", (0, 0), (-1, -1), "LEFT"),
-                                        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                                        ("VALIGN", (0, 0), (0, 0), "TOP"),
+                                        ("VALIGN", (0, 1), (-1, -1), "MIDDLE"),
                                         ("LEFTPADDING", (0, 0), (-1, -1), 0),
                                         ("RIGHTPADDING", (0, 0), (-1, -1), 0),
                                         ("TOPPADDING", (0, 0), (-1, -1), 0),
@@ -629,11 +647,11 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
         # together on page one. KeepInFrame scales only this print-sheet content;
         # Download PDF and class/whole-school exports retain their existing sizing
         # and pagination behavior.
-        if print_sheet and view_type in ("teacher", "room"):
+        if print_sheet and view_type in ("class", "teacher", "room"):
             timetable_flowables = story[timetable_story_start:]
             del story[timetable_story_start:]
             story.append(KeepInFrame(
-                doc.width, doc.height, timetable_flowables,
+                doc.width, max(1, doc.height - 82), timetable_flowables,
                 mode="shrink", hAlign="LEFT", vAlign="TOP",
             ))
 
