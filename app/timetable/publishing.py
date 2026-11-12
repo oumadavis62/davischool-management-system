@@ -962,12 +962,17 @@ def compare_timetable_versions(connection: Any, school_id: int, first_version_id
     }
 
 
-def profile_display_name(value: Any) -> str:
-    """Hide internal revision sequence numbers in user-facing profile names."""
+def profile_display_name(value: Any, status: Any = "") -> str:
+    """Hide internal revision numbers; published revision profiles are labelled Revised."""
     name = str(value or "")
     marker = " · Revision "
-    return name.split(marker, 1)[0] + " · Revision" if marker in name else name
+    if marker in name:
+        name = name.split(marker, 1)[0] + " · Revision"
+    if str(status or "").strip().lower() in {"published", "archived"}:
+        name = re.sub(r" · Revision$", " · Revised", name)
+    return name
 
 def revision_display_label(value: Any) -> str:
-    """Hide the internal revision sequence in a user-facing version label."""
-    return re.sub(r"^Revision\s+\d+", "Revision", str(value or ""))
+    """Hide internal revision numbers and use Revised for published version labels."""
+    label = re.sub(r"^Revision\s+\d+", "Revised", str(value or ""))
+    return re.sub(r"^Revision\b", "Revised", label)
