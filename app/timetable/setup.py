@@ -1,7 +1,7 @@
 """Validated setup operations for DaviSchool timetable v2."""
 from __future__ import annotations
 
-from datetime import datetime
+from app.timetable.time_utils import now_eat
 import re
 from typing import Any
 
@@ -14,7 +14,7 @@ class TimetableSetupError(ValueError):
 
 
 def _now() -> str:
-    return datetime.utcnow().replace(microsecond=0).isoformat() + "Z"
+    return now_eat()
 
 
 def _profile(cursor: Any, school_id: int, profile_id: int):
