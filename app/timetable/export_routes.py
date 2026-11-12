@@ -407,7 +407,7 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                             class_initials = str(lesson.get("class_initials") or "").strip().upper() or class_full or "—"
                             footer_style = ParagraphStyle("ExportCellFooter", parent=teacher_style, alignment=2, fontSize=5, leading=6)
                             if view_type in ("teacher", "room"):
-                                resource_subject_style = ParagraphStyle("ResourceSubject", parent=cell_style, alignment=TA_LEFT, fontSize=8, leading=9, wordWrap=None, textColor=colors.HexColor("#365b40"))
+                                resource_subject_style = ParagraphStyle("ResourceSubject", parent=cell_style, alignment=TA_LEFT, fontSize=8, leading=9, wordWrap=None, splitLongWords=0, textColor=colors.HexColor("#365b40"))
                                 resource_period_style = ParagraphStyle("ResourcePeriod", parent=cell_style, alignment=TA_RIGHT, fontSize=7, leading=8, wordWrap=None, textColor=colors.HexColor("#536b58"))
                                 resource_class_style = ParagraphStyle("ResourceClass", parent=cell_style, alignment=TA_CENTER, fontSize=25, leading=27, textColor=colors.HexColor("#263f30"))
                                 resource_meta = allocated_room if view_type == "teacher" else teacher_initials
@@ -445,6 +445,7 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                                 if view_type in ("class", "teacher", "room") else None,
                             )
                             card.setStyle(TableStyle([
+                                ("SPAN", (0,0), (1,0)) if view_type in ("teacher", "room") else ("ALIGN", (0,0), (-1,-1), "CENTER"),
                                 ("SPAN", (0,1), (2,1)) if view_type in ("teacher", "room") else ("ALIGN", (0,0), (-1,-1), "CENTER"),
                                 ("VALIGN", (0,2), (-1,2), "MIDDLE") if view_type in ("teacher", "room") else ("ALIGN", (0,0), (-1,-1), "CENTER"),
                                 ("BACKGROUND", (0,0), (-1,-1), tint),
@@ -692,7 +693,7 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                             period_label=str(max(1,int(lesson.get("duration_periods") or 1)))+"P"
                             subject_label=str(lesson.get("subject_initial") or "").strip().upper()
                             detail=CellRichText([
-                                TextBlock(InlineFont(rFont="Consolas",sz=9,b=True), subject_label + (" " * 8 + period_label if view_type == "room" else "")),
+                                TextBlock(InlineFont(rFont="Consolas",sz=7,b=True), subject_label + (" " * 4 + period_label if view_type == "room" else "")),
                                 "\n",
                                 TextBlock(InlineFont(rFont="Arial",sz=25,b=True,color="263F30"), class_initials),
                                 "\n",
