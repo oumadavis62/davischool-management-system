@@ -96,7 +96,7 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
             profile_meta = f"{esc(selected['academic_year'])} · {esc(selected['term'])} · {esc(str(selected['profile_type'] or 'main').replace('_',' ').title())}"
             profile_panel = f"""
               <section class='tt-home-profile-card'>
-                <div class='tt-home-profile-top'><div><span class='tt-home-eyebrow'>CURRENT TIMETABLE PROFILE</span><h2>{profile_name}</h2><p>{profile_meta} <i></i> <span class='tt-home-status'>{status}</span></p></div><div style='display:flex;gap:8px;flex-wrap:wrap'><a class='tt-home-outline' href='/app/timetable/setup#tt-profile-create-modal'>＋ Create new timetable</a><button class='tt-home-outline' type='button' data-open-profile-edit>Configure profile <span>↗</span></button></div></div>
+                <div class='tt-home-profile-top'><div><span class='tt-home-eyebrow'>CURRENT TIMETABLE PROFILE</span><h2>{profile_name}</h2><p>{profile_meta} <i></i> <span class='tt-home-status'>{status}</span></p></div><div style='display:flex;gap:8px;flex-wrap:wrap'><button class='tt-home-outline' type='button' data-open-profile-edit>Configure profile <span>↗</span></button></div></div>
                 <div class='tt-home-metrics'>
                   <div><span>School days</span><b>{stats['days']}</b></div><div><span>Lesson periods</span><b>{stats['periods']}</b></div><div><span>Active rooms</span><b>{stats['rooms']}</b></div><div><span>Scheduled lessons</span><b>{stats['lessons']}</b></div>
                 </div>
@@ -217,64 +217,69 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
           @media(max-width:600px){{.tt-home-profile{{align-items:stretch;flex-direction:column;gap:8px;padding:12px}}.tt-home-profile select{{width:100%;min-width:0}}.tt-home-profile-top{{gap:14px}}.tt-home-profile-top>div:last-child{{width:100%;display:grid!important;grid-template-columns:1fr 1fr}}.tt-home-profile-top>div:last-child a,.tt-home-profile-top>div:last-child button{{text-align:center;white-space:normal}}.tt-home-metrics{{gap:9px}}.tt-home-metrics div{{min-height:75px;padding:12px}}.tt-home-metrics b{{font-size:24px}}.tt-home-catalog-list a{{min-height:70px}}.tt-home-hero h1{{font-size:29px}}.tt-home-hero p{{font-size:12px}}.tt-home-empty h2{{font-size:22px}}}}
           @media(max-width:390px){{.tt-home-profile-top>div:last-child{{grid-template-columns:1fr}}.tt-home-metrics span{{font-size:9px}}}}
 
-          /* Soft sage + pearl profile treatment: keep the page light and the green restrained */
+          /* Match the timetable setup's established sage gradient palette */
           .tt-home-profile{{
-            background:#f7f9f5;
-            border:1px solid #e4eae0;
-            box-shadow:0 5px 18px rgba(46,66,48,.045);
+            background:linear-gradient(145deg,#edf6ef 0%,#e4f0e6 42%,#f7faf7 100%);
+            border:1px solid #d1e3d4;
+            box-shadow:0 8px 24px rgba(39,91,57,.08);
           }}
-          .tt-home-profile label{{color:#526b56}}
+          .tt-home-profile label{{color:#315b3e}}
           .tt-home-profile select{{
             background:#fff;
-            border:1px solid #dce5d8;
-            color:#344b38;
+            border:1px solid #cfe2d2;
+            color:#234638;
           }}
           .tt-home-profile select:focus{{
-            border-color:#9aaf91;
-            box-shadow:0 0 0 3px rgba(139,163,128,.16);
+            border-color:#65a878;
+            box-shadow:0 0 0 3px rgba(53,124,80,.14);
           }}
           .tt-home-profile-card{{
-            background:#fff;
-            border:1px solid #e4eae1;
-            box-shadow:0 10px 28px rgba(46,66,48,.055);
+            background:linear-gradient(118deg,#dceede 0%,#c9e2ce 52%,#eaf4e9 100%);
+            border:1px solid #c8ddcb;
+            box-shadow:0 12px 30px rgba(39,91,57,.09);
           }}
           .tt-home-profile-top>div:first-child{{
             flex:1;
             min-width:0;
             padding:19px 21px;
-            border:1px solid #e1e9dc;
+            border:1px solid rgba(255,255,255,.68);
             border-radius:16px;
-            background:linear-gradient(125deg,#e8efe4 0%,#f2f5ee 58%,#f8faf6 100%);
+            background:rgba(255,255,255,.36);
           }}
-          .tt-home-profile-card .tt-home-eyebrow{{color:#71866b}}
-          .tt-home-profile-top h2{{color:#344b38}}
-          .tt-home-profile-top p{{color:#738071}}
+          .tt-home-profile-card .tt-home-eyebrow{{color:#39784d}}
+          .tt-home-profile-top h2{{color:#214a34}}
+          .tt-home-profile-top p{{color:#557061}}
           .tt-home-outline{{
-            border-color:#dce5d8;
-            color:#4d674e!important;
-            background:#fff;
+            border-color:#b9d3be;
+            color:#286442!important;
+            background:rgba(255,255,255,.76);
           }}
-          .tt-home-profile-top>div:last-child .tt-home-outline:first-child{{
-            background:#647d5d;
-            border-color:#647d5d;
-            color:#fff!important;
-          }}
-          .tt-home-profile-top>div:last-child .tt-home-outline:first-child:hover{{background:#526b4c}}
-          .tt-home-profile-top>div:last-child .tt-home-outline:last-child:hover{{background:#f0f4ec;border-color:#cbd8c4}}
-          .tt-home-status{{color:#526b4b;background:#e9f0e4}}
+          .tt-home-outline:hover{{background:#fff;border-color:#8fb99a}}
+          .tt-home-status{{color:#23613b;background:#e7f4e9}}
           .tt-home-metrics div{{
-            background:#fbfcfa;
-            border:1px solid #e8ede5;
+            background:rgba(255,255,255,.88);
+            border:1px solid rgba(255,255,255,.9);
+            box-shadow:0 3px 10px rgba(39,91,57,.045);
           }}
-          .tt-home-metrics span{{color:#7a8677}}
-          .tt-home-metrics b{{color:#647d5d}}
+          .tt-home-metrics span{{color:#607968}}
+          .tt-home-metrics b{{color:#286443}}
+          .tt-home-hero-actions{{display:flex;gap:10px;align-items:center;margin-top:18px}}
+          .tt-home-hero-actions .tt-home-primary{{
+            background:#fff;
+            color:#286442!important;
+            border:1px solid rgba(255,255,255,.8);
+            box-shadow:0 6px 16px rgba(8,43,27,.13);
+          }}
+          .tt-home-hero-actions .tt-home-primary:hover{{background:#edf6ee;transform:translateY(-2px)}}
           @media(max-width:600px){{
             .tt-home-profile-top>div:first-child{{width:100%;padding:16px}}
+            .tt-home-hero-actions{{margin-top:14px}}
+            .tt-home-hero-actions .tt-home-primary{{width:100%;justify-content:center}}
           }}
 
         </style>
         <main class='tt-home'>
-          <section class='tt-home-hero'><div class='tt-home-hero-copy'><span class='tt-home-eyebrow'>MABALE_ICT · ACADEMIC OPERATIONS</span><h1>Smart Timetable</h1><p>Plan, organise and publish a balanced school timetable. Manage teaching requirements, build schedules and keep every class and teacher in sync.</p></div><div class='tt-home-hero-mark'>▦</div></section>
+          <section class='tt-home-hero'><div class='tt-home-hero-copy'><span class='tt-home-eyebrow'>MABALE_ICT · ACADEMIC OPERATIONS</span><h1>Smart Timetable</h1><p>Plan, organise and publish a balanced school timetable. Manage teaching requirements, build schedules and keep every class and teacher in sync.</p><div class='tt-home-hero-actions'><a class='tt-home-primary' href='/app/timetable/setup#tt-profile-create-modal'>＋ Create New Timetable</a></div></div><div class='tt-home-hero-mark'>▦</div></section>
           {profile_control}
           {notice}
           {profile_panel}
