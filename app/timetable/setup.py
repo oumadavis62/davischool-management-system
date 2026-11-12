@@ -412,9 +412,9 @@ def save_class_limits(connection: Any, school_id: int, profile_id: int,
     if existing:
         cur.execute(
             """UPDATE ds_timetable_class_limits
-               SET max_lessons_per_week=?,max_periods_per_day=?,notes=?,updated_at=CURRENT_TIMESTAMP
+               SET max_lessons_per_week=?,max_periods_per_day=?,notes=?,updated_at=?
                WHERE id=? AND school_id=?""",
-            values + (existing["id"], school_id),
+            values + (now_eat(), existing["id"], school_id),
         )
     else:
         cur.execute(
