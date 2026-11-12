@@ -1,6 +1,7 @@
 """Timetable approval, publication, immutable snapshots and revisions."""
 from __future__ import annotations
 
+from datetime import datetime
 from app.timetable.time_utils import now_eat
 import json
 import re
