@@ -1939,12 +1939,12 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
             con.commit()
             if kind == "requirement":
                 return redirect_setup(profile_id, "Subject requirement deleted.", request=request, tab="requirements", section="subject")
-            return redirect_setup(profile_id, "Setup row deleted.")
+            return redirect_setup(profile_id, "Setup row deleted.", request=request)
         except (TimetableSetupError, ValueError) as exc:
             con.rollback()
             if kind == "requirement":
                 return redirect_setup(profile_id, str(exc), True, request=request, tab="requirements", section="subject")
-            return redirect_setup(profile_id, str(exc), True)
+            return redirect_setup(profile_id, str(exc), True, request=request)
         finally:
             con.close()
 
@@ -1958,9 +1958,9 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
         con = get_db()
         try:
             pid = create_profile(con, int(school["id"]), name, academic_year, term, request.session.get("email", ""), academic_start_date, academic_end_date, profile_type)
-            return redirect_setup(pid, "Timetable profile created. Configure the school days and periods next.")
+            return redirect_setup(pid, "Timetable profile created. Configure the school days and periods next.", request=request)
         except TimetableSetupError as exc:
-            return redirect_setup(message=str(exc), error=True)
+            return redirect_setup(message=str(exc), error=True, request=request)
         finally:
             con.close()
 
@@ -1992,9 +1992,9 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
             standard_days = (("SAT","Saturday"),("SUN","Sunday")) if profile_type == "weekend" else (("MON","Monday"),("TUE","Tuesday"),("WED","Wednesday"),("THU","Thursday"),("FRI","Friday"))
             for order, (code, name) in enumerate(standard_days, 1):
                 save_day(con, int(school["id"]), profile_id, code, name, order, True)
-            return redirect_setup(profile_id, "Standard " + ("Saturday–Sunday weekend" if profile_type == "weekend" else "Monday–Friday") + " timetable days saved.")
+            return redirect_setup(profile_id, "Standard " + ("Saturday–Sunday weekend" if profile_type == "weekend" else "Monday–Friday") + " timetable days saved.", request=request)
         except TimetableSetupError as exc:
-            return redirect_setup(profile_id, str(exc), True)
+            return redirect_setup(profile_id, str(exc), True, request=request)
         finally: con.close()
 
     @app.post("/app/timetable/setup/day")
@@ -2004,9 +2004,9 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
         con = get_db()
         try:
             save_day(con, int(school["id"]), profile_id, day_code, day_name, day_order, instructional == "1")
-            return redirect_setup(profile_id, "School day saved.")
+            return redirect_setup(profile_id, "School day saved.", request=request)
         except (TimetableSetupError, ValueError) as exc:
-            return redirect_setup(profile_id, str(exc), True)
+            return redirect_setup(profile_id, str(exc), True, request=request)
         finally: con.close()
 
     @app.post("/app/timetable/setup/period")
@@ -2016,9 +2016,9 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
         con = get_db()
         try:
             save_period(con, int(school["id"]), profile_id, period_no, label, start_time, end_time, period_type, period_id=period_id)
-            return redirect_setup(profile_id, "Teaching period saved.")
+            return redirect_setup(profile_id, "Teaching period saved.", request=request)
         except (TimetableSetupError, ValueError) as exc:
-            return redirect_setup(profile_id, str(exc), True)
+            return redirect_setup(profile_id, str(exc), True, request=request)
         finally: con.close()
 
     @app.post("/app/timetable/setup/break-gap")
@@ -2049,9 +2049,9 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
                 (int(school["id"]), profile_id),
             ).fetchone()[0])
             save_break(con, int(school["id"]), profile_id, next_no, label, start_time, end_time, "all")
-            return redirect_setup(profile_id, "Detected break gap selected. Other gaps remain available.")
+            return redirect_setup(profile_id, "Detected break gap selected. Other gaps remain available.", request=request)
         except (TimetableSetupError, ValueError) as exc:
-            return redirect_setup(profile_id, str(exc), True)
+            return redirect_setup(profile_id, str(exc), True, request=request)
         finally:
             con.close()
 
@@ -2062,9 +2062,9 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
         con = get_db()
         try:
             save_break(con, int(school["id"]), profile_id, break_no, label, start_time, end_time, applies_to)
-            return redirect_setup(profile_id, "Break saved.")
+            return redirect_setup(profile_id, "Break saved.", request=request)
         except (TimetableSetupError, ValueError) as exc:
-            return redirect_setup(profile_id, str(exc), True)
+            return redirect_setup(profile_id, str(exc), True, request=request)
         finally: con.close()
 
     @app.post("/app/timetable/setup/calendar-event")
@@ -2074,9 +2074,9 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
         con = get_db()
         try:
             save_calendar_exception(con, int(school["id"]), profile_id, exception_date, label, exception_type, notes, instructional == "1")
-            return redirect_setup(profile_id, "Academic calendar date saved.")
+            return redirect_setup(profile_id, "Academic calendar date saved.", request=request)
         except (TimetableSetupError, ValueError) as exc:
-            return redirect_setup(profile_id, str(exc), True)
+            return redirect_setup(profile_id, str(exc), True, request=request)
         finally: con.close()
 
     @app.post("/app/timetable/setup/room")
@@ -2086,9 +2086,9 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
         con = get_db()
         try:
             save_room(con, int(school["id"]), room_code, name, room_type, int(capacity) if capacity.strip() else None, description, equipment, suitable_for, allocation_mode, int(assigned_class_id) if assigned_class_id.strip() else None)
-            return redirect_setup(profile_id, "Room or facility saved.")
+            return redirect_setup(profile_id, "Room or facility saved.", request=request)
         except (TimetableSetupError, ValueError) as exc:
-            return redirect_setup(message=str(exc), error=True)
+            return redirect_setup(message=str(exc), error=True, request=request)
         finally: con.close()
 
     @app.post("/app/timetable/setup/availability-matrix")
@@ -2120,10 +2120,10 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
                     (int(school["id"]), profile_id, teacher_id, day_id, period_id, stored_status),
                 )
             con.commit()
-            return redirect_setup(profile_id, "Teacher availability matrix saved.")
+            return redirect_setup(profile_id, "Teacher availability matrix saved.", request=request)
         except (TimetableSetupError, ValueError) as exc:
             con.rollback()
-            return redirect_setup(profile_id, str(exc), True)
+            return redirect_setup(profile_id, str(exc), True, request=request)
         finally:
             con.close()
 
@@ -2172,9 +2172,9 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
         con = get_db()
         try:
             save_teacher_availability(con, int(school["id"]), profile_id, teacher_id, day_id, period_id, availability, reason)
-            return redirect_setup(profile_id, "Teacher availability saved.")
+            return redirect_setup(profile_id, "Teacher availability saved.", request=request)
         except (TimetableSetupError, ValueError) as exc:
-            return redirect_setup(profile_id, str(exc), True)
+            return redirect_setup(profile_id, str(exc), True, request=request)
         finally: con.close()
 
     @app.post("/app/timetable/setup/requirements/bulk")
@@ -2221,9 +2221,9 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
                 int(max_periods_per_day) if max_periods_per_day.strip() else None,
                 notes,
             )
-            return redirect_setup(profile_id, "Class workload limits saved.")
+            return redirect_setup(profile_id, "Class workload limits saved.", request=request)
         except (TimetableSetupError, ValueError) as exc:
-            return redirect_setup(profile_id, str(exc), True)
+            return redirect_setup(profile_id, str(exc), True, request=request)
         finally:
             con.close()
 
@@ -2241,9 +2241,9 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
         color = teacher_color.strip().upper()
         initials = teacher_initials.strip().upper()
         if not re.fullmatch(r"[A-Z]{1,4}", initials):
-            return redirect_setup(profile_id, "Enter 1–4 letters for teacher initials.", True)
+            return redirect_setup(profile_id, "Enter 1–4 letters for teacher initials.", True, request=request)
         if len(color) != 7 or not color.startswith("#") or not all(ch in "0123456789ABCDEF" for ch in color[1:]):
-            return redirect_setup(profile_id, "Choose a valid teacher colour.", True)
+            return redirect_setup(profile_id, "Choose a valid teacher colour.", True, request=request)
         con = get_db()
         try:
             result = con.execute(
@@ -2253,10 +2253,10 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
             if result.rowcount != 1:
                 raise TimetableSetupError("The selected teacher could not be found.")
             con.commit()
-            return redirect_setup(profile_id, "Teacher timetable colour saved.")
+            return redirect_setup(profile_id, "Teacher timetable colour saved.", request=request)
         except (TimetableSetupError, ValueError) as exc:
             con.rollback()
-            return redirect_setup(profile_id, str(exc), True)
+            return redirect_setup(profile_id, str(exc), True, request=request)
         finally:
             con.close()
 
