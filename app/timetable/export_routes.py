@@ -442,11 +442,17 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                                         line += "<br/>" + pdf_text(resource_meta)
                                     line += "<br/>" + duration
                                 else:
-                                    line = "<b>" + duration + "</b><br/><b>" + subject_initial + "</b>"
+                                    # Print-sheet cell hierarchy: period/duration at the
+                                    # upper-right, prominent subject initials, then discreet
+                                    # teacher initials and the full teacher name at lower-right.
+                                    period_line = '<para align="right><font size="5">' + pdf_text(duration) + '</font></para>'
+                                    subject_line = '<para align="center"><font size="10"><b>' + subject_initial + '</b></font></para>'
                                     room_text = "" if layout["room_view"] else pdf_text(allocated_room_name(lesson))
-                                    if room_text:
-                                        line += "<br/>⌂ " + room_text
-                                    line += "<br/>" + pdf_text(teacher_initials)
+                                    room_line = ("<br/><para align=\"center\"><font size=\"5\">⌂ " + room_text + "</font></para>") if room_text else ""
+                                    initials_line = '<br/><para align="right"><font size="4">' + pdf_text(teacher_initials) + '</font></para>'
+                                    teacher_name = pdf_text(str(lesson.get("teacher_name") or "").strip())
+                                    teacher_name_line = ('<para align="right"><font size="5">' + teacher_name + '</font></para>') if teacher_name else ""
+                                    line = period_line + subject_line + room_line + initials_line + teacher_name_line
                                 plain_lines.append(line)
                             cells.append(Paragraph("<br/><br/>".join(plain_lines), ParagraphStyle(
                                 "PlainPrintTimetableCell", parent=cell_style, alignment=TA_CENTER,
