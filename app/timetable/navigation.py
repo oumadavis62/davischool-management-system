@@ -134,11 +134,23 @@ def timetable_workspace(request, body):
             button.setAttribute('aria-selected',String(i===index));
             button.tabIndex=i===index?0:-1;
           });
-          if(updateAddress && requested==='setup'){
-            const url=new URL(window.location.href);
-            url.searchParams.set('tab','setup');
-            url.searchParams.set('section',sectionKey(labels[index]));
-            window.history.replaceState({},'',url.pathname+url.search+url.hash);
+          if(requested==='setup'){
+            const selectedSection=sectionKey(labels[index]);
+            if(updateAddress){
+              const url=new URL(window.location.href);
+              url.searchParams.set('tab','setup');
+              url.searchParams.set('section',selectedSection);
+              window.history.replaceState({},'',url.pathname+url.search+url.hash);
+            }
+            const picker=wrap.querySelector(':scope > .tt-select');
+            if(picker){
+              let tabField=picker.querySelector('input[name="tab"]');
+              if(!tabField){tabField=document.createElement('input');tabField.type='hidden';tabField.name='tab';picker.append(tabField);}
+              tabField.value='setup';
+              let sectionField=picker.querySelector('input[name="section"]');
+              if(!sectionField){sectionField=document.createElement('input');sectionField.type='hidden';sectionField.name='section';picker.append(sectionField);}
+              sectionField.value=selectedSection;
+            }
           }
         }
         sectionsForTabs.forEach((section,index)=>{

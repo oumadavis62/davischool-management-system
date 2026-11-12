@@ -42,6 +42,11 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
         return get_school_obj(request)
 
     def redirect_setup(profile_id=0, message="", error=False, focus="", request=None, tab="", section=""):
+        if request is not None:
+            if not tab:
+                tab = str(request.query_params.get("tab", "") or "")
+            if not section:
+                section = str(request.query_params.get("section", "") or "")
         parts = []
         if profile_id:
             parts.append("profile_id=" + str(int(profile_id)))
@@ -54,10 +59,6 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
         if error:
             parts.append("error=1")
         if request is not None:
-            if not tab:
-                tab = str(request.query_params.get("tab", "") or "")
-            if not section:
-                section = str(request.query_params.get("section", "") or "")
             tab_id = str(request.scope.get("davischool_tab_id") or request.query_params.get("ds_tab") or "").strip()
             if tab_id:
                 parts.append("ds_tab=" + quote(tab_id, safe=""))
