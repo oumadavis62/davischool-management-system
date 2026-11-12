@@ -11,6 +11,8 @@ import threading
 import time
 from typing import Callable
 
+from app.timetable.time_utils import now_eat
+
 from app.timetable.generator import (
     GENERATION_TIME_LIMIT_SECONDS,
     generate_timetable,
@@ -34,7 +36,7 @@ def ensure_generation_jobs_table(con) -> None:
             stage TEXT NOT NULL DEFAULT 'queued',
             result_run_id INTEGER,
             message TEXT,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            created_at TIMESTAMP,
             started_at TIMESTAMP,
             finished_at TIMESTAMP
         )"""
@@ -61,9 +63,9 @@ def enqueue_generation_job(get_db: Callable, school_id: int, profile_id: int, re
             return int(existing["id"])
         cur = con.execute(
             """INSERT INTO ds_timetable_generation_jobs
-               (school_id, profile_id, requested_by, status, stage)
-               VALUES (?, ?, ?, 'queued', 'queued')""",
-            (int(school_id), int(profile_id), str(requested_by or "")),
+               (school_id, profile_id, requested_by, status, stage, created_at)
+               VALUES (?, ?, ?, 'queued', 'queued', ?)""",
+            (int(school_id), int(profile_id), str(requested_by or ""), now_eat()),
         )
         job_id = int(cur.lastrowid)
         con.commit()
@@ -143,9 +145,9 @@ def _reconcile_profile_runs(con, school_id: int, profile_id: int, current_job_id
         return 0
     cur = con.execute(
         """UPDATE ds_timetable_generation_runs
-           SET status='failed', finished_at=CURRENT_TIMESTAMP
+           SET status='failed', finished_at=?
            WHERE school_id=? AND profile_id=? AND status='running'""",
-        (int(school_id), int(profile_id)),
+        (now_eat(), int(school_id), int(profile_id)),
     )
     con.commit()
     return int(getattr(cur, "rowcount", 0) or 0)
@@ -224,9 +226,9 @@ def _execute_job(get_db, job):
             if advanced_result and advanced_result.get("run_id"):
                 con.execute(
                     """UPDATE ds_timetable_generation_runs
-                       SET status='failed', finished_at=CURRENT_TIMESTAMP
+                       SET status='failed', finished_at=?
                        WHERE id=? AND school_id=?""",
-                    (int(advanced_result["run_id"]), school_id),
+                    (now_eat(), int(advanced_result["run_id"]), school_id),
                 )
             con.commit()
             _set_job(
@@ -234,7 +236,7 @@ def _execute_job(get_db, job):
                 result_run_id=int(result.get("run_id") or 0) or None,
                 message=str(result.get("message") or "The solver could not find a complete timetable."),
             )
-            con.execute("UPDATE ds_timetable_generation_jobs SET finished_at=CURRENT_TIMESTAMP WHERE id=?", (job_id,))
+            con.execute("UPDATE ds_timetable_generation_jobs SET finished_at=? WHERE id=?", (now_eat(), job_id))
             con.commit()
             _reconcile_profile_runs(con, school_id, profile_id, job_id)
             return
@@ -243,9 +245,9 @@ def _execute_job(get_db, job):
             # Normalized sessions and ordinary lessons form one generation.
             con.execute(
                 """UPDATE ds_timetable_generation_runs
-                   SET status='completed', finished_at=CURRENT_TIMESTAMP
+                   SET status='completed', finished_at=?
                    WHERE id=? AND school_id=? AND status='running'""",
-                (int(advanced_result["run_id"]), school_id),
+                (now_eat(), int(advanced_result["run_id"]), school_id),
             )
             previous_ids = list(advanced_result.get("previous_session_ids") or [])
             _delete_sessions(con, school_id, profile_id, previous_ids)
@@ -265,7 +267,7 @@ def _execute_job(get_db, job):
         )
         con.execute(
             """UPDATE ds_timetable_generation_jobs
-               SET finished_at=CURRENT_TIMESTAMP WHERE id=?""", (job_id,)
+               SET finished_at=? WHERE id=?""", (now_eat(), job_id)
         )
         con.commit()
         _reconcile_profile_runs(con, school_id, profile_id, job_id)
@@ -281,9 +283,9 @@ def _execute_job(get_db, job):
             if advanced_result and advanced_result.get("run_id"):
                 con.execute(
                     """UPDATE ds_timetable_generation_runs
-                       SET status='failed', finished_at=CURRENT_TIMESTAMP
+                       SET status='failed', finished_at=?
                        WHERE id=? AND school_id=?""",
-                    (int(advanced_result["run_id"]), school_id),
+                    (now_eat(), int(advanced_result["run_id"]), school_id),
                 )
             con.commit()
         except Exception:
@@ -293,8 +295,8 @@ def _execute_job(get_db, job):
             message="Generation failed: " + str(exc)[:700],
         )
         con.execute(
-            "UPDATE ds_timetable_generation_jobs SET finished_at=CURRENT_TIMESTAMP WHERE id=?",
-            (job_id,),
+            "UPDATE ds_timetable_generation_jobs SET finished_at=? WHERE id=?",
+            (now_eat(), job_id),
         )
         con.commit()
     finally:
@@ -319,9 +321,9 @@ def _worker_loop(get_db):
             if row:
                 claimed = con.execute(
                     """UPDATE ds_timetable_generation_jobs
-                       SET status='running', stage='starting', started_at=CURRENT_TIMESTAMP
+                       SET status='running', stage='starting', started_at=?
                        WHERE id=? AND status='queued'""",
-                    (int(row["id"]),),
+                    (now_eat(), int(row["id"])),
                 )
                 con.commit()
                 if getattr(claimed, "rowcount", 1):
@@ -369,9 +371,9 @@ def start_generation_worker(get_db) -> None:
         for item in interrupted:
             setup.execute(
                 """UPDATE ds_timetable_generation_runs
-                   SET status='failed', finished_at=CURRENT_TIMESTAMP
+                   SET status='failed', finished_at=?
                    WHERE school_id=? AND profile_id=? AND status='running'""",
-                (int(item["school_id"]), int(item["profile_id"])),
+                (now_eat(), int(item["school_id"]), int(item["profile_id"])),
             )
         setup.execute(
             """UPDATE ds_timetable_generation_jobs
