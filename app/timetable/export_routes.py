@@ -514,7 +514,7 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
             commands = [
                 ("BACKGROUND", (0,0), (-1,-1), colors.white if print_sheet else colors.white),
                 ("BACKGROUND", (0,0), (-1,0), colors.white if print_sheet else colors.HexColor("#17633b")),
-                ("TEXTCOLOR", (0,0), (-1,-1), colors.black if print_sheet else colors.black),
+                ("TEXTCOLOR", (0,0), (-1,-1), colors.black),
                 ("GRID", (0,0), (-1,-1), 0.35, colors.HexColor("#cbd8ce")),
                 ("BACKGROUND", (0,1), (0,-1), colors.white if print_sheet else colors.HexColor("#eef5ef")),
                 ("VALIGN", (0,0), (-1,-1), "MIDDLE"),
