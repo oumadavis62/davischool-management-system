@@ -105,6 +105,16 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
     @app.get("/app/timetable/export/print", response_class=HTMLResponse)
     def timetable_export_print(request: Request, profile_id: int, view_type: str = "school",
         class_id: int = 0, teacher_id: int = 0, room_id: int = 0, remedial_display: str = "combined"):
+        # The Print action must use the exact same PDF renderer as Download PDF.
+        # Open that PDF inline so the browser's native print control is available.
+        from urllib.parse import urlencode
+        pdf_query = urlencode({
+            "profile_id": profile_id, "view_type": view_type,
+            "class_id": class_id, "teacher_id": teacher_id, "room_id": room_id,
+            "remedial_display": remedial_display, "inline": 1,
+        })
+        return RedirectResponse("/app/timetable/export/pdf?" + pdf_query, status_code=303)
+
         school, result, error = load_view(request, profile_id, view_type, class_id, teacher_id, room_id)
         if error:
             return error
@@ -256,6 +266,7 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
         teacher_id: int = 0,
         room_id: int = 0,
         remedial_display: str = "combined",
+        inline: int = 0,
     ):
         remedial_display = "separate" if remedial_display == "separate" else "combined"
         school, result, error = load_view(request, profile_id, view_type, class_id, teacher_id, room_id)
@@ -596,7 +607,7 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
         doc.build(story, onFirstPage=draw_export_footer, onLaterPages=draw_export_footer)
         buffer.seek(0)
         filename = filename_prefix(school,result) + ".pdf"
-        return StreamingResponse(buffer, media_type="application/pdf", headers={"Content-Disposition": "attachment; filename=" + filename})
+        return StreamingResponse(buffer, media_type="application/pdf", headers={"Content-Disposition": ("inline" if inline else "attachment") + "; filename=" + filename})
 
     @app.get("/app/timetable/export/xlsx")
     def timetable_export_xlsx(
