@@ -228,10 +228,9 @@ def register_timetable_view_routes(app, get_db, get_school_obj, module_page):
                                 class_label = esc(str(lesson["class_name"]) + ((" " + str(lesson["stream"])) if lesson["stream"] else ""))
                                 class_initials = esc(str(lesson.get("class_initials") or "").strip().upper() or class_label)
                                 if view_type in ("teacher", "room"):
-                                    resource_footer = (
-                                        f"<div class='tb-resource-cell-footer'>{('<span class=\'tb-resource-room\'>' + esc(lesson['room_name']) + '</span>') if view_type == 'teacher' and lesson.get('room_name') else ''}"
-                                        f"<span class='tb-resource-teacher'>{esc(teacher_initials) if view_type == 'room' else ''}</span></div>"
-                                    )
+                                    room_footer = ("<span class='tb-resource-room'>" + esc(lesson["room_name"]) + "</span>") if view_type == "teacher" and lesson.get("room_name") else ""
+                                    teacher_footer = ("<span class='tb-resource-teacher'>" + esc(teacher_initials) + "</span>") if view_type == "room" else ""
+                                    resource_footer = "<div class='tb-resource-cell-footer'>" + room_footer + teacher_footer + "</div>"
                                     cards.append(
                                         f"<div class='tb-lesson tb-resource-lesson {'tb-lesson-double' if duration > 1 else ''}' style='--teacher-color:{teacher_color}' title='{esc(lesson['subject_name'])} · {esc(lesson['class_name'])} {esc(lesson['stream'] or '')} · {esc(lesson['teacher_name'])}'>"
                                         f"<div class='tb-resource-subject'>{esc(subject_initial)}</div><div class='tb-resource-class'>{class_initials}</div>"
