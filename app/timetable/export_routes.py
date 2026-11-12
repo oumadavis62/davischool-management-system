@@ -402,16 +402,16 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                             class_initials = str(lesson.get("class_initials") or "").strip().upper() or class_full or "—"
                             footer_style = ParagraphStyle("ExportCellFooter", parent=teacher_style, alignment=2, fontSize=5, leading=6)
                             if view_type in ("teacher", "room"):
-                                resource_subject_style = ParagraphStyle("ResourceSubject", parent=cell_style, alignment=TA_RIGHT, fontSize=10, leading=11, textColor=colors.HexColor("#365b40"))
-                                resource_period_style = ParagraphStyle("ResourcePeriod", parent=cell_style, alignment=TA_LEFT, fontSize=10, leading=11, textColor=colors.HexColor("#536b58"))
+                                resource_subject_style = ParagraphStyle("ResourceSubject", parent=cell_style, alignment=TA_LEFT, fontSize=10, leading=11, textColor=colors.HexColor("#365b40"))
+                                resource_period_style = ParagraphStyle("ResourcePeriod", parent=cell_style, alignment=TA_RIGHT, fontSize=10, leading=11, textColor=colors.HexColor("#536b58"))
                                 resource_class_style = ParagraphStyle("ResourceClass", parent=cell_style, alignment=TA_CENTER, fontSize=25, leading=27, textColor=colors.HexColor("#263f30"))
                                 resource_meta = allocated_room if view_type == "teacher" else teacher_initials
                                 resource_card_height = max(28, (individual_row_height - 8) / max(1, len(cell["lessons"])))
                                 card_rows = [
                                     [
-                                        Paragraph(pdf_text(str(max(1, int(lesson.get("duration_periods") or 1))) + "P"), resource_period_style),
-                                        "",
                                         Paragraph("<b>" + subject_initial + "</b>", resource_subject_style),
+                                        "",
+                                        Paragraph(pdf_text(str(max(1, int(lesson.get("duration_periods") or 1))) + "P"), resource_period_style),
                                     ],
                                     [Paragraph("<b>" + pdf_text(class_initials) + "</b>", resource_class_style), "", ""],
                                     [Paragraph(pdf_text(resource_meta), footer_style) if resource_meta else "", "", ""],
@@ -673,7 +673,7 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                             period_label=str(max(1,int(lesson.get("duration_periods") or 1)))+"P"
                             subject_label=str(lesson.get("subject_initial") or "").strip().upper()
                             detail=CellRichText([
-                                TextBlock(InlineFont(rFont="Consolas",sz=9,b=True), period_label + " " * 8 + subject_label),
+                                TextBlock(InlineFont(rFont="Consolas",sz=9,b=True), subject_label + " " * 8 + period_label),
                                 "\n",
                                 TextBlock(InlineFont(rFont="Arial",sz=25,b=True,color="263F30"), class_initials),
                                 "\n",
