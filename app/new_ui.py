@@ -230,7 +230,7 @@ def davischool_public_homepage(request: Request):
 <section class="section trust"><div class="wrap trust-inner"><h2>Built around secure access</h2><p>Mabale_ICT keeps its management workspace behind sign-in. This public page explains the platform; school records and administrative tools remain within the authenticated application.</p></div></section>
 <section class="bottom-cta"><h2>Ready to continue?</h2><p>Sign in to access your authorised Mabale_ICT workspace.</p><a class="btn" href="/login">Open Mabale_ICT Sign In&nbsp; →</a></section>
 </main>
-<footer class="footer"><div class="wrap footer-inner"><span>© Mabale_ICT Management System</span><span>School operations, organised.</span></div></footer>
+<footer class="footer"><div class="wrap footer-inner"><span>© Mabale_ICT Software</span><span>School operations, organised.</span></div></footer>
 </body>
 </html>""")
 
@@ -510,7 +510,7 @@ def _pdf_build(story, pagesize, title, page_border=False):
         topMargin=10 * mm,
         bottomMargin=14 * mm,
         title=title,
-        author="Mabale_ICT Management System",
+        author="Mabale_ICT Software",
     )
     try:
         doc.build(story, onFirstPage=draw_footer, onLaterPages=draw_footer)
@@ -525,7 +525,7 @@ def _pdf_build(story, pagesize, title, page_border=False):
         fallback_buffer = BytesIO()
         c = canvas.Canvas(fallback_buffer, pagesize=pagesize)
         c.setTitle(str(title))
-        c.setAuthor("Mabale_ICT Management System")
+        c.setAuthor("Mabale_ICT Software")
         y = pagesize[1] - 18 * mm
 
         def ascii_text(value):
@@ -587,9 +587,9 @@ def _pdf_build(story, pagesize, title, page_border=False):
         from reportlab.pdfgen import canvas
         minimal_buffer = BytesIO()
         c = canvas.Canvas(minimal_buffer, pagesize=pagesize)
-        c.setTitle("Mabale_ICT Management System")
+        c.setTitle("Mabale_ICT Software")
         c.setFont("Helvetica-Bold", 12)
-        c.drawString(12 * mm, pagesize[1] - 18 * mm, "Mabale_ICT Management System")
+        c.drawString(12 * mm, pagesize[1] - 18 * mm, "Mabale_ICT Software")
         c.setFont("Helvetica", 9)
         c.drawString(12 * mm, pagesize[1] - 28 * mm, "PDF generated successfully.")
         c.setFont("Helvetica", 7)
@@ -1104,6 +1104,7 @@ table{{width:100%;border-collapse:collapse;background:white;border:1px solid #e5
  .academic-workspace .page table{{min-width:680px}}
 }}
 @media(max-width:430px){{.academic-workspace .page .grid{{grid-template-columns:1fr}}.academic-workspace .page .field{{width:100%}}}}
+@media print{{body:not(:has(.print-footer)):not(:has(.register-footer)):not(:has(.export-footer)):not(:has(.print-brand-footer)){{padding-bottom:12mm!important}}body:not(:has(.print-footer)):not(:has(.register-footer)):not(:has(.export-footer)):not(:has(.print-brand-footer))::after{{content:'Mabale_ICT Software';position:fixed;left:0;right:0;bottom:3mm;text-align:center;border-top:1px solid #dce9df;padding-top:3px;font:8pt Arial,sans-serif;color:#176b3a;background:#fff}}}}
 </style></head><body class='{" overview-active" if title == "Mabale_ICT" else ""}'><div class='app{" teacher-portal" if teacher_locked else ""}{" academic-workspace" if request_path.startswith(("/app/academics", "/app/exams", "/app/report-cards", "/app/subjects", "/app/classes", "/app/students/promotion")) else ""}'><aside class='side'><div class='sidebar-brand'><div class='sidebar-login-logo' aria-label='Mabale_ICT logo'><span class='davi-mark'><span class='d-letter'>M</span></span></div><div class='sidebar-brand-title'>Mabale_ICT<br>Management System</div></div>{links}{"" if teacher_locked else "<div style='padding:14px 12px;color:#94a3b8;font-size:10px;line-height:1.4'>Selection-based data entry is enabled throughout the school workspace.</div><a href='/logout' class='nav' style='margin-top:18px'>↪ Logout</a>"}</aside>
 <main class='main{" staff-workspace" if request_path == "/app/staff" else ""}'><header class='top'><div style='display:flex;align-items:center;gap:10px'><button type='button' class='sidebar-toggle' id='sidebarToggle' aria-label='Hide sidebar' title='Hide sidebar' data-sidebar-toggle='1'>☰</button><div><div class='top-system-title'>Mabale_ICT</div><div class='top-welcome'>Welcome back, <strong>{escape(name)}</strong></div><div class='muted'>{escape(role.replace('_',' ').title())}</div></div></div><div style='display:flex;gap:10px;align-items:center'>{avatar_html}</div></header>{body}<script>(function(){{
 // Shared workspace performance helpers: warm likely navigation targets on intent,
@@ -12236,6 +12237,7 @@ def external_exam_analysis_pdf(request: Request, exam_type: str = "", year: str 
         from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
         from reportlab.lib.enums import TA_CENTER
         from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+         from reportlab.lib.units import mm
         buffer = io.BytesIO()
         doc = SimpleDocTemplate(buffer,pagesize=landscape(A4),rightMargin=24,leftMargin=24,topMargin=24,bottomMargin=24)
         styles = getSampleStyleSheet()
