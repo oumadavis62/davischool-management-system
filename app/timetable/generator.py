@@ -1,7 +1,7 @@
 """Constraint-based automatic timetable generation (v1)."""
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from app.timetable.time_utils import now_eat
 from bisect import bisect_left, insort
 import json
 import time
@@ -25,7 +25,7 @@ def _check_generation_deadline(deadline: float) -> None:
 
 
 def _now() -> str:
-    return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+    return now_eat()
 
 
 def _overlap(a_start: str, a_end: str, b_start: str, b_end: str) -> bool:
