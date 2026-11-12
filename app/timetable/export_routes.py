@@ -150,7 +150,7 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                         class_initials = escape(str(lesson.get("class_initials") or "").strip().upper() or class_full or "—")
                         if view_type in ("teacher", "room"):
                             footer_detail = (
-                                "<span class='resource-room'>" + (escape(str(lesson.get("room_name") or "Room not assigned")) if view_type == "teacher" else "") + "</span>"
+                                ("<span class='resource-room'>" + escape(str(lesson.get("room_name"))) + "</span>" if view_type == "teacher" and lesson.get("room_name") else "")
                                 "<span class='resource-teacher'>" + (escape(teacher_initials) if view_type == "room" else "") + "</span>"
                             )
                             detail = (
@@ -404,11 +404,11 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                             if view_type in ("teacher", "room"):
                                 resource_subject_style = ParagraphStyle("ResourceSubject", parent=cell_style, alignment=TA_LEFT, fontSize=5, leading=6, textColor=colors.HexColor("#536b58"))
                                 resource_class_style = ParagraphStyle("ResourceClass", parent=cell_style, alignment=TA_CENTER, fontSize=12, leading=14, textColor=colors.HexColor("#263f30"))
-                                resource_meta = (pdf_text(allocated_room or "Room not assigned") if view_type == "teacher" else pdf_text(teacher_initials))
+                                resource_meta = allocated_room if view_type == "teacher" else teacher_initials
                                 card_rows = [
                                     [Paragraph("<b>" + subject_initial + "</b>", resource_subject_style)],
                                     [Paragraph("<b>" + pdf_text(class_initials) + "</b>", resource_class_style)],
-                                    [Paragraph(pdf_text(str(max(1, int(lesson.get("duration_periods") or 1))) + "P  " + resource_meta), footer_style)],
+                                    [Paragraph(pdf_text(str(max(1, int(lesson.get("duration_periods") or 1))) + "P" + (("  " + pdf_text(resource_meta)) if resource_meta else "")), footer_style)],
                                 ]
                             else:
                                 card_rows = [
@@ -655,8 +655,8 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                             class_label=str(lesson.get("class_name") or "").strip()
                             stream_label=str(lesson.get("stream") or "").strip()
                             class_initials=str(lesson.get("class_initials") or "").strip().upper() or (class_label+((" "+stream_label) if stream_label else "") or "—")
-                            resource_meta=allocated_room or "Room not assigned" if view_type == "teacher" else teacher_initials
-                            detail=str(lesson.get("subject_initial") or "").strip().upper()+"\n"+class_initials+"\n"+str(max(1,int(lesson.get("duration_periods") or 1)))+"P  "+resource_meta
+                            resource_meta=allocated_room if view_type == "teacher" else teacher_initials
+                            detail=str(lesson.get("subject_initial") or "").strip().upper()+"\n"+class_initials+"\n"+str(max(1,int(lesson.get("duration_periods") or 1)))+"P"+(("  "+resource_meta) if resource_meta else "")
                         else:
                             detail=str(max(1,int(lesson.get("duration_periods") or 1)))+"P\n"+str(lesson.get("subject_initial") or "").strip().upper()+"\n"
                             if not layout["room_view"] and allocated_room: detail+="⌂ "+allocated_room+"\n"
