@@ -471,12 +471,10 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                                         name_parts = [part for part in str(lesson.get("teacher_name") or "").split() if part]
                                         teacher_initials = "".join(part[0] for part in (name_parts[:1] + (name_parts[-1:] if len(name_parts) > 1 else []))).upper()[:4] or "—"
                                     duration = str(max(1, int(lesson.get("duration_periods") or 1))) + "P"
-                                    teacher_name = pdf_text(str(lesson.get("teacher_name") or "").strip())
                                     room_text = "" if layout["room_view"] else pdf_text(allocated_room_name(lesson))
                                     period_style = ParagraphStyle("PrintPeriodMarker", parent=cell_style, alignment=TA_RIGHT, fontSize=5, leading=6, textColor=colors.black)
                                     subject_style = ParagraphStyle("PrintSubjectInitials", parent=cell_style, alignment=TA_CENTER, fontSize=10, leading=11, textColor=colors.black)
                                     detail_style = ParagraphStyle("PrintCellDetail", parent=cell_style, alignment=TA_RIGHT, fontSize=4, leading=5, textColor=colors.black)
-                                    name_style = ParagraphStyle("PrintTeacherName", parent=cell_style, alignment=TA_RIGHT, fontSize=5, leading=6, textColor=colors.black)
                                     lesson_rows.extend([
                                         [Paragraph(pdf_text(duration), period_style)],
                                         [Paragraph("<b>" + subject_initial + "</b>", subject_style)],
@@ -487,15 +485,12 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                                         lesson_alignments.append("RIGHT")
                                     lesson_rows.append([Paragraph(teacher_initials, detail_style)])
                                     lesson_alignments.append("RIGHT")
-                                    if teacher_name:
-                                        lesson_rows.append([Paragraph(teacher_name, name_style)])
-                                        lesson_alignments.append("RIGHT")
-                                    lesson_rows.append([Paragraph("&nbsp;", cell_style)])
-                                    lesson_alignments.append("CENTER")
+
                                 text_layout = Table(lesson_rows, colWidths=[max(1, slot_width * cell["span"] - 6)])
                                 text_layout.setStyle(TableStyle([
                                     ("ALIGN", (0, 0), (-1, -1), "RIGHT"),
                                     ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                                    ("VALIGN", (0, len(lesson_rows) - 1), (-1, -1), "BOTTOM"),
                                     ("LEFTPADDING", (0, 0), (-1, -1), 0),
                                     ("RIGHTPADDING", (0, 0), (-1, -1), 0),
                                     ("TOPPADDING", (0, 0), (-1, -1), 0),
