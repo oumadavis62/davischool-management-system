@@ -111,7 +111,7 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
         pdf_query = urlencode({
             "profile_id": profile_id, "view_type": view_type,
             "class_id": class_id, "teacher_id": teacher_id, "room_id": room_id,
-            "remedial_display": remedial_display, "inline": 1,
+            "remedial_display": remedial_display, "inline": 1, "print_sheet": 1,
         })
         return RedirectResponse("/app/timetable/export/pdf?" + pdf_query, status_code=303)
 
@@ -267,6 +267,7 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
         room_id: int = 0,
         remedial_display: str = "combined",
         inline: int = 0,
+        print_sheet: int = 0,
     ):
         remedial_display = "separate" if remedial_display == "separate" else "combined"
         school, result, error = load_view(request, profile_id, view_type, class_id, teacher_id, room_id)
@@ -421,7 +422,8 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                             if not re.fullmatch(r"#[0-9A-Fa-f]{6}", card_color):
                                 card_color = "#2563EB"
                             accent = colors.HexColor(card_color)
-                            tint = colors.Color(1-(1-accent.red)*0.17, 1-(1-accent.green)*0.17, 1-(1-accent.blue)*0.17)
+                            tint = (colors.HexColor("#F4F7F4") if print_sheet else colors.Color(1-(1-accent.red)*0.17, 1-(1-accent.green)*0.17, 1-(1-accent.blue)*0.17))
+                            card_border = colors.HexColor("#B8C9BC") if print_sheet else accent
                             top_style = ParagraphStyle("ExportDuration", parent=cell_style, alignment=2, fontSize=5, leading=6)
                             subject_style = ParagraphStyle("ExportSubject", parent=cell_style, alignment=TA_CENTER, fontSize=9, leading=11)
                             room_style = ParagraphStyle("ExportRoom", parent=cell_style, alignment=TA_CENTER, fontSize=5, leading=6, textColor=colors.HexColor("#55705d"))
@@ -474,8 +476,8 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                                 ("SPAN", (0,1), (2,1)) if view_type in ("teacher", "room") else ("ALIGN", (0,0), (-1,-1), "CENTER"),
                                 ("VALIGN", (0,2), (-1,2), "MIDDLE") if view_type in ("teacher", "room") else ("ALIGN", (0,0), (-1,-1), "CENTER"),
                                 ("BACKGROUND", (0,0), (-1,-1), tint),
-                                ("BOX", (0,0), (-1,-1), 0.45, accent),
-                                ("LINEBEFORE", (0,0), (0,-1), 3, accent),
+                                ("BOX", (0,0), (-1,-1), 0.45, card_border),
+                                ("LINEBEFORE", (0,0), (0,-1), 3, card_border),
                                 ("LEFTPADDING", (0,0), (-1,-1), 3), ("RIGHTPADDING", (0,0), (-1,-1), 3),
                                 ("TOPPADDING", (0,0), (-1,-1), 1), ("BOTTOMPADDING", (0,0), (-1,-1), 1),
                                 ("VALIGN", (0,0), (-1,-1), "MIDDLE"),
