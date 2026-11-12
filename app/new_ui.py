@@ -230,7 +230,7 @@ def davischool_public_homepage(request: Request):
 <section class="section trust"><div class="wrap trust-inner"><h2>Built around secure access</h2><p>Mabale_ICT keeps its management workspace behind sign-in. This public page explains the platform; school records and administrative tools remain within the authenticated application.</p></div></section>
 <section class="bottom-cta"><h2>Ready to continue?</h2><p>Sign in to access your authorised Mabale_ICT workspace.</p><a class="btn" href="/login">Open Mabale_ICT Sign In&nbsp; →</a></section>
 </main>
-<footer class="footer"><div class="wrap footer-inner"><span>© Mabale_ICT Management System</span><span>School operations, organised.</span></div></footer>
+<footer class="footer"><div class="wrap footer-inner"><span>© Mabale_ICT Software</span><span>School operations, organised.</span></div></footer>
 </body>
 </html>""")
 
@@ -495,7 +495,7 @@ def _pdf_build(story, pagesize, title, page_border=False):
             canvas.line(6 * mm, 8 * mm, 6 * mm, pagesize[1] - 8 * mm)
             canvas.line(pagesize[0] - 6 * mm, 8 * mm, pagesize[0] - 6 * mm, pagesize[1] - 8 * mm)
         canvas.setFont("Helvetica", 7)
-        footer = "Mabale_ICT Management System  ·  Generated: %s  ·  Page %d" % (
+        footer = "Mabale_ICT Software  ·  Generated: %s  ·  Page %d" % (
             generated_at, canvas.getPageNumber()
         )
         canvas.setFillColorRGB(0.09, 0.42, 0.23)
@@ -510,7 +510,7 @@ def _pdf_build(story, pagesize, title, page_border=False):
         topMargin=10 * mm,
         bottomMargin=14 * mm,
         title=title,
-        author="Mabale_ICT Management System",
+        author="Mabale_ICT Software",
     )
     try:
         doc.build(story, onFirstPage=draw_footer, onLaterPages=draw_footer)
@@ -525,7 +525,7 @@ def _pdf_build(story, pagesize, title, page_border=False):
         fallback_buffer = BytesIO()
         c = canvas.Canvas(fallback_buffer, pagesize=pagesize)
         c.setTitle(str(title))
-        c.setAuthor("Mabale_ICT Management System")
+        c.setAuthor("Mabale_ICT Software")
         y = pagesize[1] - 18 * mm
 
         def ascii_text(value):
@@ -561,7 +561,7 @@ def _pdf_build(story, pagesize, title, page_border=False):
                             c.drawCentredString(
                                 pagesize[0] / 2,
                                 7 * mm,
-                                "Mabale_ICT Management System - Generated: %s - Page %d"
+                                "Mabale_ICT Software - Generated: %s - Page %d"
                                 % (generated_at, c.getPageNumber()),
                             )
                             c.showPage()
@@ -576,7 +576,7 @@ def _pdf_build(story, pagesize, title, page_border=False):
         c.drawCentredString(
             pagesize[0] / 2,
             7 * mm,
-            "Mabale_ICT Management System - Generated: %s - Page %d"
+            "Mabale_ICT Software - Generated: %s - Page %d"
             % (generated_at, c.getPageNumber()),
         )
         c.save()
@@ -587,16 +587,16 @@ def _pdf_build(story, pagesize, title, page_border=False):
         from reportlab.pdfgen import canvas
         minimal_buffer = BytesIO()
         c = canvas.Canvas(minimal_buffer, pagesize=pagesize)
-        c.setTitle("Mabale_ICT Management System")
+        c.setTitle("Mabale_ICT Software")
         c.setFont("Helvetica-Bold", 12)
-        c.drawString(12 * mm, pagesize[1] - 18 * mm, "Mabale_ICT Management System")
+        c.drawString(12 * mm, pagesize[1] - 18 * mm, "Mabale_ICT Software")
         c.setFont("Helvetica", 9)
         c.drawString(12 * mm, pagesize[1] - 28 * mm, "PDF generated successfully.")
         c.setFont("Helvetica", 7)
         c.drawCentredString(
             pagesize[0] / 2,
             7 * mm,
-            "Mabale_ICT Management System - Generated: %s - Page %d"
+            "Mabale_ICT Software - Generated: %s - Page %d"
             % (generated_at, c.getPageNumber()),
         )
         c.save()
@@ -1104,6 +1104,7 @@ table{{width:100%;border-collapse:collapse;background:white;border:1px solid #e5
  .academic-workspace .page table{{min-width:680px}}
 }}
 @media(max-width:430px){{.academic-workspace .page .grid{{grid-template-columns:1fr}}.academic-workspace .page .field{{width:100%}}}}
+@media print{{body:not(:has(.print-footer)):not(:has(.register-footer)):not(:has(.export-footer)):not(:has(.print-brand-footer)){{padding-bottom:12mm!important}}body:not(:has(.print-footer)):not(:has(.register-footer)):not(:has(.export-footer)):not(:has(.print-brand-footer))::after{{content:'Mabale_ICT Software';position:fixed;left:0;right:0;bottom:3mm;text-align:center;border-top:1px solid #dce9df;padding-top:3px;font:8pt Arial,sans-serif;color:#176b3a;background:#fff}}}}
 </style></head><body class='{" overview-active" if title == "Mabale_ICT" else ""}'><div class='app{" teacher-portal" if teacher_locked else ""}{" academic-workspace" if request_path.startswith(("/app/academics", "/app/exams", "/app/report-cards", "/app/subjects", "/app/classes", "/app/students/promotion")) else ""}'><aside class='side'><div class='sidebar-brand'><div class='sidebar-login-logo' aria-label='Mabale_ICT logo'><span class='davi-mark'><span class='d-letter'>M</span></span></div><div class='sidebar-brand-title'>Mabale_ICT<br>Management System</div></div>{links}{"" if teacher_locked else "<div style='padding:14px 12px;color:#94a3b8;font-size:10px;line-height:1.4'>Selection-based data entry is enabled throughout the school workspace.</div><a href='/logout' class='nav' style='margin-top:18px'>↪ Logout</a>"}</aside>
 <main class='main{" staff-workspace" if request_path == "/app/staff" else ""}'><header class='top'><div style='display:flex;align-items:center;gap:10px'><button type='button' class='sidebar-toggle' id='sidebarToggle' aria-label='Hide sidebar' title='Hide sidebar' data-sidebar-toggle='1'>☰</button><div><div class='top-system-title'>Mabale_ICT</div><div class='top-welcome'>Welcome back, <strong>{escape(name)}</strong></div><div class='muted'>{escape(role.replace('_',' ').title())}</div></div></div><div style='display:flex;gap:10px;align-items:center'>{avatar_html}</div></header>{body}<script>(function(){{
 // Shared workspace performance helpers: warm likely navigation targets on intent,
@@ -2748,7 +2749,7 @@ function openStudentsPrintPreview(){
   table.classList.add('register-table');
   var schoolHeader=__SCHOOL_HEADER_JSON__;
   var generatedAt=new Date().toLocaleString();
-  var footer='<footer class="register-footer"><span>Mabale_ICT Management System</span><span>Generated: '+generatedAt+'</span></footer>';
+  var footer='<footer class="register-footer"><span>Mabale_ICT Software</span><span>Generated: '+generatedAt+'</span></footer>';
   var html='<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Student Register Print Preview</title><style>'+css+'</style></head><body>'+previewBar+schoolHeader+table.outerHTML+footer+'</body></html>';
   w.document.open();w.document.write(html);w.document.close();w.focus();
   setTimeout(function(){try{w.print();}catch(e){console.error('Unable to open Chrome print preview',e);}},500);
@@ -5760,7 +5761,7 @@ function printDocument(){
   css += ' .marksheet-card{display:block!important;width:100%!important;margin:0!important;padding:0!important;border:0!important;box-shadow:none!important}.marksheet-scroll{overflow:visible!important;width:100%!important;max-width:none!important}.marksheet{border-collapse:collapse;width:max-content;min-width:100%;table-layout:fixed}.marksheet th,.marksheet td{border:1.25px solid #111!important;padding:6px 8px!important;text-align:center!important;font-size:12px!important;white-space:nowrap!important;box-sizing:border-box}.marksheet th{background:#fff!important;color:#000!important;font-weight:900!important}.marksheet .name-head,.marksheet .name-cell{text-align:left!important;min-width:170px!important;width:170px!important}.marksheet .adm-no-col{width:58px!important;min-width:58px!important}.marksheet .adm-no-cell,.marksheet .adm-no-head{width:58px!important;min-width:58px!important;max-width:58px!important;padding-left:4px!important;padding-right:4px!important}.marksheet .name-col,.marksheet .name-head,.marksheet .name-cell{width:170px!important;min-width:170px!important;max-width:170px!important}.marksheet .name-col{width:170px!important;min-width:170px!important}.marksheet .stream-col,.marksheet .stream-cell{width:55px!important;min-width:55px!important}.marksheet .mks-col{width:68px!important;min-width:68px!important}.marksheet .points-col{width:44px!important;min-width:44px!important}.marksheet .grade-col{width:44px!important;min-width:44px!important}.marksheet .overall-marks-col,.marksheet .overall-mks-col{width:72px!important;min-width:72px!important}.marksheet .overall-points-col,.marksheet col.overall-points-col{width:72px!important;min-width:72px!important;max-width:72px!important}.marksheet .overall-avg-col,.marksheet col.overall-avg-col{width:84px!important;min-width:84px!important;max-width:84px!important}.marksheet .overall-grade-col{min-width:68px!important}.marksheet .overall-pos-col{min-width:58px!important}' ;
   var css2='*{box-sizing:border-box}body{margin:0;background:#fff;color:#172033;font-family:Arial,sans-serif;min-height:272mm;display:flex;flex-direction:column}.report-document{display:flex!important;flex-direction:column!important;width:100%!important;min-height:272mm!important;margin:0!important;padding:0!important;border:0!important;box-shadow:none!important}.report-performance{margin-top:5px;padding:4px 6px;border:1px solid #cbd5e1;border-radius:6px}.performance-chart{height:62px;display:flex;align-items:flex-end;justify-content:center;gap:9px;margin-top:2px;border-bottom:1px solid #94a3b8}.performance-bar-item{height:100%;min-width:38px;max-width:80px;flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end}.performance-bar-value{font-size:6.5px;font-weight:800;margin-bottom:1px}.performance-bar-track{height:42px;width:16px;background:#e2e8f0;border-radius:3px 3px 0 0;display:flex;align-items:flex-end;overflow:hidden}.performance-bar-fill{width:100%;background:#176B3A;min-height:1px}.performance-bar-label{font-size:6.5px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:80px;margin-top:1px}.report-performance,.report-attendance,.report-grade-key,.report-summary-extra{break-inside:avoid;page-break-inside:avoid}@page{size:A4 landscape;margin:8mm 8mm 12mm}';
   var generatedAt=new Intl.DateTimeFormat('en-KE',{timeZone:'Africa/Nairobi',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false}).format(new Date())+' EAT';
-  var footer='<div class="print-footer"><i>Mabale_ICT Management System</i> · Generated: '+generatedAt+'</div>';
+  var footer='<div class="print-footer"><i>Mabale_ICT Software</i> · Generated: '+generatedAt+'</div>';
   var previewBar='<div class="marksheet-preview-bar no-print"><div><b>🖨️ MarkSheet Print Preview</b><span>Review the complete MarkSheet before printing.</span></div><div><button type="button" onclick="window.print()">🖨️ Print MarkSheet</button><button type="button" onclick="window.close()">✕ Close Preview</button></div></div>';
   var previewCss='.marksheet-preview-bar{position:sticky;top:0;z-index:9999;display:flex;align-items:center;justify-content:space-between;gap:16px;padding:12px 16px;margin:0 0 14px;background:#172033;color:#fff;box-shadow:0 2px 8px rgba(0,0,0,.15);font-family:Arial,sans-serif}.marksheet-preview-bar span{display:block;font-size:12px;font-weight:400;margin-top:3px;opacity:.85}.marksheet-preview-bar button{border:0;border-radius:8px;padding:10px 14px;margin-left:7px;font-weight:800;cursor:pointer;background:#fff;color:#172033}.marksheet-preview-bar button:first-child{background:#176B3A;color:#fff}@media print{.marksheet-preview-bar{display:none!important}}';
   var html='<!doctype html><html><head><meta charset="utf-8"><title>MarkSheet Print Preview</title><style>'+css+previewCss+'</style></head><body>'+previewBar+printDoc.outerHTML+footer+'</body></html>';
@@ -7150,7 +7151,7 @@ main{{width:min(1100px,92%);margin:28px auto 50px}}.welcome{{margin-bottom:20px}
 {parent_section_fees_html}
 {parent_section_notices_html}
 {parent_section_messages_html}
-{parent_section_contact_html}<p class='muted' style='text-align:center;margin-top:18px'>Your access is limited to the learner or learners explicitly linked to this parent account.</p><footer class='parent-platform-footer' aria-label='Mabale_ICT platform branding'><span class='parent-platform-logo' aria-hidden='true'><span class='davi-mark'></span></span><span>Powered by <strong>Mabale_ICT</strong></span></footer></main>
+{parent_section_contact_html}<p class='muted' style='text-align:center;margin-top:18px'>Your access is limited to the learner or learners explicitly linked to this parent account.</p><footer class='parent-platform-footer' aria-label='Mabale_ICT platform branding'><span class='parent-platform-logo' aria-hidden='true'><span class='davi-mark'></span></span><span>Powered by <strong>Mabale_ICT Software</strong></span></footer></main>
 <script>function parentShow(view){{document.querySelectorAll('.parent-view').forEach(function(section){{section.hidden=section.id!=='parent-'+view;}});document.querySelectorAll('.parent-tab').forEach(function(tab){{tab.classList.toggle('active',tab.dataset.view===view);}});window.scrollTo({{top:0,behavior:'smooth'}});}}</script></body></html>"""
     return HTMLResponse(body)
 
@@ -12236,6 +12237,7 @@ def external_exam_analysis_pdf(request: Request, exam_type: str = "", year: str 
         from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
         from reportlab.lib.enums import TA_CENTER
         from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+        from reportlab.lib.units import mm
         buffer = io.BytesIO()
         doc = SimpleDocTemplate(buffer,pagesize=landscape(A4),rightMargin=24,leftMargin=24,topMargin=24,bottomMargin=24)
         styles = getSampleStyleSheet()
@@ -12287,7 +12289,14 @@ def external_exam_analysis_pdf(request: Request, exam_type: str = "", year: str 
         story.append(gt)
         story.append(Spacer(1,8))
         story.append(Paragraph("Official grades/levels are retained as entered or imported. This report is an analysis aid and does not replace official KNEC grade calculations or candidate eligibility rules.",styles["ExternalSmall"]))
-        doc.build(story)
+        def draw_export_footer(canvas, document):
+            canvas.saveState()
+            canvas.setFont("Helvetica", 7)
+            canvas.setFillColor(colors.HexColor("#176b3a"))
+            generated_at = datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%d/%m/%Y %H:%M EAT")
+            canvas.drawCentredString(landscape(A4)[0] / 2, 3 * mm, "Mabale_ICT Software · Generated: " + generated_at + " · Page %d" % canvas.getPageNumber())
+            canvas.restoreState()
+        doc.build(story, onFirstPage=draw_export_footer, onLaterPages=draw_export_footer)
         return Response(buffer.getvalue(),media_type="application/pdf",
                         headers={"Content-Disposition":'attachment; filename="Mabale_ICT_External_Examination_Analysis.pdf"'})
     except Exception as exc:
@@ -12932,7 +12941,7 @@ def report_cards_class_preview(request: Request, exam_ids: str="", class_id: str
         closing_text=escape(_format_report_card_date(report_dates["closing_date"]))
         cards=[]
         generated_at=datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%d/%m/%Y %H:%M:%S EAT")
-        footer_html="<div class='print-footer'><i>Mabale_ICT Management System</i> · Generated: %s</div>" % generated_at
+        footer_html="<div class='print-footer'><i>Mabale_ICT Software</i> · Generated: %s</div>" % generated_at
         for st in students:
             try:
                 result=bulk_results.get(int(st["id"])) or {"details":[],"total":0.0,"average":0.0,"points":0.0,"overall_grade":"—","count":0}
@@ -13228,7 +13237,7 @@ function printReportCard(){
     hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false
   }).format(new Date())+' EAT';
   var css='*{box-sizing:border-box}body{margin:0;background:#fff;color:#172033;font-family:Arial,sans-serif}.report-document{display:flex!important;flex-direction:column!important;width:100%!important;min-height:272mm!important;margin:0!important;padding:0 5mm 12mm!important;border-left:1px solid #176B3A!important;border-right:1px solid #176B3A!important;box-shadow:none!important}.no-print{display:none!important}.doc-header{display:grid;grid-template-columns:86px 1fr;align-items:center;gap:12px;border-top:2px solid #2E8B57;border-bottom:3px solid #176B3A;padding:8px 4px 10px;margin-bottom:10px}.doc-logo{width:86px;height:70px;display:flex;align-items:center;justify-content:center}.doc-logo img{max-width:82px;max-height:66px;object-fit:contain}.doc-school-block{min-width:0;text-align:center}.doc-school{font-size:16px;line-height:1.15;font-weight:900;text-transform:uppercase;color:#176B3A}.doc-contact{font-size:10px;color:#334155;margin-top:5px;line-height:1.45}.doc-contact div{display:block;margin:1px 0;text-align:center}.doc-right{font-size:10px;color:#176B3A;line-height:1.65;text-align:center;min-width:0}.doc-right div{display:block;margin:1px 0}.doc-student-photo{width:70px;height:78px;border:1px solid #94a3b8;border-radius:5px;margin-left:auto;display:flex;align-items:center;justify-content:center;font-size:34px;background:#f8fafc;color:#64748b}.comments p{font-style:italic}.comments .actual-comment{font-style:italic}.report-card .comments p{font-style:italic}.marksheet-school{display:none!important}table{width:100%;border-collapse:collapse;table-layout:fixed}th{background:#176B3A!important;color:#fff!important}th,td{border:1px solid #176B3A;padding:4px;font-size:9px;text-align:left;overflow-wrap:anywhere}.report-card table th:nth-child(1),.report-card table td:nth-child(1){width:28%}.report-card table th:nth-child(2),.report-card table td:nth-child(2){width:8%}.report-card table th:nth-child(3),.report-card table td:nth-child(3){width:7%}.report-card table th:nth-child(4),.report-card table td:nth-child(4){width:7%}.report-card table th:nth-child(5),.report-card table td:nth-child(5){width:10%;font-size:8px;line-height:1.2}.student-identity{display:flex;flex-wrap:nowrap;gap:12px;font-size:9px;white-space:nowrap;margin:4px 0}.student-identity .student-name-value{font-size:9px}.report-signatory{font-size:8px;line-height:1.3}.report-signatory b,.report-signatory .signatory-name{font-size:8px}.kpi{font-size:18px;font-weight:900}.card{border:0;box-shadow:none}.report-comment-form{display:none}.print-footer{position:fixed;left:0;right:0;bottom:0;margin:0;text-align:center;border-top:2px solid #2E8B57;padding-top:4px;font-size:8px;color:#176B3A;background:#fff}@page{size:A4 portrait;margin:10mm 10mm 15mm}';
-  var footer='<div class="print-footer"><i>Mabale_ICT Management System</i> · Generated: '+generatedAt+'</div>';
+  var footer='<div class="print-footer"><i>Mabale_ICT Software</i> · Generated: '+generatedAt+'</div>';
   var previewBar='<div class="report-preview-bar no-print"><div><b>🖨️ Student Report Card Preview</b><span>Review the complete report card before printing.</span></div><div><button type="button" onclick="window.print()">🖨️ Print Report Card</button><button type="button" onclick="window.close()">✕ Close Preview</button></div></div>';
   var previewCss='.report-preview-bar{position:sticky;top:0;z-index:9999;display:flex;align-items:center;justify-content:space-between;gap:16px;padding:12px 16px;margin:0 0 14px;background:#172033;color:#fff;box-shadow:0 2px 8px rgba(0,0,0,.15);font-family:Arial,sans-serif}.report-preview-bar span{display:block;font-size:12px;font-weight:400;margin-top:3px;opacity:.85}.report-preview-bar button{border:0;border-radius:8px;padding:10px 14px;margin-left:7px;font-weight:800;cursor:pointer;background:#fff;color:#172033}.report-preview-bar button:first-child{background:#176B3A;color:#fff}@media print{.report-preview-bar{display:none!important}}';
   var printDoc=doc.cloneNode(true);
@@ -13260,7 +13269,7 @@ function printReportCard(){
         "<button type='button' class='btn' style='margin-top:8px;background:#176B3A' onclick='printReportCard()'>🖨️ Print MarkSheet / Report Preview</button> "
         + f"<a class='btn' style='display:inline-block;margin-top:8px;text-decoration:none' href='/app/report-cards/pdf?exam_ids={report_pdf_query}&student_id={stid}'>⬇️ Download PDF</a>"
     ) if st and eid else "")
-    report_html=f"""<div class='card section' id='report' style='background:white'>{doc_brand}<h2>{escape(str(st['name']))}</h2><div class='student student-identity'><span><b>Student Name:</b> <span class='student-name-value'>{escape(str(st['name'] or ''))}</span></span><span><b>Adm No:</b> {escape(str(st['admission_no'] or ''))}</span><span><b>Class:</b> {escape(str(st['class_name'] or ''))}</span><span><b>Stream:</b> {escape(str(st['stream'] or ''))}</span></div><div class='student student-term'><span><b>Term:</b> {escape(str(exams[0]['term'] or '') if exams else '')}</span><span><b>Assessment:</b> <span class='assessment-name'>{escape(', '.join(str(e['name'] or '') for e in exams if e['name']))}</span></span></div>{final_banner}<table style='margin-top:14px'><thead><tr><th>Subject</th><th>Marks</th><th>Grade</th><th>Points</th><th>Performance Comments</th></tr></thead><tbody>{report_subject_rows}</tbody></table><div class='grid'><div class='card'><div class='label'>Subjects</div><div class='kpi'>{len(rows)}</div></div><div class='card'><div class='label'><b>Total marks</b></div><div class='kpi'>{total:.1f}</div></div><div class='card'><div class='label'>Average</div><div class='kpi'>{avg:.1f}%</div></div><div class='card'><div class='label'><b>Total points</b></div><div class='kpi'>{result['points']:.1f}</div></div><div class='card'><div class='label'><b>Overall grade</b></div><div class='kpi'>{escape(str(result["overall_grade"]))}</div></div><div class='card'><div class='label'>Position</div><div class='kpi'>{position} / {class_total_students}</div></div></div><div class='report-summary-extra'><div><b>Class Mean</b><strong>{class_mean:.1f}%</strong></div><div><b>Difference</b><strong>{(avg-class_mean):+.1f}%</strong></div><div><b>Subjects Recorded</b><strong>{len(result['details'])}</strong></div><div><b>Result Status</b><strong>{'Final' if report_final else 'Draft'}</strong></div></div>{performance_graph}<div class='report-attendance'><b>Attendance</b><span>Days Recorded: {attendance_summary['open']}</span><span>Present: {attendance_summary['present']}</span><span>Absent: {attendance_summary['absent']}</span></div><div class='report-comment-form'><form method='post' action='/app/report-cards/comment'><input type='hidden' name='exam_id' value='{eid}'><input type='hidden' name='student_id' value='{stid}'><textarea name='comment' class='field' rows='3' placeholder='Teacher / principal comment'>{escape(str(comment or ''))}</textarea><button class='btn' style='margin-top:8px'>Save Comment</button></form></div><div style='margin-top:14px'><b>Class Teacher's Comment</b><div class='actual-comment' style='border:1px solid #cbd5e1;border-radius:8px;padding:10px;min-height:55px;font-style:italic'>{escape(str((grade_comment_rule['class_teacher_comment'] if grade_comment_rule else "") or class_teacher_comment or ""))}</div></div><div style='margin-top:14px'><b>Principal's Comment</b><div class='actual-comment' style='border:1px solid #cbd5e1;border-radius:8px;padding:10px;min-height:55px;font-style:italic'>{escape(str((grade_comment_rule['principal_comment'] if grade_comment_rule else "") or ""))}</div></div><div class='grid report-signatories' style='margin-top:18px'><div class='report-signatory' style='text-align:center'><b>Class Teacher:</b> <span class='signatory-name'>{escape(str(class_teacher_name or 'Not Assigned'))}</span><div style='margin-top:18px;border-bottom:1px solid #172033;width:68%;margin-left:auto;margin-right:auto'></div><small>Signature</small></div><div class='report-signatory' style='text-align:center'><b>Principal:</b> <span class='signatory-name'>{escape(str(principal_name or 'Not Assigned'))}</span><div style='margin-top:18px;border-bottom:1px solid #172033;width:68%;margin-left:auto;margin-right:auto'></div><small>Signature</small></div></div><div class='report-dates' style='display:flex;justify-content:center;align-items:center;width:100%;text-align:center'><b>The School Officially Closes on <u>{escape(_format_report_card_date(closing_date))}</u> and Officially Opens on <u>{escape(_format_report_card_date(opening_date))}</u>.</b></div>{grade_key_html}<div style='margin-top:14px'><b>Additional Report Comment</b><div style='border:1px solid #cbd5e1;border-radius:8px;padding:10px;min-height:45px'>{escape(str(comment or ''))}</div></div><div class='print-footer'><i>Mabale_ICT Management System</i> · Generated: {datetime.now(ZoneInfo('Africa/Nairobi')).strftime('%d/%m/%Y %H:%M:%S EAT')}</div>{print_btn}{print_script}</div>""" if st else "<div class='card section'>Select a student and examination.</div>"
+    report_html=f"""<div class='card section' id='report' style='background:white'>{doc_brand}<h2>{escape(str(st['name']))}</h2><div class='student student-identity'><span><b>Student Name:</b> <span class='student-name-value'>{escape(str(st['name'] or ''))}</span></span><span><b>Adm No:</b> {escape(str(st['admission_no'] or ''))}</span><span><b>Class:</b> {escape(str(st['class_name'] or ''))}</span><span><b>Stream:</b> {escape(str(st['stream'] or ''))}</span></div><div class='student student-term'><span><b>Term:</b> {escape(str(exams[0]['term'] or '') if exams else '')}</span><span><b>Assessment:</b> <span class='assessment-name'>{escape(', '.join(str(e['name'] or '') for e in exams if e['name']))}</span></span></div>{final_banner}<table style='margin-top:14px'><thead><tr><th>Subject</th><th>Marks</th><th>Grade</th><th>Points</th><th>Performance Comments</th></tr></thead><tbody>{report_subject_rows}</tbody></table><div class='grid'><div class='card'><div class='label'>Subjects</div><div class='kpi'>{len(rows)}</div></div><div class='card'><div class='label'><b>Total marks</b></div><div class='kpi'>{total:.1f}</div></div><div class='card'><div class='label'>Average</div><div class='kpi'>{avg:.1f}%</div></div><div class='card'><div class='label'><b>Total points</b></div><div class='kpi'>{result['points']:.1f}</div></div><div class='card'><div class='label'><b>Overall grade</b></div><div class='kpi'>{escape(str(result["overall_grade"]))}</div></div><div class='card'><div class='label'>Position</div><div class='kpi'>{position} / {class_total_students}</div></div></div><div class='report-summary-extra'><div><b>Class Mean</b><strong>{class_mean:.1f}%</strong></div><div><b>Difference</b><strong>{(avg-class_mean):+.1f}%</strong></div><div><b>Subjects Recorded</b><strong>{len(result['details'])}</strong></div><div><b>Result Status</b><strong>{'Final' if report_final else 'Draft'}</strong></div></div>{performance_graph}<div class='report-attendance'><b>Attendance</b><span>Days Recorded: {attendance_summary['open']}</span><span>Present: {attendance_summary['present']}</span><span>Absent: {attendance_summary['absent']}</span></div><div class='report-comment-form'><form method='post' action='/app/report-cards/comment'><input type='hidden' name='exam_id' value='{eid}'><input type='hidden' name='student_id' value='{stid}'><textarea name='comment' class='field' rows='3' placeholder='Teacher / principal comment'>{escape(str(comment or ''))}</textarea><button class='btn' style='margin-top:8px'>Save Comment</button></form></div><div style='margin-top:14px'><b>Class Teacher's Comment</b><div class='actual-comment' style='border:1px solid #cbd5e1;border-radius:8px;padding:10px;min-height:55px;font-style:italic'>{escape(str((grade_comment_rule['class_teacher_comment'] if grade_comment_rule else "") or class_teacher_comment or ""))}</div></div><div style='margin-top:14px'><b>Principal's Comment</b><div class='actual-comment' style='border:1px solid #cbd5e1;border-radius:8px;padding:10px;min-height:55px;font-style:italic'>{escape(str((grade_comment_rule['principal_comment'] if grade_comment_rule else "") or ""))}</div></div><div class='grid report-signatories' style='margin-top:18px'><div class='report-signatory' style='text-align:center'><b>Class Teacher:</b> <span class='signatory-name'>{escape(str(class_teacher_name or 'Not Assigned'))}</span><div style='margin-top:18px;border-bottom:1px solid #172033;width:68%;margin-left:auto;margin-right:auto'></div><small>Signature</small></div><div class='report-signatory' style='text-align:center'><b>Principal:</b> <span class='signatory-name'>{escape(str(principal_name or 'Not Assigned'))}</span><div style='margin-top:18px;border-bottom:1px solid #172033;width:68%;margin-left:auto;margin-right:auto'></div><small>Signature</small></div></div><div class='report-dates' style='display:flex;justify-content:center;align-items:center;width:100%;text-align:center'><b>The School Officially Closes on <u>{escape(_format_report_card_date(closing_date))}</u> and Officially Opens on <u>{escape(_format_report_card_date(opening_date))}</u>.</b></div>{grade_key_html}<div style='margin-top:14px'><b>Additional Report Comment</b><div style='border:1px solid #cbd5e1;border-radius:8px;padding:10px;min-height:45px'>{escape(str(comment or ''))}</div></div><div class='print-footer'><i>Mabale_ICT Software</i> · Generated: {datetime.now(ZoneInfo('Africa/Nairobi')).strftime('%d/%m/%Y %H:%M:%S EAT')}</div>{print_btn}{print_script}</div>""" if st else "<div class='card section'>Select a student and examination.</div>"
     subject_editor="".join(f"""<div class='card' style='margin-top:10px'><div style='font-weight:800;margin-bottom:7px'>{escape(str(r['name']))}</div><form method='post' action='/app/report-cards/subject-comment'><input type='hidden' name='student_id' value='{stid}'><input type='hidden' name='exam_id' value='{eid}'><input type='hidden' name='subject_id' value='{r['subject_id']}'><textarea name='comment' class='field' rows='2' placeholder='Performance comment for this subject'>{escape(str(subject_comments.get(int(r['subject_id']),'')))}</textarea><button class='btn' style='margin-top:7px'>Save Subject Comment</button></form></div>""" for r in rows) if st and eid else ""
     teacher_editor=f"""<div class='card section no-print'><h2>Class Teacher's Comment</h2><form method='post' action='/app/report-cards/class-teacher-comment'><input type='hidden' name='student_id' value='{stid}'><input type='hidden' name='exam_id' value='{eid}'><textarea name='comment' class='field' rows='4' placeholder='Enter the class teacher's comment'>{escape(str(class_teacher_comment or ''))}</textarea><button class='btn' style='margin-top:8px'>Save Class Teacher Comment</button></form></div>""" if st and eid else ""
     overall_rows=cur.execute("SELECT id,grade,min_total,max_total,class_teacher_comment,principal_comment FROM overall_grading_rules WHERE school_id=? ORDER BY CASE WHEN upper(trim(grade))='X' THEN 1 ELSE 0 END,min_total DESC,id DESC",(sid,)).fetchall()
@@ -13740,7 +13749,7 @@ function printGraduationRegister(){
  if(!w){alert('Chrome blocked the print preview. Allow pop-ups for this site, then try again.');return;}
  var bar='<div class="preview-bar no-print"><div><b>Graduation Records Print Preview</b><span>Review the filtered graduation records. The print preview opens automatically.</span></div><div><button onclick="window.print()">Print Graduation Records</button><button onclick="window.close()">Close Preview</button></div></div>';
  var css='*{box-sizing:border-box}body{margin:0;padding:18px;background:#fff;color:#111;font:12px Arial,sans-serif}.preview-bar{position:sticky;top:0;z-index:10;display:flex;justify-content:space-between;align-items:center;gap:12px;padding:12px 16px;margin:-18px -18px 18px;background:#172033;color:#fff}.preview-bar span{display:block;font-size:12px;margin-top:4px;opacity:.85}.preview-bar button{border:0;border-radius:7px;padding:10px 12px;margin-left:7px;font-weight:800;cursor:pointer}.preview-bar button:first-child{background:#176B3A;color:#fff}.doc-header{display:grid;grid-template-columns:76px 1fr 76px;align-items:center;gap:10px;border-top:2px solid #2E8B57;border-bottom:3px solid #2E8B57;padding:8px 0;margin-bottom:12px}.doc-logo{height:64px;display:flex;align-items:center;justify-content:center}.doc-logo img{max-width:70px;max-height:60px;object-fit:contain}.doc-school-block{text-align:center}.doc-school{font-size:20px;font-weight:800;text-transform:uppercase}.doc-contact{font-size:10px;line-height:1.4}.register-title{text-align:center;font-size:16px;margin:12px 0;text-decoration:underline}.graduation-class-table{margin-bottom:16px;break-inside:avoid}.class-teacher-heading th{text-align:left;background:#f1f5f9;font-size:10px}table{width:100%;border-collapse:collapse;font-size:9px}th,td{border:1px solid #333;padding:5px;text-align:left;vertical-align:top}th{background:#e8f5ec;font-weight:800}.print-footer{display:flex;justify-content:space-between;margin-top:16px;padding-top:6px;border-top:1px solid #777;font-size:9px}@page{size:A4 landscape;margin:10mm}@media print{.no-print{display:none!important}body{padding:0}.doc-header{break-inside:avoid}thead{display:table-header-group}tr{break-inside:avoid}}';
- var html='<!doctype html><html><head><meta charset="utf-8"><title>Graduation Records Print Preview</title><style>'+css+'</style></head><body>'+bar+source.innerHTML+'<div class="print-footer"><span>Mabale_ICT Management System</span><span>Generated: '+new Date().toLocaleString()+'</span></div></body></html>';
+ var html='<!doctype html><html><head><meta charset="utf-8"><title>Graduation Records Print Preview</title><style>'+css+'</style></head><body>'+bar+source.innerHTML+'<div class="print-footer"><span>Mabale_ICT Software</span><span>Generated: '+new Date().toLocaleString()+'</span></div></body></html>';
  w.document.open();w.document.write(html);w.document.close();w.focus();setTimeout(function(){try{w.print()}catch(e){console.error(e)}},400);
 }
 </script>"""
@@ -20207,7 +20216,7 @@ def class_marksheet_analysis_pdf(
             canvas.rect(4*mm, 4*mm, page_width - 8*mm, page_height - 8*mm, stroke=1, fill=0)
             canvas.setFont("Helvetica", 7)
             canvas.setFillColor(colors.HexColor("#176b3a"))
-            canvas.drawCentredString(page_width/2, 6*mm, "Mabale_ICT Management System · Generated " + datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%d/%m/%Y %H:%M EAT"))
+            canvas.drawCentredString(page_width/2, 6*mm, "Mabale_ICT Software · Generated " + datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%d/%m/%Y %H:%M EAT"))
             canvas.drawRightString(page_width - 8*mm, 6*mm, "Page %d" % canvas.getPageNumber())
             canvas.restoreState()
         doc.build(story, onFirstPage=add_footer, onLaterPages=add_footer)

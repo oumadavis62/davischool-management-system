@@ -227,7 +227,7 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
         specialized_export = view_type != "school"
         timetable_table_class = "specialized-timetable" if specialized_export else "main-timetable"
         generated_at = datetime.now(EAT).strftime("%d %b %Y %H:%M EAT")
-        export_footer = ("<footer class='export-footer'><span>Mabale_ICT Management System · Generated: " + escape(generated_at) + "</span><span>Total scheduled lessons: " + str(len(result["lessons"])) + "</span></footer>")
+        export_footer = ("<footer class='export-footer'><span>Mabale_ICT Software · Generated: " + escape(generated_at) + "</span><span>Total scheduled lessons: " + str(len(result["lessons"])) + "</span></footer>")
         room_period_css = ".resource-duration{top:3px;bottom:auto;right:5px}" if view_type == "room" else ""
         html=f"""<!doctype html><html><head><meta charset="utf-8"><title>{title}</title>
         <style>{room_period_css}
@@ -715,7 +715,7 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
             # Shrink only this consolidated sheet when a school has many entries.
             story.append(KeepInFrame(doc.width, doc.height - 34, [weekend_table], mode="shrink", hAlign="LEFT", vAlign="TOP"))
         generated_at = datetime.now(EAT).strftime("%d %b %Y %H:%M EAT")
-        doc.footer_left = "Mabale_ICT Management System · Generated: " + generated_at
+        doc.footer_left = "Mabale_ICT Software · Generated: " + generated_at
         doc.footer_right = "Total scheduled lessons: " + str(len(result["lessons"]))
         # Footer is drawn in afterPage(), after all content on each PDF page.
         doc.build(story)
@@ -963,12 +963,11 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
             else:
                 ws.page_setup.fitToHeight = 0
 
-        if view_type in ("teacher", "room"):
-            generated_at = datetime.now(EAT).strftime("%d %b %Y %H:%M EAT")
-            sheet.oddFooter.left.text = "Mabale_ICT Management System · Generated: " + generated_at
-            sheet.oddFooter.right.text = "Total scheduled lessons: " + str(len(result["lessons"]))
-            sheet.oddFooter.left.size = 8
-            sheet.oddFooter.right.size = 8
+        generated_at = datetime.now(EAT).strftime("%d %b %Y %H:%M EAT")
+        sheet.oddFooter.left.text = "Mabale_ICT Software · Generated: " + generated_at
+        sheet.oddFooter.right.text = "Total scheduled lessons: " + str(len(result["lessons"]))
+        sheet.oddFooter.left.size = 8
+        sheet.oddFooter.right.size = 8
         workbook.save(buffer)
         buffer.seek(0)
         filename = filename_prefix(school,result) + ".xlsx"
