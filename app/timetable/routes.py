@@ -217,6 +217,61 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
           @media(max-width:600px){{.tt-home-profile{{align-items:stretch;flex-direction:column;gap:8px;padding:12px}}.tt-home-profile select{{width:100%;min-width:0}}.tt-home-profile-top{{gap:14px}}.tt-home-profile-top>div:last-child{{width:100%;display:grid!important;grid-template-columns:1fr 1fr}}.tt-home-profile-top>div:last-child a,.tt-home-profile-top>div:last-child button{{text-align:center;white-space:normal}}.tt-home-metrics{{gap:9px}}.tt-home-metrics div{{min-height:75px;padding:12px}}.tt-home-metrics b{{font-size:24px}}.tt-home-catalog-list a{{min-height:70px}}.tt-home-hero h1{{font-size:29px}}.tt-home-hero p{{font-size:12px}}.tt-home-empty h2{{font-size:22px}}}}
           @media(max-width:390px){{.tt-home-profile-top>div:last-child{{grid-template-columns:1fr}}.tt-home-metrics span{{font-size:9px}}}}
 
+          /* Soft sage + pearl profile treatment: keep the page light and the green restrained */
+          .tt-home-profile{{
+            background:#f7f9f5;
+            border:1px solid #e4eae0;
+            box-shadow:0 5px 18px rgba(46,66,48,.045);
+          }}
+          .tt-home-profile label{{color:#526b56}}
+          .tt-home-profile select{{
+            background:#fff;
+            border:1px solid #dce5d8;
+            color:#344b38;
+          }}
+          .tt-home-profile select:focus{{
+            border-color:#9aaf91;
+            box-shadow:0 0 0 3px rgba(139,163,128,.16);
+          }}
+          .tt-home-profile-card{{
+            background:#fff;
+            border:1px solid #e4eae1;
+            box-shadow:0 10px 28px rgba(46,66,48,.055);
+          }}
+          .tt-home-profile-top>div:first-child{{
+            flex:1;
+            min-width:0;
+            padding:19px 21px;
+            border:1px solid #e1e9dc;
+            border-radius:16px;
+            background:linear-gradient(125deg,#e8efe4 0%,#f2f5ee 58%,#f8faf6 100%);
+          }}
+          .tt-home-profile-card .tt-home-eyebrow{{color:#71866b}}
+          .tt-home-profile-top h2{{color:#344b38}}
+          .tt-home-profile-top p{{color:#738071}}
+          .tt-home-outline{{
+            border-color:#dce5d8;
+            color:#4d674e!important;
+            background:#fff;
+          }}
+          .tt-home-profile-top>div:last-child .tt-home-outline:first-child{{
+            background:#647d5d;
+            border-color:#647d5d;
+            color:#fff!important;
+          }}
+          .tt-home-profile-top>div:last-child .tt-home-outline:first-child:hover{{background:#526b4c}}
+          .tt-home-profile-top>div:last-child .tt-home-outline:last-child:hover{{background:#f0f4ec;border-color:#cbd8c4}}
+          .tt-home-status{{color:#526b4b;background:#e9f0e4}}
+          .tt-home-metrics div{{
+            background:#fbfcfa;
+            border:1px solid #e8ede5;
+          }}
+          .tt-home-metrics span{{color:#7a8677}}
+          .tt-home-metrics b{{color:#647d5d}}
+          @media(max-width:600px){{
+            .tt-home-profile-top>div:first-child{{width:100%;padding:16px}}
+          }}
+
         </style>
         <main class='tt-home'>
           <section class='tt-home-hero'><div class='tt-home-hero-copy'><span class='tt-home-eyebrow'>MABALE_ICT · ACADEMIC OPERATIONS</span><h1>Smart Timetable</h1><p>Plan, organise and publish a balanced school timetable. Manage teaching requirements, build schedules and keep every class and teacher in sync.</p></div><div class='tt-home-hero-mark'>▦</div></section>
