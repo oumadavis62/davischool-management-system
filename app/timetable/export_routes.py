@@ -279,7 +279,21 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
         from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, KeepInFrame, Image as ReportLabImage
 
         buffer = BytesIO()
-        doc = SimpleDocTemplate(buffer, pagesize=landscape(A4), leftMargin=18, rightMargin=18, topMargin=18, bottomMargin=44)
+        class FooterSimpleDocTemplate(SimpleDocTemplate):
+            def afterPage(self):
+                # Draw after all page flowables so long timetable tables cannot
+                # paint over the footer in the printable PDF.
+                self.canv.saveState()
+                self.canv.setFont("Helvetica", 7)
+                self.canv.setFillColor(colors.HexColor("#536b58"))
+                self.canv.drawString(self.leftMargin, 28, self.footer_left)
+                self.canv.drawRightString(self.pagesize[0] - self.rightMargin, 28, self.footer_right)
+                self.canv.restoreState()
+                super().afterPage()
+
+        doc = FooterSimpleDocTemplate(buffer, pagesize=landscape(A4), leftMargin=18, rightMargin=18, topMargin=18, bottomMargin=44)
+        doc.footer_left = ""
+        doc.footer_right = ""
         styles = getSampleStyleSheet()
         school_style = ParagraphStyle("DSchoolName", parent=styles["Title"], alignment=TA_CENTER, fontSize=16, leading=19, textColor=colors.HexColor("#174a31"))
         title_style = ParagraphStyle("TimetableTitle", parent=styles["Heading2"], alignment=TA_CENTER, fontSize=11, leading=14, textColor=colors.HexColor("#315b3e"))
@@ -595,16 +609,10 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
             # Shrink only this consolidated sheet when a school has many entries.
             story.append(KeepInFrame(doc.width, doc.height - 34, [weekend_table], mode="shrink", hAlign="LEFT", vAlign="TOP"))
         generated_at = datetime.now(EAT).strftime("%d %b %Y %H:%M EAT")
-        def draw_export_footer(canvas, document):
-            # Keep the same generated footer on every PDF sheet. The Print
-            # button opens this exact PDF inline, so its printed pages inherit it.
-            canvas.saveState()
-            canvas.setFont("Helvetica", 7)
-            canvas.setFillColor(colors.HexColor("#536b58"))
-            canvas.drawString(doc.leftMargin, 28, "Mabale_ICT Management System · Generated: " + generated_at)
-            canvas.drawRightString(doc.pagesize[0] - doc.rightMargin, 28, "Total scheduled lessons: " + str(len(result["lessons"])))
-            canvas.restoreState()
-        doc.build(story, onFirstPage=draw_export_footer, onLaterPages=draw_export_footer)
+        doc.footer_left = "Mabale_ICT Management System · Generated: " + generated_at
+        doc.footer_right = "Total scheduled lessons: " + str(len(result["lessons"]))
+        # Footer is drawn in afterPage(), after all content on each PDF page.
+        doc.build(story)
         buffer.seek(0)
         filename = filename_prefix(school,result) + ".pdf"
         return StreamingResponse(buffer, media_type="application/pdf", headers={"Content-Disposition": ("inline" if inline else "attachment") + "; filename=" + filename})
