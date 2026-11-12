@@ -531,7 +531,7 @@ class TimetableSchoolSnapshotIntegrationTests(unittest.TestCase):
         for source_id, target_id in class_map.items():
             self.db.execute(
                 "INSERT INTO classes VALUES(?,?,?,?,?)",
-                (target_id, 1, class_names[source_id], "Blue" if source_id in (1, 5) else "Green"),
+                (target_id, 1, class_names[source_id], "Blue" if source_id in (1, 5) else "Green", "G9" if source_id in (1, 2) else "G8"),
             )
         teacher_names = {
             1: "DAVIS OUMA", 2: "ALVIN OUMA", 3: "ANN NDILU", 4: "HELLEN AKEYO",
