@@ -371,7 +371,6 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
             data = [[Paragraph("Day", header_style)] + ([Paragraph("Class / Stream", header_style)] if layout["show_class_column"] else [])]
             for _, kind, item in timeline:
                 label = (
-                    "<b>" + pdf_text(str(item["label"])) + "</b><br/>" +
                     pdf_text(str(item["start_time"])) + "–" + pdf_text(str(item["end_time"]))
                     if kind == "break" and print_sheet else
                     (pdf_text(str(item["start_time"])) + "–" + pdf_text(str(item["end_time"])))
@@ -405,16 +404,15 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                             timeline_cursor += 1
                             continue
                     if cell["kind"] == "break":
-                        if print_sheet:
-                            # Break name and time are part of the single repeating column header.
-                            cells.append("")
-                            timeline_cursor += 1
-                            continue
                         if row["day_first"]:
                             cell = dict(cell, rowspan=row["day_rowspan"])
                         b = cell["item"]
                         break_label = "<br/>".join(pdf_text(ch) for ch in str(b["label"]))
-                        break_style = ParagraphStyle("ExportBreak", parent=cell_style, alignment=TA_CENTER, fontSize=10, leading=11, textColor=colors.black if print_sheet else colors.HexColor("#75551d"))
+                        break_style = ParagraphStyle(
+                            "ExportBreak", parent=cell_style, alignment=TA_CENTER,
+                            fontSize=10, leading=11,
+                            textColor=colors.black if print_sheet else colors.HexColor("#75551d"),
+                        )
                         cells.append(Paragraph("<b>" + break_label + "</b>", break_style))
                         if cell["rowspan"] > 1:
                             col = len(cells) - 1
