@@ -1886,6 +1886,13 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
             return RedirectResponse("/", 303)
         con = get_db()
         try:
+            if teacher_id:
+                valid_teacher = con.execute(
+                    "SELECT id FROM teachers WHERE id=? AND school_id=? AND lower(trim(COALESCE(role, ''))) = 'teacher'",
+                    (int(teacher_id), int(school["id"])),
+                ).fetchone()
+                if not valid_teacher:
+                    raise TimetableSetupError("Select a staff member designated as Teacher in the Staff List.")
             save_timetable_constraint(
                 con, int(school["id"]), profile_id, name, constraint_type, applies_to, schedule_layer,
                 int(subject_id) if subject_id else None, int(teacher_id) if teacher_id else None,
@@ -2236,6 +2243,12 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
         if not school: return RedirectResponse("/", 303)
         con = get_db()
         try:
+            valid_teacher = con.execute(
+                "SELECT id FROM teachers WHERE id=? AND school_id=? AND lower(trim(COALESCE(role, ''))) = 'teacher'",
+                (teacher_id, int(school["id"])),
+            ).fetchone()
+            if not valid_teacher:
+                raise TimetableSetupError("Select a staff member designated as Teacher in the Staff List.")
             save_teacher_availability(con, int(school["id"]), profile_id, teacher_id, day_id, period_id, availability, reason)
             return redirect_setup(profile_id, "Teacher availability saved.", request=request)
         except (TimetableSetupError, ValueError) as exc:
@@ -2339,8 +2352,10 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
             else:
                 class_id, teacher_id, subject_id = int(class_id or 0), int(teacher_id or 0), int(subject_id or 0)
             valid_allocation = con.execute(
-                """SELECT 1 FROM teacher_allocations
-                   WHERE school_id=? AND class_id=? AND teacher_id=? AND subject_id=? LIMIT 1""",
+                """SELECT 1 FROM teacher_allocations ta
+                   JOIN teachers t ON t.id=ta.teacher_id AND t.school_id=ta.school_id
+                   WHERE ta.school_id=? AND ta.class_id=? AND ta.teacher_id=? AND ta.subject_id=?
+                     AND lower(trim(COALESCE(t.role, ''))) = 'teacher' LIMIT 1""",
                 (int(school["id"]), class_id, teacher_id, subject_id),
             ).fetchone()
             if not valid_allocation:
