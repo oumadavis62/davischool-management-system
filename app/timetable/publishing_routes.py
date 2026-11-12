@@ -92,7 +92,7 @@ def register_timetable_publishing_routes(app, get_db, get_school_obj, module_pag
                 esc(p["term"]),
                 esc(publishing_profile_name(p["name"], p["status"])),
                 esc(str(p["profile_type"] or "main").replace("_", " ").title()),
-                esc(p["status"]),
+                esc('Revised' if str(p['status']).lower() in ('published','archived') else str(p['status']).replace('_', ' ').title()),
             )
             for p in profiles
         )
@@ -124,7 +124,7 @@ def register_timetable_publishing_routes(app, get_db, get_school_obj, module_pag
             for v in versions
         ) or "<tr><td colspan='5' class='pub-muted'>No published versions yet.</td></tr>"
         version_options = "".join(
-            f"<option value='{int(v['id'])}'>{esc(revision_display_label(v['label']))} · {esc(profile_display_name(v['profile_name']))} · {esc(v['created_at'])}</option>"
+            f"<option value='{int(v['id'])}'>{esc(revision_display_label(v['label']))} · {esc(profile_display_name(v['profile_name'], v['profile_status']))} · {esc(v['created_at'])}</option>"
             for v in versions
         )
         compare_html = ""
