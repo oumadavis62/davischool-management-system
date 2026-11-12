@@ -433,7 +433,7 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                                 card_rows,
                                 colWidths=([card_width * 0.30, card_width * 0.40, card_width * 0.30] if view_type in ("teacher", "room") else [card_width]),
                                 rowHeights=(
-                                    [resource_card_height * 0.15, resource_card_height * 0.70, resource_card_height * 0.15]
+                                    [resource_card_height * 0.20, resource_card_height * 0.60, resource_card_height * 0.20]
                                     if view_type in ("teacher", "room") else
                                     [max(4, (individual_row_height - 8) / (len(card_rows) * max(1, len(cell["lessons"]))))] * len(card_rows)
                                 )
