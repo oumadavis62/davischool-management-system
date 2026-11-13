@@ -133,7 +133,7 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                 cells.append(f"<th rowspan='{row['day_rowspan']}' class='day'>{escape(str(row['day'].get('day_code') or row['day']['day_name']))}</th>")
             if layout["show_class_column"]:
                 cl=row["class"]
-                cells.append("<th class='class'>" + escape(cl["class_name"] + ((" " + cl["stream"]) if cl["stream"] else "")) + "</th>")
+                cells.append("<th class='class'>" + escape(cl.get("class_initials") or (cl["class_name"] + ((" " + cl["stream"]) if cl["stream"] else ""))) + "</th>")
             for cell in row["cells"]:
                 if cell["kind"] == "break_placeholder":
                     continue
@@ -398,7 +398,7 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                     cells.append("")
                 if layout["show_class_column"]:
                     cl = row["class"]
-                    cells.append(Paragraph("<b>" + pdf_text(cl["class_name"] + ((" " + cl["stream"]) if cl["stream"] else "")) + "</b>", cell_style))
+                    cells.append(Paragraph("<b>" + pdf_text(cl.get("class_initials") or (cl["class_name"] + ((" " + cl["stream"]) if cl["stream"] else ""))) + "</b>", cell_style))
                 timeline_cursor = 0
                 for original_cell in row["cells"]:
                     cell = original_cell
@@ -938,7 +938,7 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                 if row["day_rowspan"]>1: sheet.merge_cells(start_row=row_index,start_column=col,end_row=row_index+row["day_rowspan"]-1,end_column=col)
             col+=1
             if layout["show_class_column"]:
-                cl=row["class"]; sheet.cell(row_index,col,cl["class_name"]+((" "+cl["stream"]) if cl["stream"] else "")); col+=1
+                cl=row["class"]; sheet.cell(row_index,col,cl.get("class_initials") or (cl["class_name"]+((" "+cl["stream"]) if cl["stream"] else ""))); col+=1
             for cell in row["cells"]:
                 if cell["kind"]=="break_placeholder":
                     col += 1
