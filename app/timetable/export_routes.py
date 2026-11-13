@@ -469,7 +469,7 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                                     meta_style = ParagraphStyle("PrintResourceMeta", parent=cell_style, alignment=TA_RIGHT, fontSize=5, leading=6, textColor=colors.black)
                                     period_style = ParagraphStyle("PrintResourcePeriod", parent=cell_style, alignment=TA_LEFT if view_type == "room" else TA_RIGHT, fontSize=6, leading=7, textColor=colors.black)
                                     resource_table = Table([
-                                        [Paragraph(duration, period_style) if view_type == "room" else "", Paragraph("<b>" + subject_initial + "</b>", subject_style), ""],
+                                        [Paragraph(duration, period_style) if view_type == "room" else "", Paragraph("<b>" + subject_initial + "</b>", subject_style) if view_type == "room" else "", Paragraph("<b>" + subject_initial + "</b>", subject_style) if view_type == "teacher" else ""],
                                         [Paragraph("<b>" + pdf_text(class_initials) + "</b>", class_style), "", ""],
                                         [Paragraph(pdf_text(resource_meta), meta_style) if view_type == "teacher" and resource_meta else "", "", Paragraph(pdf_text(resource_meta), meta_style) if view_type == "room" and resource_meta else Paragraph(duration, period_style) if view_type == "teacher" else ""],
                                     ], colWidths=[resource_width * .30, resource_width * .40, resource_width * .30])
@@ -479,7 +479,8 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                                         ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
                                         ("VALIGN", (0, 0), (-1, 0), "TOP"),
                                         ("ALIGN", (0, 0), (0, 0), "LEFT" if view_type == "room" else "CENTER"),
-                                        ("ALIGN", (1, 0), (1, 0), "CENTER" if view_type == "room" else "RIGHT"),
+                                        ("ALIGN", (1, 0), (1, 0), "CENTER"),
+                                        ("ALIGN", (2, 0), (2, 0), "RIGHT"),
                                         ("ALIGN", (2, 2), (2, 2), "RIGHT"),
                                         ("LEFTPADDING", (0, 0), (-1, -1), 0),
                                         ("RIGHTPADDING", (0, 0), (-1, -1), 0),
