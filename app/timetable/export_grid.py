@@ -93,6 +93,10 @@ def build_export_grid(result, view_type):
                         has_new_lesson = any(
                             int(other["day_id"]) == int(day["id"])
                             and int(other["period_id"]) in covered_period_ids
+                            and (
+                                view_type in ("teacher", "room")
+                                or int(other["class_id"]) == int(class_row["class_id"])
+                            )
                             for other in lessons
                         )
                         if can_merge and not has_new_lesson:
