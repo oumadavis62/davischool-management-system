@@ -471,7 +471,7 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                                     resource_table = Table([
                                         [Paragraph(duration, period_style) if view_type == "room" else "", Paragraph("<b>" + subject_initial + "</b>", subject_style), ""],
                                         [Paragraph("<b>" + pdf_text(class_initials) + "</b>", class_style), "", ""],
-                                        ["", "", Paragraph(pdf_text(resource_meta), meta_style) if resource_meta else Paragraph("&nbsp;", meta_style)],
+                                        [Paragraph(pdf_text(resource_meta), meta_style) if view_type == "teacher" and resource_meta else "", "", Paragraph(pdf_text(resource_meta), meta_style) if view_type == "room" and resource_meta else Paragraph(duration, period_style) if view_type == "teacher" else ""],
                                     ], colWidths=[resource_width * .30, resource_width * .40, resource_width * .30])
                                     resource_table.setStyle(TableStyle([
                                         ("SPAN", (0, 1), (2, 1)),
