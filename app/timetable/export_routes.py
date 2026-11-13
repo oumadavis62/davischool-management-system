@@ -380,6 +380,7 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                 )
                 data[0].append(Paragraph(label, break_header_style if kind == "break" else header_style))
             span_commands = []
+            individual_lesson_padding_commands = []
             merged_print_break_columns = set()
             for day_row_index, row in enumerate(day_rows):
                 row_index = day_row_index + 1
@@ -460,7 +461,10 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                                 teacher_style = ParagraphStyle("PrintAnchoredTeacher", parent=cell_style, alignment=TA_RIGHT, fontSize=6, leading=7, textColor=colors.black)
                                 right_style = ParagraphStyle("PrintAnchoredRight", parent=cell_style, alignment=TA_RIGHT, fontSize=6, leading=7, textColor=colors.black)
 
-                                resource_width = max(1, slot_width * cell["span"] - 6)
+                                # The outer timetable cell will have zero horizontal
+                                # padding for this lesson. Use its full spanned width so
+                                # corner labels can align with the actual cell borders.
+                                resource_width = max(1, slot_width * cell["span"])
                                 cell_height = max(24, individual_row_height - 8)
                                 top_band = max(6, cell_height * 0.20)
                                 bottom_band = max(6, cell_height * 0.20)
@@ -526,7 +530,7 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
 
                             lesson_layout = Table(
                                 lesson_rows,
-                                colWidths=[max(1, slot_width * cell["span"] - 6)],
+                                colWidths=[max(1, slot_width * cell["span"])],
                                 rowHeights=[max(24, individual_row_height - 8)] * len(lesson_rows),
                             )
                             # The nested lesson table already uses the full inner
@@ -540,7 +544,14 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                                 ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
                                 ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
                             ]))
+                            lesson_col = len(cells)
                             cells.append(lesson_layout)
+                            individual_lesson_padding_commands.extend([
+                                ("LEFTPADDING", (lesson_col, row_index), (lesson_col + cell["span"] - 1, row_index), 0),
+                                ("RIGHTPADDING", (lesson_col, row_index), (lesson_col + cell["span"] - 1, row_index), 0),
+                                ("TOPPADDING", (lesson_col, row_index), (lesson_col + cell["span"] - 1, row_index), 0),
+                                ("BOTTOMPADDING", (lesson_col, row_index), (lesson_col + cell["span"] - 1, row_index), 0),
+                            ])
                             # Preserve the occupied period columns for a lesson
                             # spanning multiple periods. Without this merge, the
                             # print-sheet row becomes shorter than its header and
@@ -699,7 +710,7 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                 ("VALIGN", (0,0), (-1,-1), "MIDDLE"),
                 ("LEFTPADDING", (0,0), (-1,-1), 3), ("RIGHTPADDING", (0,0), (-1,-1), 3),
                 ("TOPPADDING", (0,0), (-1,-1), 4), ("BOTTOMPADDING", (0,0), (-1,-1), 4),
-            ] + span_commands
+            ] + span_commands + individual_lesson_padding_commands
             for col, (_, kind, _) in enumerate(timeline, start=1 + (1 if layout["show_class_column"] else 0)):
                 if kind == "break":
                     commands += [("BACKGROUND", (col,0), (col,-1), colors.white if print_sheet else colors.HexColor("#f1ead8")), ("TEXTCOLOR", (col,0), (col,-1), colors.black if print_sheet else colors.HexColor("#75551d"))]
