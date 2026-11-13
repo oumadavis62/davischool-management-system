@@ -953,29 +953,62 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
 
         # Discourage a class from studying the same subject in the same
         # period on multiple weekdays (e.g. Mathematics in Period 6 every day).
-        # This is a soft objective: availability, manual placements, linked
-        # classes, double/triple spans and all conflict rules remain intact.
+        # Consecutive instructional days receive a much stronger penalty so
+        # the generator actively spreads a subject across the week. These are
+        # soft objectives: fixed lessons and hard resource constraints remain
+        # authoritative, and a valid timetable is still possible when options
+        # are limited.
         variable_days_by_subject_period = defaultdict(lambda: defaultdict(list))
         for (class_id, subject_id, period_no, day_id), values in by_class_subject_period_day.items():
             variable_days_by_subject_period[(class_id, subject_id, period_no)][day_id].extend(values)
+        ordered_instructional_days = [
+            int(day["id"]) for day in sorted(days, key=lambda item: day_order[int(item["id"])])
+        ]
         subject_period_keys = set(fixed_subject_period_days) | set(variable_days_by_subject_period)
         for key in subject_period_keys:
             fixed_days = set(fixed_subject_period_days.get(key, set()))
             day_variables = variable_days_by_subject_period.get(key, {})
+            presence_by_day = {}
             repeated_days = []
             for day_id, values in day_variables.items():
                 if day_id in fixed_days:
                     continue
                 presence = model.NewBoolVar("subject{}_class{}_period{}_day{}_present".format(key[1], key[0], key[2], day_id))
                 model.Add(presence == sum(values))
+                presence_by_day[day_id] = presence
                 repeated_days.append(presence)
             if repeated_days:
                 total_days = len(fixed_days) + sum(repeated_days)
                 repeats = model.NewIntVar(0, len(days), "subject{}_class{}_period{}_repeat".format(key[1], key[0], key[2]))
                 model.AddMaxEquality(repeats, [total_days - 1, 0])
-                # Stronger than the ordinary period-order preference, but
-                # deliberately weaker than any hard scheduling constraint.
+                # Retain the weekly spread preference, but make adjacent-day
+                # repetition the dominant distribution objective.
                 objective_terms.append((repeats, 300))
+
+            # Penalize every pair of consecutive instructional days on which
+            # this class has the same subject in the same period. This also
+            # accounts for manually fixed lessons on either side of the pair.
+            for previous_day, next_day in zip(
+                ordered_instructional_days, ordered_instructional_days[1:]
+            ):
+                previous_fixed = previous_day in fixed_days
+                next_fixed = next_day in fixed_days
+                previous_presence = presence_by_day.get(previous_day)
+                next_presence = presence_by_day.get(next_day)
+                if previous_fixed and next_presence is not None:
+                    objective_terms.append((next_presence, 25000))
+                elif next_fixed and previous_presence is not None:
+                    objective_terms.append((previous_presence, 25000))
+                elif previous_presence is not None and next_presence is not None:
+                    adjacent_repeat = model.NewBoolVar(
+                        "subject{}_class{}_period{}_adjacent_{}_{}".format(
+                            key[1], key[0], key[2], previous_day, next_day
+                        )
+                    )
+                    model.Add(adjacent_repeat <= previous_presence)
+                    model.Add(adjacent_repeat <= next_presence)
+                    model.Add(adjacent_repeat >= previous_presence + next_presence - 1)
+                    objective_terms.append((adjacent_repeat, 25000))
 
         # Balance daily teaching loads across the week. These are soft costs:
         # class, teacher, availability and room constraints remain hard.
