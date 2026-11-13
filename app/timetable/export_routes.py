@@ -439,7 +439,7 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                     elif cell["kind"] == "continued":
                         cells.append(Paragraph("<br/>".join("↳ " + pdf_text(str(x.get("subject_initial") or "").strip().upper() or "—") + " continues" for x in cell["lessons"]), cell_style))
                     else:
-                        if print_sheet:
+                        if print_sheet and view_type in ("class", "teacher", "room"):
                             # Position labels in fixed proportional bands so they stay anchored
                             # to the lesson-cell corners regardless of the available cell size.
                             lesson_rows = []
@@ -504,6 +504,40 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                                 colWidths=[max(1, slot_width * cell["span"] - 6)],
                                 rowHeights=[max(24, individual_row_height - 8)] * len(lesson_rows),
                             ))
+                        elif print_sheet:
+                            # Preserve the existing whole-school print-sheet layout.
+                            lesson_rows = []
+                            for lesson in cell["lessons"]:
+                                subject_initial = pdf_text(str(lesson.get("subject_initial") or "").strip().upper() or "—")
+                                teacher_initials = str(lesson.get("teacher_initials") or "").strip().upper()
+                                if not teacher_initials:
+                                    name_parts = [part for part in str(lesson.get("teacher_name") or "").split() if part]
+                                    teacher_initials = "".join(part[0] for part in (name_parts[:1] + (name_parts[-1:] if len(name_parts) > 1 else []))).upper()[:4] or "—"
+                                duration = str(max(1, int(lesson.get("duration_periods") or 1))) + "P"
+                                room_text = "" if layout["room_view"] else pdf_text(allocated_room_name(lesson))
+                                period_style = ParagraphStyle("PrintPeriodMarker", parent=cell_style, alignment=TA_LEFT, fontSize=5, leading=6, textColor=colors.black)
+                                subject_style = ParagraphStyle("PrintSubjectInitials", parent=cell_style, alignment=TA_CENTER, fontSize=15, leading=17, textColor=colors.black)
+                                detail_style = ParagraphStyle("PrintCellDetail", parent=cell_style, alignment=TA_RIGHT, fontSize=5, leading=6, textColor=colors.black)
+                                lesson_rows.extend([
+                                    [Paragraph(pdf_text(duration), period_style)],
+                                    [Paragraph("<b>" + subject_initial + "</b>", subject_style)],
+                                ])
+                                if room_text:
+                                    lesson_rows.append([Paragraph("⌂ " + room_text, detail_style)])
+                                lesson_rows.append([Paragraph(teacher_initials, detail_style)])
+                            text_layout = Table(lesson_rows, colWidths=[max(1, slot_width * cell["span"] - 6)])
+                            text_layout.setStyle(TableStyle([
+                                ("ALIGN", (0, 0), (-1, -1), "RIGHT"),
+                                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                                ("ALIGN", (0, 0), (0, 0), "LEFT"),
+                                ("VALIGN", (0, 0), (0, 0), "TOP"),
+                                ("VALIGN", (0, len(lesson_rows) - 1), (-1, -1), "BOTTOM"),
+                                ("LEFTPADDING", (0, 0), (-1, -1), 0),
+                                ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+                                ("TOPPADDING", (0, 0), (-1, -1), 0),
+                                ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
+                            ]))
+                            cells.append(text_layout)
                         else:
                             card_tables = []
                             card_width = max(1, slot_width * cell["span"] - 8)
