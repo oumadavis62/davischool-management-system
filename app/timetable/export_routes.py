@@ -475,6 +475,7 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                                     center = Paragraph("<b>" + pdf_text(class_initials) + "</b>", class_style)
                                     bottom_right = Paragraph(duration, teacher_style)
 
+                                resource_width = max(1, slot_width * cell["span"] - 6)
                                 cell_height = max(24, individual_row_height - 8)
                                 top_band = max(7, cell_height * 0.22)
                                 center_band = max(8, cell_height * 0.56)
