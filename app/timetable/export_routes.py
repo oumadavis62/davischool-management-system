@@ -516,8 +516,13 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                                     colWidths=[resource_width * 0.5, resource_width * 0.5],
                                     rowHeights=[top_band, center_band, bottom_band],
                                 )
+                                # Keep every label 1% of the lesson-cell width
+                                # clear of the vertical column rules on printouts.
+                                edge_inset = max(0.5, resource_width * 0.01)
                                 anchored.setStyle(TableStyle([
                                     ("SPAN", (0, 1), (1, 1)),
+                                    ("LEFTPADDING", (0, 0), (-1, -1), edge_inset),
+                                    ("RIGHTPADDING", (0, 0), (-1, -1), edge_inset),
                                     ("ALIGN", (0, 0), (0, 0), "LEFT"),
                                     ("ALIGN", (1, 0), (1, 0), "CENTER"),
                                     ("ALIGN", (0, 1), (1, 1), "CENTER"),
