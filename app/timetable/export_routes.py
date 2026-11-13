@@ -570,37 +570,54 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                                 span_commands.append(("SPAN", (col, row_index), (col + cell["span"] - 1, row_index)))
                                 cells.extend([""] * (cell["span"] - 1))
                         elif print_sheet:
-                            # Preserve the existing whole-school print-sheet layout.
+                            # Whole-school print cells use the same edge anchors as
+                            # individual print sheets: period at top-left, subject
+                            # centered, and teacher at bottom-right.
                             lesson_rows = []
+                            resource_width = max(1, slot_width * cell["span"])
+                            edge_inset = max(0.5, resource_width * 0.01)
                             for lesson in cell["lessons"]:
                                 subject_initial = pdf_text(str(lesson.get("subject_initial") or "").strip().upper() or "—")
                                 teacher_initials = str(lesson.get("teacher_initials") or "").strip().upper()
                                 if not teacher_initials:
                                     name_parts = [part for part in str(lesson.get("teacher_name") or "").split() if part]
                                     teacher_initials = "".join(part[0] for part in (name_parts[:1] + (name_parts[-1:] if len(name_parts) > 1 else []))).upper()[:4] or "—"
-                                duration = str(max(1, int(lesson.get("duration_periods") or 1))) + "P"
+                                duration = pdf_text(str(max(1, int(lesson.get("duration_periods") or 1))) + "P")
                                 room_text = "" if layout["room_view"] else pdf_text(allocated_room_name(lesson))
                                 period_style = ParagraphStyle("PrintPeriodMarker", parent=cell_style, alignment=TA_LEFT, fontSize=5, leading=6, textColor=colors.black)
                                 subject_style = ParagraphStyle("PrintSubjectInitials", parent=cell_style, alignment=TA_CENTER, fontSize=15, leading=17, textColor=colors.black)
-                                detail_style = ParagraphStyle("PrintCellDetail", parent=cell_style, alignment=TA_RIGHT, fontSize=5, leading=6, textColor=colors.black)
-                                lesson_rows.extend([
-                                    [Paragraph(pdf_text(duration), period_style)],
-                                    [Paragraph("<b>" + subject_initial + "</b>", subject_style)],
-                                ])
-                                if room_text:
-                                    lesson_rows.append([Paragraph("⌂ " + room_text, detail_style)])
-                                lesson_rows.append([Paragraph(teacher_initials, detail_style)])
-                            text_layout = Table(lesson_rows, colWidths=[max(1, slot_width * cell["span"] - 6)])
+                                room_style = ParagraphStyle("PrintCellRoom", parent=cell_style, alignment=TA_LEFT, fontSize=5, leading=6, textColor=colors.black)
+                                teacher_style = ParagraphStyle("PrintCellTeacher", parent=cell_style, alignment=TA_RIGHT, fontSize=5, leading=6, textColor=colors.black)
+                                anchored = Table(
+                                    [
+                                        [Paragraph(duration, period_style), ""],
+                                        [Paragraph("<b>" + subject_initial + "</b>", subject_style), ""],
+                                        [Paragraph("⌂ " + room_text, room_style) if room_text else "", Paragraph(teacher_initials, teacher_style)],
+                                    ],
+                                    colWidths=[resource_width * 0.5, resource_width * 0.5],
+                                )
+                                anchored.setStyle(TableStyle([
+                                    ("SPAN", (0, 1), (1, 1)),
+                                    ("ALIGN", (0, 0), (0, 0), "LEFT"),
+                                    ("ALIGN", (0, 1), (1, 1), "CENTER"),
+                                    ("ALIGN", (0, 2), (0, 2), "LEFT"),
+                                    ("ALIGN", (1, 2), (1, 2), "RIGHT"),
+                                    ("VALIGN", (0, 0), (-1, 0), "TOP"),
+                                    ("VALIGN", (0, 1), (-1, 1), "MIDDLE"),
+                                    ("VALIGN", (0, 2), (-1, 2), "BOTTOM"),
+                                    ("LEFTPADDING", (0, 0), (-1, -1), edge_inset),
+                                    ("RIGHTPADDING", (0, 0), (-1, -1), edge_inset),
+                                    ("TOPPADDING", (0, 0), (-1, -1), 0),
+                                    ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
+                                ]))
+                                lesson_rows.append([anchored])
+                            text_layout = Table(lesson_rows, colWidths=[resource_width], rowHeights=[max(24, individual_row_height)] * len(lesson_rows))
                             text_layout.setStyle(TableStyle([
-                                ("ALIGN", (0, 0), (-1, -1), "RIGHT"),
-                                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-                                ("ALIGN", (0, 0), (0, 0), "LEFT"),
-                                ("VALIGN", (0, 0), (0, 0), "TOP"),
-                                ("VALIGN", (0, len(lesson_rows) - 1), (-1, -1), "BOTTOM"),
                                 ("LEFTPADDING", (0, 0), (-1, -1), 0),
                                 ("RIGHTPADDING", (0, 0), (-1, -1), 0),
                                 ("TOPPADDING", (0, 0), (-1, -1), 0),
                                 ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
+                                ("VALIGN", (0, 0), (-1, -1), "TOP"),
                             ]))
                             cells.append(text_layout)
                         else:
