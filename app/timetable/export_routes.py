@@ -228,7 +228,7 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
         timetable_table_class = "specialized-timetable" if specialized_export else "main-timetable"
         generated_at = datetime.now(EAT).strftime("%d %b %Y %H:%M EAT")
         export_footer = ("<footer class='export-footer'><span>Mabale_ICT Software · Generated: " + escape(generated_at) + "</span><span>Total scheduled lessons: " + str(len(result["lessons"])) + "</span></footer>")
-        room_period_css = ".resource-duration{top:3px;bottom:auto;right:5px}" if view_type == "room" else ""
+        room_period_css = ""
         html=f"""<!doctype html><html><head><meta charset="utf-8"><title>{title}</title>
         <style>{room_period_css}
         @page{{size:A4 landscape;margin:7mm}}*{{box-sizing:border-box;-webkit-print-color-adjust:exact;print-color-adjust:exact}}body{{font:10px Arial,sans-serif;color:#234638;margin:12px}}
@@ -241,7 +241,16 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
         body.individual-sheet .lesson{{position:relative;box-sizing:border-box;flex:1 1 0;width:100%;height:100%;min-height:0;margin:0;border-radius:0;padding:13px 5px 5px}}
         body.individual-sheet .lesson+.lesson{{border-left-width:3px}}
         body.individual-sheet table.specialized-timetable td.slot{{height:100%}}
-        td.slot{{background:#fff}}.resource-lesson{{position:relative;min-height:0;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:12px 4px 14px;border-radius:0;background:color-mix(in srgb,var(--teacher-color) 12%,white);border:1px solid color-mix(in srgb,var(--teacher-color) 42%,white);border-left:3px solid var(--teacher-color);margin:0}}.resource-subject{{position:absolute;top:4px;left:5px;right:auto;font-size:10px;line-height:1;font-weight:900;color:#365b40;white-space:nowrap;word-break:keep-all;overflow-wrap:normal;writing-mode:horizontal-tb;z-index:2}}.resource-class{{display:flex;flex:1;align-items:center;justify-content:center;width:100%;min-height:0;text-align:center;font-size:clamp(25px,2.2vw,34px);line-height:.95;font-weight:950;letter-spacing:-.04em;color:#263f30;overflow-wrap:anywhere}}.resource-duration{{position:absolute;bottom:3px;right:5px;left:auto;font-size:9px;line-height:1;font-weight:900;color:#536b58;white-space:nowrap;word-break:keep-all;overflow-wrap:normal;writing-mode:horizontal-tb;z-index:2}}.resource-footer{{position:absolute;bottom:3px;left:4px;right:30px;display:flex;justify-content:space-between;font-size:7px;color:#637968}}.resource-teacher{{margin-left:auto;font-weight:800;color:#245b39}}.lesson{{position:relative;min-height:66px;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;background:color-mix(in srgb,var(--teacher-color) 17%,white);border:1px solid color-mix(in srgb,var(--teacher-color) 48%,white);border-left:4px solid var(--teacher-color);border-radius:6px;padding:13px 5px 5px;margin:2px;font-size:9px;line-height:1.2}}
+        td.slot{{background:#fff}}.resource-lesson{{position:relative;min-height:0;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:12px 4px 14px;border-radius:0;background:color-mix(in srgb,var(--teacher-color) 12%,white);border:1px solid color-mix(in srgb,var(--teacher-color) 42%,white);border-left:3px solid var(--teacher-color);margin:0}}.resource-subject{{position:absolute;top:4px;left:5px;right:auto;font-size:10px;line-height:1;font-weight:900;color:#365b40;white-space:nowrap;word-break:keep-all;overflow-wrap:normal;writing-mode:horizontal-tb;z-index:2}}.resource-class{{display:flex;flex:1;align-items:center;justify-content:center;width:100%;min-height:0;text-align:center;font-size:clamp(25px,2.2vw,34px);line-height:.95;font-weight:950;letter-spacing:-.04em;color:#263f30;overflow-wrap:anywhere}}
+        body.class-sheet .lesson .duration-label{{left:5px;right:auto;top:3px}}
+        body.class-sheet .lesson .subject-initials{{font-size:16px;line-height:1.1;text-align:center}}
+        body.room-sheet .resource-subject{{left:50%;right:auto;transform:translateX(-50%);font-size:15px;text-align:center}}
+        body.room-sheet .resource-duration{{top:3px;bottom:auto;left:5px;right:auto}}
+        body.room-sheet .resource-footer{{left:auto;right:5px;justify-content:flex-end}}
+        body.room-sheet .resource-teacher{{margin-left:0}}
+        body.teacher-sheet .resource-subject{{left:auto;right:5px;text-align:right}}
+        body.teacher-sheet .resource-duration{{top:auto;bottom:3px;left:auto;right:5px}}
+        body.teacher-sheet .resource-class{{font-size:clamp(30px,2.6vw,38px)}}.resource-duration{{position:absolute;bottom:3px;right:5px;left:auto;font-size:9px;line-height:1;font-weight:900;color:#536b58;white-space:nowrap;word-break:keep-all;overflow-wrap:normal;writing-mode:horizontal-tb;z-index:2}}.resource-footer{{position:absolute;bottom:3px;left:4px;right:30px;display:flex;justify-content:space-between;font-size:7px;color:#637968}}.resource-teacher{{margin-left:auto;font-weight:800;color:#245b39}}.lesson{{position:relative;min-height:66px;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;background:color-mix(in srgb,var(--teacher-color) 17%,white);border:1px solid color-mix(in srgb,var(--teacher-color) 48%,white);border-left:4px solid var(--teacher-color);border-radius:6px;padding:13px 5px 5px;margin:2px;font-size:9px;line-height:1.2}}
         .lesson .duration-label{{position:absolute;top:3px;right:5px;font-size:8px;font-weight:bold;background:#d5e9d9;border-radius:8px;padding:2px 4px}}.lesson .subject-initials{{display:block;text-align:center;font-size:12px;font-weight:900;letter-spacing:.4px}}.lesson .room-detail{{display:block;color:#55705d;font-size:8px;margin-top:4px;max-width:100%;overflow-wrap:anywhere}}.lesson .teacher-initials,.lesson .class-detail{{align-self:flex-end;margin-top:auto;background:#245b39;color:#fff;border-radius:4px;padding:2px 5px;font-size:8px;font-weight:900}}.lesson .class-detail{{max-width:100%;text-align:right;overflow-wrap:anywhere}}th.break-header{{width:90%}}td.break{{width:90%;background:#f1ead8;color:#75551d;vertical-align:middle;text-align:center;min-width:24px;padding:0;position:relative}}td.break>span{{display:flex;flex-direction:column;justify-content:center;align-items:center;min-height:100%;height:100%;font-size:18px;font-weight:950;line-height:1}}td.break>span i{{display:block;font-style:normal;line-height:1}}td.free{{background:#fbfdfb}}td.continued{{background:#f6faf6;color:#7b9480;font-size:8px}}
         .actions{{text-align:center;margin-bottom:10px}}button{{padding:8px 15px;background:#17633b;color:#fff;border:0;border-radius:7px}}.export-footer{{display:flex;justify-content:space-between;gap:12px;position:fixed;bottom:0;left:0;right:0;padding:5px 12px;font-size:8px;color:#536b58;border-top:1px solid #c7d9ca;background:#fff}}body.individual-sheet{{padding-bottom:24px}}
         .extra-section{{margin-top:18px;break-inside:avoid}}.extra-section h3{{font-size:12px;color:#1d563b;margin:0 0 8px}}.session-table{{width:100%;border-collapse:collapse;table-layout:fixed;min-width:0;font-size:8px}}.session-table th{{background:#17633b;color:#fff;padding:5px}}.session-table td{{padding:5px;border:1px solid #dce7de;text-align:left}}.empty{{color:#64748b;font-size:9px}}
@@ -249,7 +258,7 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
         body.individual-sheet>table.specialized-timetable{{flex:1;height:100%;width:100%;table-layout:fixed}}
         body.individual-sheet>table.specialized-timetable tbody tr{{height:1px}}
         @media print{{body{{margin:0}}.actions{{display:none}}tr{{break-inside:avoid}}table{{min-width:0}}body.individual-sheet{{display:block;height:auto;min-height:0;padding-bottom:0}}body.individual-sheet>table.specialized-timetable{{display:table;height:auto;min-height:0;flex:none;width:100%;table-layout:fixed}}body.individual-sheet table.specialized-timetable tbody tr{{height:auto;break-inside:avoid}}body.individual-sheet table.specialized-timetable td.slot{{display:table-cell;height:auto;min-height:0;padding:2px;vertical-align:middle}}body.individual-sheet .lesson{{display:flex;width:100%;height:auto;min-height:54px;flex:initial;margin:0;border-radius:0;padding:13px 5px 5px}}.extra-remedial-separate,.extra-weekend{{break-before:page}}}}
-        </style></head><body class="{'individual-sheet' if view_type in ('class', 'teacher', 'room') else ''}"><div class="actions"><button onclick="window.print()">Print timetable</button></div>
+        </style></head><body class="{'individual-sheet ' + view_type + '-sheet' if view_type in ('class', 'teacher', 'room') else ''}"><div class="actions"><button onclick="window.print()">Print timetable</button></div>
         <div style="display:grid;grid-template-columns:68px 1fr 68px;align-items:center;gap:8px;margin-bottom:4px"><div>{logo_img}</div><div><h1 style="text-decoration:underline">{school_name}</h1><p style="font-size:8px;color:#405b49;margin:3px 0">{school_details_html}</p><h2 style="text-decoration:underline">{title}</h2></div><div style="text-align:right">{logo_img}</div></div>
         <p style="font-size:9px;font-weight:500;text-align:center;margin:10px 0 14px">{meta_html}</p>
         <table class="{timetable_table_class}"><thead><tr>{header_html}</tr></thead><tbody>{"".join(body_rows)}</tbody></table>
@@ -455,25 +464,28 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                                     resource_meta = allocated_room_name(lesson) if view_type == "teacher" else teacher_initials
                                     duration = pdf_text(str(max(1, int(lesson.get("duration_periods") or 1))) + "P")
                                     resource_width = max(1, slot_width * cell["span"] - 6)
-                                    subject_style = ParagraphStyle("PrintResourceSubject", parent=cell_style, alignment=TA_LEFT, fontSize=10, leading=11, wordWrap=None, splitLongWords=0, textColor=colors.black)
-                                    class_style = ParagraphStyle("PrintResourceClass", parent=cell_style, alignment=TA_CENTER, fontSize=14, leading=15, textColor=colors.black)
-                                    meta_style = ParagraphStyle("PrintResourceMeta", parent=cell_style, alignment=TA_LEFT, fontSize=5, leading=6, textColor=colors.black)
-                                    period_style = ParagraphStyle("PrintResourcePeriod", parent=cell_style, alignment=TA_RIGHT, fontSize=6, leading=7, textColor=colors.black)
+                                    subject_style = ParagraphStyle("PrintResourceSubject", parent=cell_style, alignment=TA_CENTER if view_type == "room" else TA_RIGHT, fontSize=15, leading=16, wordWrap=None, splitLongWords=0, textColor=colors.black)
+                                    class_style = ParagraphStyle("PrintResourceClass", parent=cell_style, alignment=TA_CENTER, fontSize=29 if view_type == "teacher" else 14, leading=31 if view_type == "teacher" else 15, textColor=colors.black)
+                                    meta_style = ParagraphStyle("PrintResourceMeta", parent=cell_style, alignment=TA_RIGHT, fontSize=5, leading=6, textColor=colors.black)
+                                    period_style = ParagraphStyle("PrintResourcePeriod", parent=cell_style, alignment=TA_LEFT if view_type == "room" else TA_RIGHT, fontSize=6, leading=7, textColor=colors.black)
                                     resource_table = Table([
-                                        [Paragraph("<b>" + subject_initial + "</b>", subject_style)],
-                                        [Paragraph("<b>" + pdf_text(class_initials) + "</b>", class_style)],
-                                        [Paragraph(pdf_text(resource_meta), meta_style) if resource_meta else Paragraph("&nbsp;", meta_style)],
-                                        [Paragraph(duration, period_style)],
-                                    ], colWidths=[resource_width])
+                                        [Paragraph(duration, period_style) if view_type == "room" else "", Paragraph("<b>" + subject_initial + "</b>", subject_style) if view_type == "room" else "", Paragraph("<b>" + subject_initial + "</b>", subject_style) if view_type == "teacher" else ""],
+                                        [Paragraph("<b>" + pdf_text(class_initials) + "</b>", class_style), "", ""],
+                                        [Paragraph(pdf_text(resource_meta), meta_style) if view_type == "teacher" and resource_meta else "", "", Paragraph(pdf_text(resource_meta), meta_style) if view_type == "room" and resource_meta else Paragraph(duration, period_style) if view_type == "teacher" else ""],
+                                    ], colWidths=[resource_width * .30, resource_width * .40, resource_width * .30])
                                     resource_table.setStyle(TableStyle([
-                                        ("ALIGN", (0, 0), (-1, -1), "LEFT"),
-                                        ("VALIGN", (0, 0), (0, 0), "TOP"),
-                                        ("VALIGN", (0, 1), (-1, -1), "MIDDLE"),
+                                        ("SPAN", (0, 1), (2, 1)),
+                                        ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+                                        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                                        ("VALIGN", (0, 0), (-1, 0), "TOP"),
+                                        ("ALIGN", (0, 0), (0, 0), "LEFT" if view_type == "room" else "CENTER"),
+                                        ("ALIGN", (1, 0), (1, 0), "CENTER"),
+                                        ("ALIGN", (2, 0), (2, 0), "RIGHT"),
+                                        ("ALIGN", (2, 2), (2, 2), "RIGHT"),
                                         ("LEFTPADDING", (0, 0), (-1, -1), 0),
                                         ("RIGHTPADDING", (0, 0), (-1, -1), 0),
                                         ("TOPPADDING", (0, 0), (-1, -1), 0),
                                         ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
-                                        ("ALIGN", (0, 3), (0, 3), "RIGHT"),
                                     ]))
                                     resource_rows.append([resource_table])
                                 cells.append(Table(resource_rows, colWidths=[max(1, slot_width * cell["span"] - 6)]))
@@ -490,8 +502,8 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                                         teacher_initials = "".join(part[0] for part in (name_parts[:1] + (name_parts[-1:] if len(name_parts) > 1 else []))).upper()[:4] or "—"
                                     duration = str(max(1, int(lesson.get("duration_periods") or 1))) + "P"
                                     room_text = "" if layout["room_view"] else pdf_text(allocated_room_name(lesson))
-                                    period_style = ParagraphStyle("PrintPeriodMarker", parent=cell_style, alignment=(TA_LEFT if view_type == "school" else TA_RIGHT), fontSize=5, leading=6, textColor=colors.black)
-                                    subject_style = ParagraphStyle("PrintSubjectInitials", parent=cell_style, alignment=TA_CENTER, fontSize=10, leading=11, textColor=colors.black)
+                                    period_style = ParagraphStyle("PrintPeriodMarker", parent=cell_style, alignment=TA_LEFT if view_type in ("school", "class") else TA_RIGHT, fontSize=5, leading=6, textColor=colors.black)
+                                    subject_style = ParagraphStyle("PrintSubjectInitials", parent=cell_style, alignment=TA_CENTER, fontSize=14 if view_type == "class" else 10, leading=15 if view_type == "class" else 11, textColor=colors.black)
                                     detail_style = ParagraphStyle("PrintCellDetail", parent=cell_style, alignment=TA_RIGHT, fontSize=4, leading=5, textColor=colors.black)
                                     lesson_rows.extend([
                                         [Paragraph(pdf_text(duration), period_style)],
@@ -508,8 +520,8 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                                 text_layout.setStyle(TableStyle([
                                     ("ALIGN", (0, 0), (-1, -1), "RIGHT"),
                                     ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-                                    ("ALIGN", (0, 0), (0, 0), "LEFT" if view_type == "school" else "RIGHT"),
-                                    ("VALIGN", (0, 0), (0, 0), "TOP" if view_type == "school" else "MIDDLE"),
+                                    ("ALIGN", (0, 0), (0, 0), "LEFT" if view_type in ("school", "class") else "RIGHT"),
+                                    ("VALIGN", (0, 0), (0, 0), "TOP" if view_type in ("school", "class") else "MIDDLE"),
                                     ("VALIGN", (0, len(lesson_rows) - 1), (-1, -1), "BOTTOM"),
                                     ("LEFTPADDING", (0, 0), (-1, -1), 0),
                                     ("RIGHTPADDING", (0, 0), (-1, -1), 0),
@@ -538,8 +550,8 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                                 accent = colors.HexColor(card_color)
                                 tint = (colors.white if print_sheet else colors.Color(1-(1-accent.red)*0.17, 1-(1-accent.green)*0.17, 1-(1-accent.blue)*0.17))
                                 card_border = colors.HexColor("#B8B8B8") if print_sheet else accent
-                                top_style = ParagraphStyle("ExportDuration", parent=cell_style, alignment=2, fontSize=5, leading=6)
-                                subject_style = ParagraphStyle("ExportSubject", parent=cell_style, alignment=TA_CENTER, fontSize=9, leading=11)
+                                top_style = ParagraphStyle("ExportDuration", parent=cell_style, alignment=TA_LEFT if view_type == "class" else 2, fontSize=5, leading=6)
+                                subject_style = ParagraphStyle("ExportSubject", parent=cell_style, alignment=TA_CENTER, fontSize=14 if view_type == "class" else 9, leading=15 if view_type == "class" else 11)
                                 room_style = ParagraphStyle("ExportRoom", parent=cell_style, alignment=TA_CENTER, fontSize=5, leading=6, textColor=colors.black if print_sheet else colors.HexColor("#55705d"))
                                 teacher_style = ParagraphStyle("ExportTeacher", parent=cell_style, alignment=2, fontSize=5, leading=6, textColor=colors.black if print_sheet else colors.white)
                                 class_label = str(lesson.get("class_name") or "").strip()
@@ -548,22 +560,22 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                                 class_initials = str(lesson.get("class_initials") or "").strip().upper() or class_full or "—"
                                 footer_style = ParagraphStyle("ExportCellFooter", parent=teacher_style, alignment=2, fontSize=5, leading=6)
                                 if view_type in ("teacher", "room"):
-                                    resource_subject_style = ParagraphStyle("ResourceSubject", parent=cell_style, alignment=TA_LEFT, fontSize=8, leading=9, wordWrap=None, splitLongWords=0, textColor=colors.black if print_sheet else colors.HexColor("#365b40"))
-                                    resource_period_style = ParagraphStyle("ResourcePeriod", parent=cell_style, alignment=TA_RIGHT, fontSize=7, leading=8, wordWrap=None, textColor=colors.black if print_sheet else colors.HexColor("#536b58"))
-                                    resource_class_style = ParagraphStyle("ResourceClass", parent=cell_style, alignment=TA_CENTER, fontSize=25, leading=27, textColor=colors.black if print_sheet else colors.HexColor("#263f30"))
+                                    resource_subject_style = ParagraphStyle("ResourceSubject", parent=cell_style, alignment=TA_CENTER if view_type == "room" else TA_RIGHT, fontSize=15, leading=16, wordWrap=None, splitLongWords=0, textColor=colors.black if print_sheet else colors.HexColor("#365b40"))
+                                    resource_period_style = ParagraphStyle("ResourcePeriod", parent=cell_style, alignment=TA_LEFT if view_type == "room" else TA_RIGHT, fontSize=7, leading=8, wordWrap=None, textColor=colors.black if print_sheet else colors.HexColor("#536b58"))
+                                    resource_class_style = ParagraphStyle("ResourceClass", parent=cell_style, alignment=TA_CENTER, fontSize=29, leading=31, textColor=colors.black if print_sheet else colors.HexColor("#263f30"))
                                     resource_meta = allocated_room if view_type == "teacher" else teacher_initials
                                     resource_card_height = max(28, (individual_row_height - 8) / max(1, len(cell["lessons"])))
                                     card_rows = [
                                         [
-                                            Paragraph("<b>" + subject_initial + "</b>", resource_subject_style),
-                                            "",
                                             Paragraph(pdf_text(str(max(1, int(lesson.get("duration_periods") or 1))) + "P"), resource_period_style) if view_type == "room" else "",
+                                            Paragraph("<b>" + subject_initial + "</b>", resource_subject_style) if view_type == "room" else "",
+                                            Paragraph("<b>" + subject_initial + "</b>", resource_subject_style) if view_type == "teacher" else "",
                                         ],
                                         [Paragraph("<b>" + pdf_text(class_initials) + "</b>", resource_class_style), "", ""],
                                         [
-                                            Paragraph(pdf_text(resource_meta), footer_style) if resource_meta else "",
+                                            Paragraph(pdf_text(resource_meta), footer_style) if view_type == "teacher" and resource_meta else "",
                                             "",
-                                            Paragraph(pdf_text(str(max(1, int(lesson.get("duration_periods") or 1))) + "P"), resource_period_style) if view_type == "teacher" else "",
+                                            Paragraph(pdf_text(resource_meta), footer_style) if view_type == "room" and resource_meta else Paragraph(pdf_text(str(max(1, int(lesson.get("duration_periods") or 1))) + "P"), resource_period_style) if view_type == "teacher" else "",
                                         ],
                                     ]
                                 else:
@@ -586,7 +598,7 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                                     if view_type in ("class", "teacher", "room") else None,
                                 )
                                 card.setStyle(TableStyle([
-                                    ("SPAN", (0,0), (1,0)) if view_type in ("teacher", "room") else ("ALIGN", (0,0), (-1,-1), "CENTER"),
+                                    ("ALIGN", (0,0), (-1,-1), "CENTER"),
                                     ("SPAN", (0,1), (2,1)) if view_type in ("teacher", "room") else ("ALIGN", (0,0), (-1,-1), "CENTER"),
                                     ("VALIGN", (0,2), (-1,2), "MIDDLE") if view_type in ("teacher", "room") else ("ALIGN", (0,0), (-1,-1), "CENTER"),
                                     ("BACKGROUND", (0,0), (-1,-1), tint),
