@@ -454,11 +454,11 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                                 stream_label = str(lesson.get("stream") or "").strip()
                                 class_initials = str(lesson.get("class_initials") or "").strip().upper() or (class_label + ((" " + stream_label) if stream_label else "") or "—")
                                 period_style = ParagraphStyle("PrintAnchoredPeriod", parent=cell_style, alignment=TA_LEFT, fontSize=6, leading=7, textColor=colors.black)
-                                subject_style = ParagraphStyle("PrintAnchoredSubject", parent=cell_style, alignment=TA_CENTER, fontSize=16 if view_type == "room" else 15 if view_type == "class" else 10, leading=18 if view_type == "room" else 17 if view_type == "class" else 11, textColor=colors.black)
+                                subject_style = ParagraphStyle("PrintAnchoredSubject", parent=cell_style, alignment=TA_CENTER, fontSize=20 if view_type == "room" else 18 if view_type == "class" else 10, leading=22 if view_type == "room" else 20 if view_type == "class" else 11, textColor=colors.black)
                                 subject_left_style = ParagraphStyle("PrintAnchoredSubjectLeft", parent=subject_style, alignment=TA_LEFT)
                                 class_style = ParagraphStyle("PrintAnchoredClass", parent=cell_style, alignment=TA_CENTER, fontSize=22 if view_type == "teacher" else 7, leading=24 if view_type == "teacher" else 8, textColor=colors.black)
                                 teacher_style = ParagraphStyle("PrintAnchoredTeacher", parent=cell_style, alignment=TA_RIGHT, fontSize=6, leading=7, textColor=colors.black)
-                                right_style = ParagraphStyle("PrintAnchoredRight", parent=cell_style, alignment=TA_CENTER, fontSize=6, leading=7, textColor=colors.black)
+                                right_style = ParagraphStyle("PrintAnchoredRight", parent=cell_style, alignment=TA_RIGHT, fontSize=6, leading=7, textColor=colors.black)
 
                                 resource_width = max(1, slot_width * cell["span"] - 6)
                                 cell_height = max(24, individual_row_height - 8)
