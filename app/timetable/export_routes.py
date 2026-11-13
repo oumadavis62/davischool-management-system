@@ -477,12 +477,12 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
 
                                 resource_width = max(1, slot_width * cell["span"] - 6)
                                 cell_height = max(24, individual_row_height - 8)
-                                top_band = max(7, cell_height * 0.22)
-                                center_band = max(8, cell_height * 0.56)
-                                bottom_band = max(7, cell_height - top_band - center_band)
+                                top_band = max(6, cell_height * 0.20)
+                                bottom_band = max(6, cell_height * 0.20)
+                                center_band = max(8, cell_height - top_band - bottom_band)
                                 anchored = Table(
                                     [[top_left, top_right], [center, ""], ["", bottom_right]],
-                                    colWidths=[resource_width * 0.5, resource_width * 0.5] if view_type in ("teacher", "room") else [resource_width * 0.5, resource_width * 0.5],
+                                    colWidths=[resource_width * 0.5, resource_width * 0.5],
                                     rowHeights=[top_band, center_band, bottom_band],
                                 )
                                 anchored.setStyle(TableStyle([
