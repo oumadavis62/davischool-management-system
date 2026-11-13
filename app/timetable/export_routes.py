@@ -519,11 +519,23 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                                 ]))
                                 lesson_rows.append([anchored])
 
-                            cells.append(Table(
+                            lesson_layout = Table(
                                 lesson_rows,
                                 colWidths=[max(1, slot_width * cell["span"] - 6)],
                                 rowHeights=[max(24, individual_row_height - 8)] * len(lesson_rows),
-                            ))
+                            )
+                            # The nested lesson table already uses the full inner
+                            # cell width. Remove ReportLab's default 6pt wrapper
+                            # padding on each side so labels are not displaced
+                            # beyond the right edge of individual print cells.
+                            lesson_layout.setStyle(TableStyle([
+                                ("LEFTPADDING", (0, 0), (-1, -1), 0),
+                                ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+                                ("TOPPADDING", (0, 0), (-1, -1), 0),
+                                ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
+                                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                            ]))
+                            cells.append(lesson_layout)
                             # Preserve the occupied period columns for a lesson
                             # spanning multiple periods. Without this merge, the
                             # print-sheet row becomes shorter than its header and
