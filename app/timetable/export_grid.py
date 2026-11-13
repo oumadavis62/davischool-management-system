@@ -64,16 +64,42 @@ def build_export_grid(result, view_type):
                     slot, continued = starts.get(key, []), occupied.get(key, [])
                 if slot:
                     span = 1
-                    for lesson in slot:
-                        duration=max(1,int(lesson["duration_periods"] or 1))
-                        start=period_index.get(int(lesson["period_id"]))
-                        span_periods=[periods[start+off] for off in range(duration) if start is not None and start+off<len(periods)]
-                        can_merge=(len(span_periods)==duration and all(timeline_pos.get(int(span_periods[off]["id"]))==pos+off for off in range(duration)))
-                        if can_merge:
-                            span=max(span,duration)
-                    if span>1:
-                        for off in range(1,span):
-                            covered.add(int(periods[period_index[pid]+off]["id"]))
+                    # A merged cell must represent one uninterrupted lesson.
+                    # Previously, the longest duration in a shared slot could
+                    # span over a different lesson starting in the next period,
+                    # making that scheduled lesson disappear from the export.
+                    # Only merge a single-lesson slot, and only when no other
+                    # lesson for this view starts in any period being covered.
+                    if len(slot) == 1:
+                        lesson = slot[0]
+                        duration = max(1, int(lesson["duration_periods"] or 1))
+                        start = period_index.get(int(lesson["period_id"]))
+                        span_periods = [
+                            periods[start + off]
+                            for off in range(duration)
+                            if start is not None and start + off < len(periods)
+                        ]
+                        can_merge = (
+                            len(span_periods) == duration
+                            and all(
+                                timeline_pos.get(int(span_periods[off]["id"])) == pos + off
+                                for off in range(duration)
+                            )
+                        )
+                        covered_period_ids = {
+                            int(periods[start + off]["id"])
+                            for off in range(1, duration)
+                        } if start is not None and len(span_periods) == duration else set()
+                        has_new_lesson = any(
+                            int(other["day_id"]) == int(day["id"])
+                            and int(other["period_id"]) in covered_period_ids
+                            for other in lessons
+                        )
+                        if can_merge and not has_new_lesson:
+                            span = duration
+                    if span > 1:
+                        for off in range(1, span):
+                            covered.add(int(periods[period_index[pid] + off]["id"]))
                     cells.append({"kind":"lesson","lessons":slot,"span":span})
                 elif continued:
                     cells.append({"kind":"continued","lessons":continued,"span":1})
