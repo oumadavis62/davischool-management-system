@@ -52,6 +52,10 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
         safe = re.sub(r"[^A-Za-z0-9_-]+", "-", raw).strip("-")
         return (safe or "Mabale_ICT-Timetable")[:90]
 
+    def scheduled_period_count(lessons):
+        """Count scheduled periods, including every period in a double/long lesson."""
+        return sum(max(1, int(lesson.get("duration_periods") or 1)) for lesson in lessons)
+
     def allocated_room_name(lesson):
         """Return a room label only for a real, explicitly allocated room."""
         room_id = lesson.get("room_id")
@@ -227,7 +231,7 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
         specialized_export = view_type != "school"
         timetable_table_class = "specialized-timetable" if specialized_export else "main-timetable"
         generated_at = datetime.now(EAT).strftime("%d %b %Y %H:%M EAT")
-        export_footer = ("<footer class='export-footer'><span>Mabale_ICT Software · Generated: " + escape(generated_at) + "</span><span>Total scheduled lessons: " + str(len(result["lessons"])) + "</span></footer>")
+        export_footer = ("<footer class='export-footer'><span>Mabale_ICT Software · Generated: " + escape(generated_at) + "</span><span>Total scheduled lessons: " + str(scheduled_period_count(result["lessons"])) + "</span></footer>")
         room_period_css = ".resource-duration{top:3px;bottom:auto;left:5px;right:auto}" if view_type == "room" else ""
         html=f"""<!doctype html><html><head><meta charset="utf-8"><title>{title}</title>
         <style>{room_period_css}
@@ -855,7 +859,7 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
             story.append(KeepInFrame(doc.width, doc.height - 34, [weekend_table], mode="shrink", hAlign="LEFT", vAlign="TOP"))
         generated_at = datetime.now(EAT).strftime("%d %b %Y %H:%M EAT")
         doc.footer_left = "Mabale_ICT Software · Generated: " + generated_at
-        doc.footer_right = "Total scheduled lessons: " + str(len(result["lessons"]))
+        doc.footer_right = "Total scheduled lessons: " + str(scheduled_period_count(result["lessons"]))
         # Footer is drawn in afterPage(), after all content on each PDF page.
         doc.build(story)
         buffer.seek(0)
@@ -900,7 +904,7 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
         sheet.cell(2,1).font = Font(bold=True,size=12,color="315B3E")
         sheet.cell(2,1).alignment = Alignment(horizontal="center")
         sheet.merge_cells(start_row=3,start_column=1,end_row=3,end_column=last_col)
-        profile_text = str(result["profile"]["academic_year"]) + " · " + str(result["profile"]["term"]) + " · " + str(len(result["lessons"])) + " scheduled lessons"
+        profile_text = str(result["profile"]["academic_year"]) + " · " + str(result["profile"]["term"]) + " · " + str(scheduled_period_count(result["lessons"])) + " scheduled periods"
         sheet.cell(3,1,profile_text)
         sheet.cell(3,1).alignment = Alignment(horizontal="center")
         header_row = 5
@@ -1104,7 +1108,7 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
 
         generated_at = datetime.now(EAT).strftime("%d %b %Y %H:%M EAT")
         sheet.oddFooter.left.text = "Mabale_ICT Software · Generated: " + generated_at
-        sheet.oddFooter.right.text = "Total scheduled lessons: " + str(len(result["lessons"]))
+        sheet.oddFooter.right.text = "Total scheduled lessons: " + str(scheduled_period_count(result["lessons"]))
         sheet.oddFooter.left.size = 8
         sheet.oddFooter.right.size = 8
         workbook.save(buffer)
