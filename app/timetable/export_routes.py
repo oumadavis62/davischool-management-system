@@ -524,6 +524,14 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                                 colWidths=[max(1, slot_width * cell["span"] - 6)],
                                 rowHeights=[max(24, individual_row_height - 8)] * len(lesson_rows),
                             ))
+                            # Preserve the occupied period columns for a lesson
+                            # spanning multiple periods. Without this merge, the
+                            # print-sheet row becomes shorter than its header and
+                            # every later lesson shifts into the wrong column.
+                            if cell["span"] > 1:
+                                col = len(cells) - 1
+                                span_commands.append(("SPAN", (col, row_index), (col + cell["span"] - 1, row_index)))
+                                cells.extend([""] * (cell["span"] - 1))
                         elif print_sheet:
                             # Preserve the existing whole-school print-sheet layout.
                             lesson_rows = []
