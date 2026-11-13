@@ -622,7 +622,9 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                             cells.append(text_layout)
                         else:
                             card_tables = []
-                            card_width = max(1, slot_width * cell["span"] - 8)
+                            whole_school_cell = view_type not in ("class", "teacher", "room")
+                            card_width = max(1, slot_width * cell["span"] if whole_school_cell else slot_width * cell["span"] - 8)
+                            edge_inset = max(0.5, card_width * 0.01)
                             for lesson in cell["lessons"]:
                                 subject_initial = pdf_text(str(lesson.get("subject_initial") or "").strip().upper() or "—")
                                 teacher_initials = str(lesson.get("teacher_initials") or "").strip().upper()
@@ -692,8 +694,10 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                                     ("BACKGROUND", (0,0), (-1,-1), tint),
                                     ("BOX", (0,0), (-1,-1), 0.45, card_border),
                                     ("LINEBEFORE", (0,0), (0,-1), 3, card_border),
-                                    ("LEFTPADDING", (0,0), (-1,-1), 3), ("RIGHTPADDING", (0,0), (-1,-1), 3),
-                                    ("TOPPADDING", (0,0), (-1,-1), 1), ("BOTTOMPADDING", (0,0), (-1,-1), 1),
+                                    ("LEFTPADDING", (0,0), (-1,-1), edge_inset if whole_school_cell else 3),
+                                    ("RIGHTPADDING", (0,0), (-1,-1), edge_inset if whole_school_cell else 3),
+                                    ("TOPPADDING", (0,0), (-1,-1), 0 if whole_school_cell else 1),
+                                    ("BOTTOMPADDING", (0,0), (-1,-1), 0 if whole_school_cell else 1),
                                     ("VALIGN", (0,0), (-1,-1), "MIDDLE"),
                                     ("VALIGN", (0,0), (-1,0), "TOP"),
                                     ("VALIGN", (0,-1), (-1,-1), "BOTTOM"),
