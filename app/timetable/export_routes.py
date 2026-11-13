@@ -601,8 +601,8 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                                 tint = (colors.white if print_sheet else colors.Color(1-(1-accent.red)*0.17, 1-(1-accent.green)*0.17, 1-(1-accent.blue)*0.17))
                                 card_border = colors.HexColor("#B8B8B8") if print_sheet else accent
                                 top_style = ParagraphStyle("ExportDuration", parent=cell_style, alignment=(TA_LEFT if view_type in ("class", "room") else 2), fontSize=5, leading=6)
-                                subject_style = ParagraphStyle("ExportSubject", parent=cell_style, alignment=TA_CENTER, fontSize=9, leading=11)
-                                room_style = ParagraphStyle("ExportRoom", parent=cell_style, alignment=TA_CENTER, fontSize=5, leading=6, textColor=colors.black if print_sheet else colors.HexColor("#55705d"))
+                                subject_style = ParagraphStyle("ExportSubject", parent=cell_style, alignment=TA_CENTER, fontSize=12, leading=14)
+                                room_style = ParagraphStyle("ExportRoom", parent=cell_style, alignment=TA_LEFT, fontSize=5, leading=6, textColor=colors.black if print_sheet else colors.HexColor("#55705d"))
                                 teacher_style = ParagraphStyle("ExportTeacher", parent=cell_style, alignment=2, fontSize=5, leading=6, textColor=colors.black if print_sheet else colors.white)
                                 class_label = str(lesson.get("class_name") or "").strip()
                                 stream_label = str(lesson.get("stream") or "").strip()
@@ -611,9 +611,9 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                                 footer_style = ParagraphStyle("ExportCellFooter", parent=teacher_style, alignment=2, fontSize=5, leading=6)
                                 teacher_initial_style = ParagraphStyle("ExportTeacherInitials", parent=cell_style, alignment=2, fontSize=5, leading=6, textColor=colors.black)
                                 if view_type in ("teacher", "room"):
-                                    resource_subject_style = ParagraphStyle("ResourceSubject", parent=cell_style, alignment=(TA_CENTER if view_type == "room" else TA_RIGHT), fontSize=16 if view_type == "room" else 8, leading=18 if view_type == "room" else 9, wordWrap=None, splitLongWords=0, textColor=colors.black if print_sheet else colors.HexColor("#365b40"))
+                                    resource_subject_style = ParagraphStyle("ResourceSubject", parent=cell_style, alignment=(TA_CENTER if view_type == "room" else TA_RIGHT), fontSize=20 if view_type == "room" else 8, leading=22 if view_type == "room" else 9, wordWrap=None, splitLongWords=0, textColor=colors.black if print_sheet else colors.HexColor("#365b40"))
                                     resource_period_style = ParagraphStyle("ResourcePeriod", parent=cell_style, alignment=(TA_LEFT if view_type == "room" else TA_RIGHT), fontSize=7, leading=8, wordWrap=None, textColor=colors.black if print_sheet else colors.HexColor("#536b58"))
-                                    resource_class_style = ParagraphStyle("ResourceClass", parent=cell_style, alignment=TA_CENTER, fontSize=25, leading=27, textColor=colors.black if print_sheet else colors.HexColor("#263f30"))
+                                    resource_class_style = ParagraphStyle("ResourceClass", parent=cell_style, alignment=TA_CENTER, fontSize=30, leading=32, textColor=colors.black if print_sheet else colors.HexColor("#263f30"))
                                     resource_meta = allocated_room if view_type == "teacher" else teacher_initials
                                     resource_card_height = max(28, (individual_row_height - 8) / max(1, len(cell["lessons"])))
                                     card_rows = [
@@ -658,6 +658,8 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                                     ("LEFTPADDING", (0,0), (-1,-1), 3), ("RIGHTPADDING", (0,0), (-1,-1), 3),
                                     ("TOPPADDING", (0,0), (-1,-1), 1), ("BOTTOMPADDING", (0,0), (-1,-1), 1),
                                     ("VALIGN", (0,0), (-1,-1), "MIDDLE"),
+                                    ("VALIGN", (0,0), (-1,0), "TOP"),
+                                    ("VALIGN", (0,-1), (-1,-1), "BOTTOM"),
                                 ]))
                                 card_tables.append(card)
                             if len(card_tables) == 1:
