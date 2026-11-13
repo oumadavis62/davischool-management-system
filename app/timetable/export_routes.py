@@ -465,7 +465,9 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                                 # padding for this lesson. Use its full spanned width so
                                 # corner labels can align with the actual cell borders.
                                 resource_width = max(1, slot_width * cell["span"])
-                                cell_height = max(24, individual_row_height - 8)
+                                # Use the complete timetable row height: the outer lesson cell
+                                # has zero padding, so the anchored labels can meet its edges.
+                                cell_height = max(24, individual_row_height)
                                 top_band = max(6, cell_height * 0.20)
                                 bottom_band = max(6, cell_height * 0.20)
                                 center_band = max(8, cell_height - top_band - bottom_band)
@@ -533,7 +535,7 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                             lesson_layout = Table(
                                 lesson_rows,
                                 colWidths=[max(1, slot_width * cell["span"])],
-                                rowHeights=[max(24, individual_row_height - 8)] * len(lesson_rows),
+                                rowHeights=[max(24, individual_row_height)] * len(lesson_rows),
                             )
                             # The nested lesson table already uses the full inner
                             # cell width. Remove ReportLab's default 6pt wrapper
@@ -544,7 +546,7 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                                 ("RIGHTPADDING", (0, 0), (-1, -1), 0),
                                 ("TOPPADDING", (0, 0), (-1, -1), 0),
                                 ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
-                                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                                ("VALIGN", (0, 0), (-1, -1), "TOP"),
                             ]))
                             lesson_col = len(cells)
                             cells.append(lesson_layout)
