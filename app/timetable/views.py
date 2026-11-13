@@ -129,7 +129,7 @@ def get_timetable_view(connection: Any, school_id: int, profile_id: int, view_ty
         "breaks": breaks,
         "lessons": lessons,
         "allocation_classes": cur.execute(
-            """SELECT DISTINCT ta.class_id,c.name class_name,c.stream
+            """SELECT DISTINCT ta.class_id,c.name class_name,c.stream,c.initials class_initials
                FROM teacher_allocations ta
                JOIN classes c ON c.id=ta.class_id AND c.school_id=ta.school_id
                JOIN ds_timetable_class_requirements r
