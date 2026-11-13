@@ -459,27 +459,47 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                                 teacher_style = ParagraphStyle("PrintAnchoredTeacher", parent=cell_style, alignment=TA_RIGHT, fontSize=6, leading=7, textColor=colors.black)
                                 right_style = ParagraphStyle("PrintAnchoredRight", parent=cell_style, alignment=TA_RIGHT, fontSize=6, leading=7, textColor=colors.black)
 
-                                if view_type == "class":
-                                    top_left = Paragraph(duration, period_style)
-                                    top_right = ""
-                                    center = Paragraph("<b>" + subject_initial + "</b>", subject_style)
-                                    bottom_right = Paragraph(teacher_initials, teacher_style)
-                                elif view_type == "room":
-                                    top_left = Paragraph(duration, period_style)
-                                    top_right = Paragraph(pdf_text(class_initials), right_style)
-                                    center = Paragraph("<b>" + subject_initial + "</b>", subject_style)
-                                    bottom_right = Paragraph(teacher_initials, teacher_style)
-                                else:
-                                    top_left = ""
-                                    top_right = Paragraph("<b>" + subject_initial + "</b>", subject_style)
-                                    center = Paragraph("<b>" + pdf_text(class_initials) + "</b>", class_style)
-                                    bottom_right = Paragraph(duration, teacher_style)
-
                                 resource_width = max(1, slot_width * cell["span"] - 6)
                                 cell_height = max(24, individual_row_height - 8)
                                 top_band = max(6, cell_height * 0.20)
                                 bottom_band = max(6, cell_height * 0.20)
                                 center_band = max(8, cell_height - top_band - bottom_band)
+
+                                # Keep the small corner labels inside their own
+                                # half-cell areas. Long initials or duration labels
+                                # shrink to fit instead of painting across borders.
+                                label_width = max(1, resource_width * 0.5 - 2)
+                                period_fit = KeepInFrame(
+                                    label_width, max(1, top_band - 1),
+                                    [Paragraph(duration, period_style)],
+                                    mode="shrink", hAlign="LEFT", vAlign="MIDDLE",
+                                )
+                                teacher_fit = KeepInFrame(
+                                    label_width, max(1, bottom_band - 1),
+                                    [Paragraph(teacher_initials, teacher_style)],
+                                    mode="shrink", hAlign="RIGHT", vAlign="MIDDLE",
+                                )
+                                period_right_fit = KeepInFrame(
+                                    label_width, max(1, bottom_band - 1),
+                                    [Paragraph(duration, teacher_style)],
+                                    mode="shrink", hAlign="RIGHT", vAlign="MIDDLE",
+                                )
+
+                                if view_type == "class":
+                                    top_left = period_fit
+                                    top_right = ""
+                                    center = Paragraph("<b>" + subject_initial + "</b>", subject_style)
+                                    bottom_right = teacher_fit
+                                elif view_type == "room":
+                                    top_left = period_fit
+                                    top_right = Paragraph(pdf_text(class_initials), right_style)
+                                    center = Paragraph("<b>" + subject_initial + "</b>", subject_style)
+                                    bottom_right = teacher_fit
+                                else:
+                                    top_left = ""
+                                    top_right = Paragraph("<b>" + subject_initial + "</b>", subject_style)
+                                    center = Paragraph("<b>" + pdf_text(class_initials) + "</b>", class_style)
+                                    bottom_right = period_right_fit
                                 anchored = Table(
                                     [[top_left, top_right], [center, ""], ["", bottom_right]],
                                     colWidths=[resource_width * 0.5, resource_width * 0.5],
