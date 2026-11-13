@@ -455,9 +455,9 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                                 stream_label = str(lesson.get("stream") or "").strip()
                                 class_initials = str(lesson.get("class_initials") or "").strip().upper() or (class_label + ((" " + stream_label) if stream_label else "") or "—")
                                 period_style = ParagraphStyle("PrintAnchoredPeriod", parent=cell_style, alignment=TA_LEFT, fontSize=6, leading=7, textColor=colors.black)
-                                subject_style = ParagraphStyle("PrintAnchoredSubject", parent=cell_style, alignment=TA_CENTER, fontSize=20 if view_type == "room" else 18 if view_type == "class" else 10, leading=22 if view_type == "room" else 20 if view_type == "class" else 11, textColor=colors.black)
+                                subject_style = ParagraphStyle("PrintAnchoredSubject", parent=cell_style, alignment=TA_CENTER, fontSize=23 if view_type == "room" else 21 if view_type == "class" else 13, leading=25 if view_type == "room" else 23 if view_type == "class" else 14, textColor=colors.black)
                                 subject_left_style = ParagraphStyle("PrintAnchoredSubjectLeft", parent=subject_style, alignment=TA_LEFT)
-                                class_style = ParagraphStyle("PrintAnchoredClass", parent=cell_style, alignment=TA_CENTER, fontSize=22 if view_type == "teacher" else 7, leading=24 if view_type == "teacher" else 8, textColor=colors.black)
+                                class_style = ParagraphStyle("PrintAnchoredClass", parent=cell_style, alignment=TA_CENTER, fontSize=25 if view_type == "teacher" else 7, leading=27 if view_type == "teacher" else 8, textColor=colors.black)
                                 teacher_style = ParagraphStyle("PrintAnchoredTeacher", parent=cell_style, alignment=TA_RIGHT, fontSize=6, leading=7, textColor=colors.black)
                                 right_style = ParagraphStyle("PrintAnchoredRight", parent=cell_style, alignment=TA_RIGHT, fontSize=6, leading=7, textColor=colors.black)
 
@@ -585,7 +585,7 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                                 duration = pdf_text(str(max(1, int(lesson.get("duration_periods") or 1))) + "P")
                                 room_text = "" if layout["room_view"] else pdf_text(allocated_room_name(lesson))
                                 period_style = ParagraphStyle("PrintPeriodMarker", parent=cell_style, alignment=TA_LEFT, fontSize=5, leading=6, textColor=colors.black)
-                                subject_style = ParagraphStyle("PrintSubjectInitials", parent=cell_style, alignment=TA_CENTER, fontSize=15, leading=17, textColor=colors.black)
+                                subject_style = ParagraphStyle("PrintSubjectInitials", parent=cell_style, alignment=TA_CENTER, fontSize=18, leading=20, textColor=colors.black)
                                 room_style = ParagraphStyle("PrintCellRoom", parent=cell_style, alignment=TA_LEFT, fontSize=5, leading=6, textColor=colors.black)
                                 teacher_style = ParagraphStyle("PrintCellTeacher", parent=cell_style, alignment=TA_RIGHT, fontSize=5, leading=6, textColor=colors.black)
                                 anchored = Table(
@@ -640,7 +640,7 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                                 tint = (colors.white if print_sheet else colors.Color(1-(1-accent.red)*0.17, 1-(1-accent.green)*0.17, 1-(1-accent.blue)*0.17))
                                 card_border = colors.HexColor("#B8B8B8") if print_sheet else accent
                                 top_style = ParagraphStyle("ExportDuration", parent=cell_style, alignment=(TA_LEFT if whole_school_cell or view_type in ("class", "room") else 2), fontSize=5, leading=6)
-                                subject_style = ParagraphStyle("ExportSubject", parent=cell_style, alignment=TA_CENTER, fontSize=12, leading=14)
+                                subject_style = ParagraphStyle("ExportSubject", parent=cell_style, alignment=TA_CENTER, fontSize=15, leading=17)
                                 room_style = ParagraphStyle("ExportRoom", parent=cell_style, alignment=TA_LEFT, fontSize=5, leading=6, textColor=colors.black if print_sheet else colors.HexColor("#55705d"))
                                 teacher_style = ParagraphStyle("ExportTeacher", parent=cell_style, alignment=2, fontSize=5, leading=6, textColor=colors.black if print_sheet else colors.white)
                                 class_label = str(lesson.get("class_name") or "").strip()
