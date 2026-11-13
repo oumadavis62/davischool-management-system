@@ -477,17 +477,17 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                                 period_fit = KeepInFrame(
                                     label_width, max(1, top_band - 1),
                                     [Paragraph(duration, period_style)],
-                                    mode="shrink", hAlign="LEFT", vAlign="MIDDLE",
+                                    mode="shrink", hAlign="LEFT", vAlign="TOP",
                                 )
                                 teacher_fit = KeepInFrame(
                                     label_width, max(1, bottom_band - 1),
                                     [Paragraph(teacher_initials, teacher_style)],
-                                    mode="shrink", hAlign="RIGHT", vAlign="MIDDLE",
+                                    mode="shrink", hAlign="RIGHT", vAlign="BOTTOM",
                                 )
                                 period_right_fit = KeepInFrame(
                                     label_width, max(1, bottom_band - 1),
                                     [Paragraph(duration, teacher_style)],
-                                    mode="shrink", hAlign="RIGHT", vAlign="MIDDLE",
+                                    mode="shrink", hAlign="RIGHT", vAlign="BOTTOM",
                                 )
 
                                 if view_type == "class":
@@ -504,7 +504,7 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                                     top_left = KeepInFrame(
                                         label_width, max(1, top_band - 1),
                                         [Paragraph("<b>" + subject_initial + "</b>", subject_left_style)],
-                                        mode="shrink", hAlign="LEFT", vAlign="MIDDLE",
+                                        mode="shrink", hAlign="LEFT", vAlign="TOP",
                                     )
                                     top_right = ""
                                     center = Paragraph("<b>" + pdf_text(class_initials) + "</b>", class_style)
@@ -520,7 +520,9 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                                     ("ALIGN", (1, 0), (1, 0), "CENTER"),
                                     ("ALIGN", (0, 1), (1, 1), "CENTER"),
                                     ("ALIGN", (1, 2), (1, 2), "RIGHT"),
-                                    ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                                    ("VALIGN", (0, 0), (-1, 0), "TOP"),
+                                    ("VALIGN", (0, 1), (-1, 1), "MIDDLE"),
+                                    ("VALIGN", (0, 2), (-1, 2), "BOTTOM"),
                                     ("LEFTPADDING", (0, 0), (-1, -1), 0),
                                     ("RIGHTPADDING", (0, 0), (-1, -1), 0),
                                     ("TOPPADDING", (0, 0), (-1, -1), 0),
