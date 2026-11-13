@@ -639,7 +639,7 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                                 accent = colors.HexColor(card_color)
                                 tint = (colors.white if print_sheet else colors.Color(1-(1-accent.red)*0.17, 1-(1-accent.green)*0.17, 1-(1-accent.blue)*0.17))
                                 card_border = colors.HexColor("#B8B8B8") if print_sheet else accent
-                                top_style = ParagraphStyle("ExportDuration", parent=cell_style, alignment=(TA_LEFT if view_type in ("class", "room") else 2), fontSize=5, leading=6)
+                                top_style = ParagraphStyle("ExportDuration", parent=cell_style, alignment=(TA_LEFT if whole_school_cell or view_type in ("class", "room") else 2), fontSize=5, leading=6)
                                 subject_style = ParagraphStyle("ExportSubject", parent=cell_style, alignment=TA_CENTER, fontSize=12, leading=14)
                                 room_style = ParagraphStyle("ExportRoom", parent=cell_style, alignment=TA_LEFT, fontSize=5, leading=6, textColor=colors.black if print_sheet else colors.HexColor("#55705d"))
                                 teacher_style = ParagraphStyle("ExportTeacher", parent=cell_style, alignment=2, fontSize=5, leading=6, textColor=colors.black if print_sheet else colors.white)
@@ -684,8 +684,10 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                                         [resource_card_height * 0.20, resource_card_height * 0.60, resource_card_height * 0.20]
                                         if view_type in ("teacher", "room") else
                                         [max(4, (individual_row_height - 8) / (len(card_rows) * max(1, len(cell["lessons"]))))] * len(card_rows)
-                                    )
-                                    if view_type in ("class", "teacher", "room") else None,
+                                        if view_type == "class" else
+                                        [max(4, individual_row_height / max(1, len(card_rows)))] * len(card_rows)
+                                        if whole_school_cell else None
+                                    ),
                                 )
                                 card.setStyle(TableStyle([
                                     ("SPAN", (0,0), (1,0)) if view_type in ("teacher", "room") else ("ALIGN", (0,0), (-1,-1), "CENTER"),
