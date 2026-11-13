@@ -660,11 +660,10 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
             if day_start + rows_per_day < len(layout["rows"]):
                 story.append(Spacer(1, 5))
 
-        # The teacher and room Print sheets must keep the complete timetable
-        # together on page one. KeepInFrame scales only this print-sheet content;
-        # Download PDF and class/whole-school exports retain their existing sizing
-        # and pagination behavior.
-        if print_sheet and view_type in ("class", "teacher", "room"):
+        # Class, teacher, and room PDFs must keep the complete timetable
+        # together on the first A4 landscape page. Apply this to both Download PDF
+        # and Print sheet output; leave the whole-school timetable unchanged.
+        if view_type in ("class", "teacher", "room"):
             timetable_flowables = story[timetable_story_start:]
             del story[timetable_story_start:]
             story.append(KeepInFrame(
