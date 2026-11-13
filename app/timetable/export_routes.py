@@ -381,6 +381,7 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                 data[0].append(Paragraph(label, break_header_style if kind == "break" else header_style))
             span_commands = []
             individual_lesson_padding_commands = []
+            school_print_lesson_padding_commands = []
             merged_print_break_columns = set()
             for day_row_index, row in enumerate(day_rows):
                 row_index = day_row_index + 1
@@ -574,7 +575,7 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                             # individual print sheets: period at top-left, subject
                             # centered, and teacher at bottom-right.
                             lesson_rows = []
-                            resource_width = max(1, slot_width * cell["span"])
+                            resource_width = max(1, sum(timeline_widths[timeline_cursor:timeline_cursor + cell["span"]]))
                             edge_inset = max(0.5, resource_width * 0.01)
                             for lesson in cell["lessons"]:
                                 subject_initial = pdf_text(str(lesson.get("subject_initial") or "").strip().upper() or "—")
@@ -619,11 +620,24 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                                 ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
                                 ("VALIGN", (0, 0), (-1, -1), "TOP"),
                             ]))
+                            lesson_col = len(cells)
                             cells.append(text_layout)
+                            school_print_lesson_padding_commands.extend([
+                                ("LEFTPADDING", (lesson_col, row_index), (lesson_col, row_index), 0),
+                                ("RIGHTPADDING", (lesson_col, row_index), (lesson_col, row_index), 0),
+                                ("TOPPADDING", (lesson_col, row_index), (lesson_col, row_index), 0),
+                                ("BOTTOMPADDING", (lesson_col, row_index), (lesson_col, row_index), 0),
+                            ])
+                            # Preserve every occupied period column for a spanning
+                            # lesson; otherwise the following cells shift left and
+                            # lessons appear missing or in the wrong period.
+                            if cell["span"] > 1:
+                                span_commands.append(("SPAN", (lesson_col, row_index), (lesson_col + cell["span"] - 1, row_index)))
+                                cells.extend([""] * (cell["span"] - 1))
                         else:
                             card_tables = []
                             whole_school_cell = view_type not in ("class", "teacher", "room")
-                            card_width = max(1, slot_width * cell["span"] if whole_school_cell else slot_width * cell["span"] - 8)
+                            card_width = max(1, sum(timeline_widths[timeline_cursor:timeline_cursor + cell["span"]]) - (6 if whole_school_cell else 8))
                             edge_inset = max(0.5, card_width * 0.01)
                             for lesson in cell["lessons"]:
                                 subject_initial = pdf_text(str(lesson.get("subject_initial") or "").strip().upper() or "—")
@@ -742,7 +756,7 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                 ("VALIGN", (0,0), (-1,-1), "MIDDLE"),
                 ("LEFTPADDING", (0,0), (-1,-1), 3), ("RIGHTPADDING", (0,0), (-1,-1), 3),
                 ("TOPPADDING", (0,0), (-1,-1), 4), ("BOTTOMPADDING", (0,0), (-1,-1), 4),
-            ] + span_commands + individual_lesson_padding_commands
+            ] + span_commands + individual_lesson_padding_commands + school_print_lesson_padding_commands
             for col, (_, kind, _) in enumerate(timeline, start=1 + (1 if layout["show_class_column"] else 0)):
                 if kind == "break":
                     commands += [("BACKGROUND", (col,0), (col,-1), colors.white if print_sheet else colors.HexColor("#f1ead8")), ("TEXTCOLOR", (col,0), (col,-1), colors.black if print_sheet else colors.HexColor("#75551d"))]
