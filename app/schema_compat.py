@@ -9,15 +9,20 @@ from __future__ import annotations
 
 import os
 
-def _ensure_live_postgres_schema():
-    """Apply additive migrations to Render PostgreSQL when DATABASE_URL is present."""
-    database_url = os.environ.get("DATABASE_URL", "").strip()
-    if not database_url:
+def _ensure_live_postgres_schema(connection):
+    """Apply additive PostgreSQL migrations on the startup connection.
+
+    Reuse the connection that already owns the schema migration advisory lock.
+    A second connection doing ALTER TABLE here can deadlock with another
+    startup process that owns the advisory lock and is waiting for that DDL.
+    """
+    if not os.environ.get("DATABASE_URL", "").strip():
         return
-    try:
-        import psycopg
-    except Exception:
-        return
+    from app.db import acquire_schema_migration_lock
+
+    pg = connection
+    acquire_schema_migration_lock(pg)
+    cur = pg.cursor()
 
     migrations = {
         "users": {
@@ -85,70 +90,69 @@ def _ensure_live_postgres_schema():
         "finance_accounts": {"school_id": "INTEGER", "code": "TEXT", "name": "TEXT", "type": "TEXT", "opening_balance": "REAL"},
 
     }
-
-    with psycopg.connect(database_url) as pg:
-        with pg.cursor() as cur:
-            cur.execute("""CREATE TABLE IF NOT EXISTS marks_correction_requests(
-                id BIGSERIAL PRIMARY KEY,
-                school_id INTEGER NOT NULL,
-                exam_id INTEGER NOT NULL,
-                class_id INTEGER NOT NULL,
-                subject_id INTEGER NOT NULL,
-                teacher_id INTEGER,
-                requested_by TEXT,
-                requested_at TEXT,
-                reason TEXT,
-                status TEXT NOT NULL DEFAULT 'pending',
-                reviewed_by TEXT,
-                reviewed_at TEXT,
-                review_note TEXT
-            )""")
-            for table, columns in migrations.items():
+    cur.execute("""CREATE TABLE IF NOT EXISTS marks_correction_requests(
+        id BIGSERIAL PRIMARY KEY,
+        school_id INTEGER NOT NULL,
+        exam_id INTEGER NOT NULL,
+        class_id INTEGER NOT NULL,
+        subject_id INTEGER NOT NULL,
+        teacher_id INTEGER,
+        requested_by TEXT,
+        requested_at TEXT,
+        reason TEXT,
+        status TEXT NOT NULL DEFAULT 'pending',
+        reviewed_by TEXT,
+        reviewed_at TEXT,
+        review_note TEXT
+    )""")
+    for table, columns in migrations.items():
+        cur.execute(
+            "SELECT column_name FROM information_schema.columns "
+            "WHERE table_schema='public' AND table_name=%s",
+            (table,),
+        )
+        existing = {row[0] for row in cur.fetchall()}
+        if not existing:
+            continue
+        for column, definition in columns.items():
+            if column in existing:
+                continue
+            cur.execute("SAVEPOINT davischool_column_migration")
+            try:
+                cur.execute(
+                    f'ALTER TABLE "{table}" ADD COLUMN IF NOT EXISTS "{column}" {definition}'
+                )
+                cur.execute("RELEASE SAVEPOINT davischool_column_migration")
+            except Exception as exc:
+                cur.execute("ROLLBACK TO SAVEPOINT davischool_column_migration")
+                cur.execute("RELEASE SAVEPOINT davischool_column_migration")
+                print(
+                    f"DAVISCHOOL POSTGRES COLUMN MIGRATION SKIPPED: {table}.{column}: {exc!r}",
+                    flush=True,
+                )
                 cur.execute(
                     "SELECT column_name FROM information_schema.columns "
                     "WHERE table_schema='public' AND table_name=%s",
                     (table,),
                 )
                 existing = {row[0] for row in cur.fetchall()}
-                # Older installations may legitimately not have every optional
-                # table yet. Never let one missing table abort all migrations.
-                if not existing:
-                    continue
-                for column, definition in columns.items():
-                    if column not in existing:
-                        try:
-                            cur.execute(
-                                f'ALTER TABLE "{table}" ADD COLUMN IF NOT EXISTS "{column}" {definition}'
-                            )
-                        except Exception as exc:
-                            pg.rollback()
-                            print(
-                                f"DAVISCHOOL POSTGRES COLUMN MIGRATION SKIPPED: {table}.{column}: {exc!r}",
-                                flush=True,
-                            )
-                            # Re-open the transaction after a failed DDL statement.
-                            cur = pg.cursor()
-                            cur.execute(
-                                "SELECT column_name FROM information_schema.columns "
-                                "WHERE table_schema='public' AND table_name=%s",
-                                (table,),
-                            )
-                            existing = {row[0] for row in cur.fetchall()}
-        # Academic indexes keep MarkSheet and Marks Entry fast on large schools.
-        # Use a fresh cursor here because the migration loop may have rolled back
-        # and replaced its cursor after a failed PostgreSQL DDL statement.
-        with pg.cursor() as index_cur:
-            for index_sql in (
-                "CREATE INDEX IF NOT EXISTS idx_students_school_class_name ON students(school_id, class_id, name)",
-                "CREATE INDEX IF NOT EXISTS idx_marks_school_exam_class ON marks(school_id, exam_id, class_id)",
-                "CREATE INDEX IF NOT EXISTS idx_marks_student_exam_subject ON marks(student_id, exam_id, subject_id)",
-                "CREATE INDEX IF NOT EXISTS idx_grading_school_subject_range ON subject_grading_rules(school_id, subject_id, min_mark, max_mark)",
-            ):
-                try:
-                    index_cur.execute(index_sql)
-                except Exception as exc:
-                    print("DAVISCHOOL ACADEMIC INDEX SKIPPED:", repr(exc), flush=True)
-        pg.commit()
+
+    # Academic indexes keep MarkSheet and Marks Entry fast on large schools.
+    for index_sql in (
+        "CREATE INDEX IF NOT EXISTS idx_students_school_class_name ON students(school_id, class_id, name)",
+        "CREATE INDEX IF NOT EXISTS idx_marks_school_exam_class ON marks(school_id, exam_id, class_id)",
+        "CREATE INDEX IF NOT EXISTS idx_marks_student_exam_subject ON marks(student_id, exam_id, subject_id)",
+        "CREATE INDEX IF NOT EXISTS idx_grading_school_subject_range ON subject_grading_rules(school_id, subject_id, min_mark, max_mark)",
+    ):
+        cur.execute("SAVEPOINT davischool_index_migration")
+        try:
+            cur.execute(index_sql)
+            cur.execute("RELEASE SAVEPOINT davischool_index_migration")
+        except Exception as exc:
+            cur.execute("ROLLBACK TO SAVEPOINT davischool_index_migration")
+            cur.execute("RELEASE SAVEPOINT davischool_index_migration")
+            print("DAVISCHOOL ACADEMIC INDEX SKIPPED:", repr(exc), flush=True)
+    pg.commit()
 
 
 
@@ -219,6 +223,6 @@ def ensure_schema_compatibility(con):
 
     # Keep the live Render PostgreSQL schema compatible with older deployments.
     try:
-        _ensure_live_postgres_schema()
+        _ensure_live_postgres_schema(con)
     except Exception as exc:
         print("DAVISCHOOL POSTGRES SCHEMA MIGRATION ERROR:", repr(exc), flush=True)
