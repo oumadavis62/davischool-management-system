@@ -465,7 +465,7 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                                     duration = pdf_text(str(max(1, int(lesson.get("duration_periods") or 1))) + "P")
                                     resource_width = max(1, slot_width * cell["span"] - 6)
                                     subject_style = ParagraphStyle("PrintResourceSubject", parent=cell_style, alignment=TA_CENTER if view_type == "room" else TA_RIGHT, fontSize=15, leading=16, wordWrap=None, splitLongWords=0, textColor=colors.black)
-                                    class_style = ParagraphStyle("PrintResourceClass", parent=cell_style, alignment=TA_CENTER, fontSize=14, leading=15, textColor=colors.black)
+                                    class_style = ParagraphStyle("PrintResourceClass", parent=cell_style, alignment=TA_CENTER, fontSize=29 if view_type == "teacher" else 14, leading=31 if view_type == "teacher" else 15, textColor=colors.black)
                                     meta_style = ParagraphStyle("PrintResourceMeta", parent=cell_style, alignment=TA_RIGHT, fontSize=5, leading=6, textColor=colors.black)
                                     period_style = ParagraphStyle("PrintResourcePeriod", parent=cell_style, alignment=TA_LEFT if view_type == "room" else TA_RIGHT, fontSize=6, leading=7, textColor=colors.black)
                                     resource_table = Table([
