@@ -457,7 +457,7 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                                 subject_style = ParagraphStyle("PrintAnchoredSubject", parent=cell_style, alignment=TA_CENTER, fontSize=16 if view_type == "room" else 15 if view_type == "class" else 10, leading=18 if view_type == "room" else 17 if view_type == "class" else 11, textColor=colors.black)
                                 class_style = ParagraphStyle("PrintAnchoredClass", parent=cell_style, alignment=TA_CENTER, fontSize=22 if view_type == "teacher" else 7, leading=24 if view_type == "teacher" else 8, textColor=colors.black)
                                 teacher_style = ParagraphStyle("PrintAnchoredTeacher", parent=cell_style, alignment=TA_RIGHT, fontSize=6, leading=7, textColor=colors.black)
-                                right_style = ParagraphStyle("PrintAnchoredRight", parent=cell_style, alignment=TA_RIGHT, fontSize=6, leading=7, textColor=colors.black)
+                                right_style = ParagraphStyle("PrintAnchoredRight", parent=cell_style, alignment=TA_CENTER, fontSize=6, leading=7, textColor=colors.black)
 
                                 resource_width = max(1, slot_width * cell["span"] - 6)
                                 cell_height = max(24, individual_row_height - 8)
@@ -508,7 +508,7 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                                 anchored.setStyle(TableStyle([
                                     ("SPAN", (0, 1), (1, 1)),
                                     ("ALIGN", (0, 0), (0, 0), "LEFT"),
-                                    ("ALIGN", (1, 0), (1, 0), "RIGHT"),
+                                    ("ALIGN", (1, 0), (1, 0), "CENTER"),
                                     ("ALIGN", (0, 1), (1, 1), "CENTER"),
                                     ("ALIGN", (1, 2), (1, 2), "RIGHT"),
                                     ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
