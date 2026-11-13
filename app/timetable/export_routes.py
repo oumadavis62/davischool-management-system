@@ -767,6 +767,12 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                 ("LEFTPADDING", (0,0), (-1,-1), 3), ("RIGHTPADDING", (0,0), (-1,-1), 3),
                 ("TOPPADDING", (0,0), (-1,-1), 4), ("BOTTOMPADDING", (0,0), (-1,-1), 4),
             ] + span_commands + individual_lesson_padding_commands + school_print_lesson_padding_commands
+            if layout["show_class_column"]:
+                class_column_index = 1
+                commands += [
+                    ("ALIGN", (class_column_index, 1), (class_column_index, -1), "CENTER"),
+                    ("VALIGN", (class_column_index, 1), (class_column_index, -1), "MIDDLE"),
+                ]
             for col, (_, kind, _) in enumerate(timeline, start=1 + (1 if layout["show_class_column"] else 0)):
                 if kind == "break":
                     commands += [("BACKGROUND", (col,0), (col,-1), colors.white if print_sheet else colors.HexColor("#f1ead8")), ("TEXTCOLOR", (col,0), (col,-1), colors.black if print_sheet else colors.HexColor("#75551d"))]
