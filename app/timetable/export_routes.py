@@ -402,7 +402,7 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                     cells.append(Paragraph("<b>" + pdf_text(cl.get("class_initials") or (cl["class_name"] + ((" " + cl["stream"]) if cl["stream"] else ""))) + "</b>", class_initials_style))
                 timeline_cursor = 0
                 for original_cell in row["cells"]:
-                    if print_sheet and view_type == "class" and timeline_cursor < len(timeline) and timeline[timeline_cursor][1] == "break":
+                    if view_type == "class" and timeline_cursor < len(timeline) and timeline[timeline_cursor][1] == "break":
                         break_col = len(cells)
                         if row_index == 1:
                             break_item = timeline[timeline_cursor][2]
