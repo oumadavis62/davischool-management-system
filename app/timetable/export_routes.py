@@ -609,6 +609,7 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                                 class_full = class_label + ((" " + stream_label) if stream_label else "")
                                 class_initials = str(lesson.get("class_initials") or "").strip().upper() or class_full or "—"
                                 footer_style = ParagraphStyle("ExportCellFooter", parent=teacher_style, alignment=2, fontSize=5, leading=6)
+                                teacher_initial_style = ParagraphStyle("ExportTeacherInitials", parent=cell_style, alignment=2, fontSize=5, leading=6, textColor=colors.black)
                                 if view_type in ("teacher", "room"):
                                     resource_subject_style = ParagraphStyle("ResourceSubject", parent=cell_style, alignment=(TA_CENTER if view_type == "room" else TA_RIGHT), fontSize=16 if view_type == "room" else 8, leading=18 if view_type == "room" else 9, wordWrap=None, splitLongWords=0, textColor=colors.black if print_sheet else colors.HexColor("#365b40"))
                                     resource_period_style = ParagraphStyle("ResourcePeriod", parent=cell_style, alignment=(TA_LEFT if view_type == "room" else TA_RIGHT), fontSize=7, leading=8, wordWrap=None, textColor=colors.black if print_sheet else colors.HexColor("#536b58"))
@@ -625,7 +626,7 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                                         [
                                             Paragraph(pdf_text(resource_meta), footer_style) if resource_meta and view_type == "teacher" else "",
                                             "",
-                                            Paragraph(pdf_text(resource_meta), footer_style) if resource_meta and view_type == "room" else Paragraph(pdf_text(str(max(1, int(lesson.get("duration_periods") or 1))) + "P"), resource_period_style) if view_type == "teacher" else "",
+                                            Paragraph(pdf_text(resource_meta), teacher_initial_style) if resource_meta and view_type == "room" else Paragraph(pdf_text(str(max(1, int(lesson.get("duration_periods") or 1))) + "P"), resource_period_style) if view_type == "teacher" else "",
                                         ],
                                     ]
                                 else:
@@ -636,7 +637,7 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                                     if room_text:
                                         card_rows.append([Paragraph("⌂ " + room_text, room_style)])
                                     footer_label = teacher_initials
-                                    card_rows.append([Paragraph("<font color='black'><b>" + pdf_text(footer_label) + "</b></font>", footer_style) if print_sheet else Paragraph("<font backColor='#245b39' color='white'><b>" + pdf_text(footer_label) + "</b></font>", footer_style)])
+                                    card_rows.append([Paragraph(pdf_text(footer_label), teacher_initial_style)])
                                 card = Table(
                                     card_rows,
                                     colWidths=([card_width * 0.30, card_width * 0.40, card_width * 0.30] if view_type in ("teacher", "room") else [card_width]),
