@@ -402,6 +402,23 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                     cells.append(Paragraph("<b>" + pdf_text(cl.get("class_initials") or (cl["class_name"] + ((" " + cl["stream"]) if cl["stream"] else ""))) + "</b>", class_initials_style))
                 timeline_cursor = 0
                 for original_cell in row["cells"]:
+                    if print_sheet and view_type == "class" and timeline_cursor < len(timeline) and timeline[timeline_cursor][1] == "break":
+                        break_col = len(cells)
+                        if row_index == 1:
+                            break_item = timeline[timeline_cursor][2]
+                            break_label = "<br/>".join(pdf_text(ch) for ch in str(break_item["label"]))
+                            break_style = ParagraphStyle(
+                                "ClassPrintFullHeightBreak", parent=cell_style,
+                                alignment=TA_CENTER, fontSize=10, leading=11,
+                                textColor=colors.black,
+                            )
+                            cells.append(Paragraph("<b>" + break_label + "</b>", break_style))
+                            if len(day_rows) > 1:
+                                span_commands.append(("SPAN", (break_col, 1), (break_col, len(day_rows))))
+                        else:
+                            cells.append("")
+                        timeline_cursor += 1
+                        continue
                     cell = original_cell
                     if cell["kind"] == "break_placeholder":
                         timeline_entry = timeline[timeline_cursor]
