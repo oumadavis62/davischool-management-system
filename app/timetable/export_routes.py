@@ -530,8 +530,8 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                                     ("VALIGN", (0, 0), (-1, 0), "TOP"),
                                     ("VALIGN", (0, 1), (-1, 1), "MIDDLE"),
                                     ("VALIGN", (0, 2), (-1, 2), "BOTTOM"),
-                                    ("LEFTPADDING", (0, 0), (-1, -1), 0),
-                                    ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+                                    ("LEFTPADDING", (0, 0), (-1, -1), edge_inset),
+                                    ("RIGHTPADDING", (0, 0), (-1, -1), edge_inset),
                                     ("TOPPADDING", (0, 0), (-1, -1), 0),
                                     ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
                                 ]))
