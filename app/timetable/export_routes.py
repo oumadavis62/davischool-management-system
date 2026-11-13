@@ -549,8 +549,8 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                                 accent = colors.HexColor(card_color)
                                 tint = (colors.white if print_sheet else colors.Color(1-(1-accent.red)*0.17, 1-(1-accent.green)*0.17, 1-(1-accent.blue)*0.17))
                                 card_border = colors.HexColor("#B8B8B8") if print_sheet else accent
-                                top_style = ParagraphStyle("ExportDuration", parent=cell_style, alignment=2, fontSize=5, leading=6)
-                                subject_style = ParagraphStyle("ExportSubject", parent=cell_style, alignment=TA_CENTER, fontSize=9, leading=11)
+                                top_style = ParagraphStyle("ExportDuration", parent=cell_style, alignment=TA_LEFT if view_type == "class" else 2, fontSize=5, leading=6)
+                                subject_style = ParagraphStyle("ExportSubject", parent=cell_style, alignment=TA_CENTER, fontSize=14 if view_type == "class" else 9, leading=15 if view_type == "class" else 11)
                                 room_style = ParagraphStyle("ExportRoom", parent=cell_style, alignment=TA_CENTER, fontSize=5, leading=6, textColor=colors.black if print_sheet else colors.HexColor("#55705d"))
                                 teacher_style = ParagraphStyle("ExportTeacher", parent=cell_style, alignment=2, fontSize=5, leading=6, textColor=colors.black if print_sheet else colors.white)
                                 class_label = str(lesson.get("class_name") or "").strip()
