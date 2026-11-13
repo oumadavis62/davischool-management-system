@@ -440,89 +440,69 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                         cells.append(Paragraph("<br/>".join("↳ " + pdf_text(str(x.get("subject_initial") or "").strip().upper() or "—") + " continues" for x in cell["lessons"]), cell_style))
                     else:
                         if print_sheet:
-                            # Plain text only: no nested lesson-card backgrounds, borders, or badges.
-                            if view_type in ("teacher", "room"):
-                                resource_rows = []
-                                for lesson in cell["lessons"]:
-                                    subject_initial = pdf_text(str(lesson.get("subject_initial") or "").strip().upper() or "—")
-                                    teacher_initials = str(lesson.get("teacher_initials") or "").strip().upper()
-                                    if not teacher_initials:
-                                        name_parts = [part for part in str(lesson.get("teacher_name") or "").split() if part]
-                                        teacher_initials = "".join(part[0] for part in (name_parts[:1] + (name_parts[-1:] if len(name_parts) > 1 else []))).upper()[:4] or "—"
-                                    class_label = str(lesson.get("class_name") or "").strip()
-                                    stream_label = str(lesson.get("stream") or "").strip()
-                                    class_initials = str(lesson.get("class_initials") or "").strip().upper() or (class_label + ((" " + stream_label) if stream_label else "") or "—")
-                                    resource_meta = allocated_room_name(lesson) if view_type == "teacher" else teacher_initials
-                                    duration = pdf_text(str(max(1, int(lesson.get("duration_periods") or 1))) + "P")
-                                    resource_width = max(1, slot_width * cell["span"] - 6)
-                                    subject_style = ParagraphStyle("PrintResourceSubject", parent=cell_style, alignment=(TA_CENTER if view_type == "room" else TA_RIGHT), fontSize=16 if view_type == "room" else 10, leading=18 if view_type == "room" else 11, wordWrap=None, splitLongWords=0, textColor=colors.black)
-                                    class_style = ParagraphStyle("PrintResourceClass", parent=cell_style, alignment=TA_CENTER, fontSize=24 if view_type == "teacher" else 14, leading=26 if view_type == "teacher" else 15, textColor=colors.black)
-                                    meta_style = ParagraphStyle("PrintResourceMeta", parent=cell_style, alignment=TA_RIGHT, fontSize=5, leading=6, textColor=colors.black)
-                                    period_style = ParagraphStyle("PrintResourcePeriod", parent=cell_style, alignment=(TA_LEFT if view_type == "room" else TA_RIGHT), fontSize=6, leading=7, textColor=colors.black)
-                                    resource_table = Table([
-                                        [Paragraph(duration, period_style) if view_type == "room" else "", Paragraph("<b>" + subject_initial + "</b>", subject_style) if view_type == "room" else "", Paragraph("<b>" + subject_initial + "</b>", subject_style) if view_type == "teacher" else ""],
-                                        [Paragraph("<b>" + pdf_text(class_initials) + "</b>", class_style), "", ""],
-                                        [Paragraph(pdf_text(resource_meta), meta_style) if resource_meta and view_type == "teacher" else "", "", Paragraph(pdf_text(resource_meta), meta_style) if resource_meta and view_type == "room" else Paragraph(duration, period_style) if view_type == "teacher" else ""],
-                                    ], colWidths=[resource_width * .34, resource_width * .32, resource_width * .34])
-                                    resource_table.setStyle(TableStyle([
-                                        ("SPAN", (0, 1), (-1, 1)),
-                                        ("ALIGN", (0, 0), (-1, -1), "LEFT"),
-                                        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-                                        ("VALIGN", (1, 0), (1, 0), "MIDDLE"),
-                                        ("ALIGN", (1, 0), (1, 0), "CENTER" if view_type == "room" else "RIGHT"),
-                                        ("ALIGN", (0, 2), (0, 2), "RIGHT"),
-                                        ("ALIGN", (2, 2), (2, 2), "RIGHT"),
-                                        ("LEFTPADDING", (0, 0), (-1, -1), 0),
-                                        ("RIGHTPADDING", (0, 0), (-1, -1), 0),
-                                        ("TOPPADDING", (0, 0), (-1, -1), 0),
-                                        ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
-                                    ]))
-                                    resource_rows.append([resource_table])
-                                cells.append(Table(resource_rows, colWidths=[max(1, slot_width * cell["span"] - 6)]))
-                            else:
-                                # A borderless text-only layout keeps each lesson cell free of
-                                # cards while independently aligning its top and bottom labels.
-                                lesson_rows = []
-                                lesson_alignments = []
-                                for lesson in cell["lessons"]:
-                                    subject_initial = pdf_text(str(lesson.get("subject_initial") or "").strip().upper() or "—")
-                                    teacher_initials = str(lesson.get("teacher_initials") or "").strip().upper()
-                                    if not teacher_initials:
-                                        name_parts = [part for part in str(lesson.get("teacher_name") or "").split() if part]
-                                        teacher_initials = "".join(part[0] for part in (name_parts[:1] + (name_parts[-1:] if len(name_parts) > 1 else []))).upper()[:4] or "—"
-                                    duration = str(max(1, int(lesson.get("duration_periods") or 1))) + "P"
-                                    room_text = "" if layout["room_view"] else pdf_text(allocated_room_name(lesson))
-                                    period_style = ParagraphStyle("PrintPeriodMarker", parent=cell_style, alignment=(TA_LEFT if view_type in ("school", "class") else TA_RIGHT), fontSize=5, leading=6, textColor=colors.black)
-                                    subject_style = ParagraphStyle("PrintSubjectInitials", parent=cell_style, alignment=TA_CENTER, fontSize=15 if view_type == "class" else 10, leading=17 if view_type == "class" else 11, textColor=colors.black)
-                                    detail_style = ParagraphStyle("PrintCellDetail", parent=cell_style, alignment=TA_RIGHT, fontSize=5, leading=6, textColor=colors.black)
-                                    lesson_rows.extend([
-                                        [Paragraph(pdf_text(duration), period_style)],
-                                        [Paragraph("<b>" + subject_initial + "</b>", subject_style)],
-                                    ])
-                                    lesson_alignments.extend(["LEFT" if view_type == "class" else "RIGHT", "CENTER"])
-                                    if room_text:
-                                        lesson_rows.append([Paragraph("⌂ " + room_text, detail_style)])
-                                        lesson_alignments.append("RIGHT")
-                                    lesson_rows.append([Paragraph(teacher_initials, detail_style)])
-                                    lesson_alignments.append("RIGHT")
+                            # Position labels in fixed proportional bands so they stay anchored
+                            # to the lesson-cell corners regardless of the available cell size.
+                            lesson_rows = []
+                            for lesson in cell["lessons"]:
+                                subject_initial = pdf_text(str(lesson.get("subject_initial") or "").strip().upper() or "—")
+                                teacher_initials = str(lesson.get("teacher_initials") or "").strip().upper()
+                                if not teacher_initials:
+                                    name_parts = [part for part in str(lesson.get("teacher_name") or "").split() if part]
+                                    teacher_initials = "".join(part[0] for part in (name_parts[:1] + (name_parts[-1:] if len(name_parts) > 1 else []))).upper()[:4] or "—"
+                                duration = pdf_text(str(max(1, int(lesson.get("duration_periods") or 1))) + "P")
+                                class_label = str(lesson.get("class_name") or "").strip()
+                                stream_label = str(lesson.get("stream") or "").strip()
+                                class_initials = str(lesson.get("class_initials") or "").strip().upper() or (class_label + ((" " + stream_label) if stream_label else "") or "—")
+                                period_style = ParagraphStyle("PrintAnchoredPeriod", parent=cell_style, alignment=TA_LEFT, fontSize=6, leading=7, textColor=colors.black)
+                                subject_style = ParagraphStyle("PrintAnchoredSubject", parent=cell_style, alignment=TA_CENTER, fontSize=16 if view_type == "room" else 15 if view_type == "class" else 10, leading=18 if view_type == "room" else 17 if view_type == "class" else 11, textColor=colors.black)
+                                class_style = ParagraphStyle("PrintAnchoredClass", parent=cell_style, alignment=TA_CENTER, fontSize=22 if view_type == "teacher" else 7, leading=24 if view_type == "teacher" else 8, textColor=colors.black)
+                                teacher_style = ParagraphStyle("PrintAnchoredTeacher", parent=cell_style, alignment=TA_RIGHT, fontSize=6, leading=7, textColor=colors.black)
+                                right_style = ParagraphStyle("PrintAnchoredRight", parent=cell_style, alignment=TA_RIGHT, fontSize=6, leading=7, textColor=colors.black)
 
-                                text_layout = Table(lesson_rows, colWidths=[max(1, slot_width * cell["span"] - 6)])
-                                text_layout.setStyle(TableStyle([
-                                    ("ALIGN", (0, 0), (-1, -1), "RIGHT"),
+                                if view_type == "class":
+                                    top_left = Paragraph(duration, period_style)
+                                    top_right = ""
+                                    center = Paragraph("<b>" + subject_initial + "</b>", subject_style)
+                                    bottom_right = Paragraph(teacher_initials, teacher_style)
+                                elif view_type == "room":
+                                    top_left = Paragraph(duration, period_style)
+                                    top_right = Paragraph(pdf_text(class_initials), right_style)
+                                    center = Paragraph("<b>" + subject_initial + "</b>", subject_style)
+                                    bottom_right = Paragraph(teacher_initials, teacher_style)
+                                else:
+                                    top_left = ""
+                                    top_right = Paragraph("<b>" + subject_initial + "</b>", subject_style)
+                                    center = Paragraph("<b>" + pdf_text(class_initials) + "</b>", class_style)
+                                    bottom_right = Paragraph(duration, teacher_style)
+
+                                cell_height = max(24, individual_row_height - 8)
+                                top_band = max(7, cell_height * 0.22)
+                                center_band = max(8, cell_height * 0.56)
+                                bottom_band = max(7, cell_height - top_band - center_band)
+                                anchored = Table(
+                                    [[top_left, top_right], [center, ""], ["", bottom_right]],
+                                    colWidths=[resource_width * 0.5, resource_width * 0.5] if view_type in ("teacher", "room") else [resource_width * 0.5, resource_width * 0.5],
+                                    rowHeights=[top_band, center_band, bottom_band],
+                                )
+                                anchored.setStyle(TableStyle([
+                                    ("SPAN", (0, 1), (1, 1)),
+                                    ("ALIGN", (0, 0), (0, 0), "LEFT"),
+                                    ("ALIGN", (1, 0), (1, 0), "RIGHT"),
+                                    ("ALIGN", (0, 1), (1, 1), "CENTER"),
+                                    ("ALIGN", (1, 2), (1, 2), "RIGHT"),
                                     ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-                                    ("ALIGN", (0, 0), (0, 0), "LEFT" if view_type in ("school", "class") else "RIGHT"),
-                                    ("VALIGN", (0, 0), (0, 0), "TOP" if view_type in ("school", "class") else "MIDDLE"),
-                                    ("VALIGN", (0, len(lesson_rows) - 1), (-1, -1), "BOTTOM"),
                                     ("LEFTPADDING", (0, 0), (-1, -1), 0),
                                     ("RIGHTPADDING", (0, 0), (-1, -1), 0),
                                     ("TOPPADDING", (0, 0), (-1, -1), 0),
                                     ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
                                 ]))
-                                cells.append(text_layout)
-                            if cell["span"] > 1:
-                                col = len(cells) - 1
-                                span_commands.append(("SPAN", (col, row_index), (col + cell["span"] - 1, row_index)))
-                                cells.extend([""] * (cell["span"] - 1))
+                                lesson_rows.append([anchored])
+
+                            cells.append(Table(
+                                lesson_rows,
+                                colWidths=[max(1, slot_width * cell["span"] - 6)],
+                                rowHeights=[max(24, individual_row_height - 8)] * len(lesson_rows),
+                            ))
                         else:
                             card_tables = []
                             card_width = max(1, slot_width * cell["span"] - 8)
