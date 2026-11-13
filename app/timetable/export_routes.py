@@ -462,7 +462,7 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                                     resource_table = Table([
                                         [Paragraph(duration, period_style) if view_type == "room" else "", Paragraph("<b>" + subject_initial + "</b>", subject_style), ""],
                                         [Paragraph("<b>" + pdf_text(class_initials) + "</b>", class_style), "", ""],
-                                        [Paragraph(pdf_text(resource_meta), meta_style) if resource_meta else "", "", Paragraph(duration, period_style) if view_type == "teacher" else ""],
+                                        [Paragraph(pdf_text(resource_meta), meta_style) if resource_meta and view_type == "teacher" else "", "", Paragraph(pdf_text(resource_meta), meta_style) if resource_meta and view_type == "room" else Paragraph(duration, period_style) if view_type == "teacher" else ""],
                                     ], colWidths=[resource_width * .34, resource_width * .32, resource_width * .34], rowHeights=[resource_width * .0 + 8, None, 8])
                                     resource_table.setStyle(TableStyle([
                                         ("SPAN", (0, 1), (-1, 1)),
@@ -557,15 +557,15 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                                     resource_card_height = max(28, (individual_row_height - 8) / max(1, len(cell["lessons"])))
                                     card_rows = [
                                         [
-                                            Paragraph(pdf_text(str(max(1, int(lesson.get("duration_periods") or 1))) + "P"), resource_period_style) if view_type == "room" else (Paragraph("<b>" + subject_initial + "</b>", resource_subject_style) if view_type == "teacher" else ""),
+                                            Paragraph(pdf_text(str(max(1, int(lesson.get("duration_periods") or 1))) + "P"), resource_period_style) if view_type == "room" else "",
                                             Paragraph("<b>" + subject_initial + "</b>", resource_subject_style) if view_type == "room" else "",
                                             Paragraph("<b>" + subject_initial + "</b>", resource_subject_style) if view_type == "teacher" else "",
                                         ],
                                         [Paragraph("<b>" + pdf_text(class_initials) + "</b>", resource_class_style), "", ""],
                                         [
-                                            Paragraph(pdf_text(resource_meta), footer_style) if resource_meta else "",
+                                            Paragraph(pdf_text(resource_meta), footer_style) if resource_meta and view_type == "teacher" else "",
                                             "",
-                                            Paragraph(pdf_text(str(max(1, int(lesson.get("duration_periods") or 1))) + "P"), resource_period_style) if view_type == "teacher" else "",
+                                            Paragraph(pdf_text(resource_meta), footer_style) if resource_meta and view_type == "room" else Paragraph(pdf_text(str(max(1, int(lesson.get("duration_periods") or 1))) + "P"), resource_period_style) if view_type == "teacher" else "",
                                         ],
                                     ]
                                 else:
