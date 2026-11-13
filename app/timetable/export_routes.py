@@ -456,14 +456,14 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                                     duration = pdf_text(str(max(1, int(lesson.get("duration_periods") or 1))) + "P")
                                     resource_width = max(1, slot_width * cell["span"] - 6)
                                     subject_style = ParagraphStyle("PrintResourceSubject", parent=cell_style, alignment=(TA_CENTER if view_type == "room" else TA_RIGHT), fontSize=16 if view_type == "room" else 10, leading=18 if view_type == "room" else 11, wordWrap=None, splitLongWords=0, textColor=colors.black)
-                                    class_style = ParagraphStyle("PrintResourceClass", parent=cell_style, alignment=TA_CENTER, fontSize=14, leading=15, textColor=colors.black)
+                                    class_style = ParagraphStyle("PrintResourceClass", parent=cell_style, alignment=TA_CENTER, fontSize=24 if view_type == "teacher" else 14, leading=26 if view_type == "teacher" else 15, textColor=colors.black)
                                     meta_style = ParagraphStyle("PrintResourceMeta", parent=cell_style, alignment=TA_RIGHT, fontSize=5, leading=6, textColor=colors.black)
                                     period_style = ParagraphStyle("PrintResourcePeriod", parent=cell_style, alignment=(TA_LEFT if view_type == "room" else TA_RIGHT), fontSize=6, leading=7, textColor=colors.black)
                                     resource_table = Table([
-                                        [Paragraph(duration, period_style) if view_type == "room" else "", Paragraph("<b>" + subject_initial + "</b>", subject_style), ""],
+                                        [Paragraph(duration, period_style) if view_type == "room" else "", Paragraph("<b>" + subject_initial + "</b>", subject_style) if view_type == "room" else "", Paragraph("<b>" + subject_initial + "</b>", subject_style) if view_type == "teacher" else ""],
                                         [Paragraph("<b>" + pdf_text(class_initials) + "</b>", class_style), "", ""],
                                         [Paragraph(pdf_text(resource_meta), meta_style) if resource_meta and view_type == "teacher" else "", "", Paragraph(pdf_text(resource_meta), meta_style) if resource_meta and view_type == "room" else Paragraph(duration, period_style) if view_type == "teacher" else ""],
-                                    ], colWidths=[resource_width * .34, resource_width * .32, resource_width * .34], rowHeights=[resource_width * .0 + 8, None, 8])
+                                    ], colWidths=[resource_width * .34, resource_width * .32, resource_width * .34])
                                     resource_table.setStyle(TableStyle([
                                         ("SPAN", (0, 1), (-1, 1)),
                                         ("ALIGN", (0, 0), (-1, -1), "LEFT"),
@@ -511,7 +511,7 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                                     ("ALIGN", (0, 0), (-1, -1), "RIGHT"),
                                     ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
                                     ("ALIGN", (0, 0), (0, 0), "LEFT" if view_type in ("school", "class") else "RIGHT"),
-                                    ("VALIGN", (0, 0), (0, 0), "TOP" if view_type == "school" else "MIDDLE"),
+                                    ("VALIGN", (0, 0), (0, 0), "TOP" if view_type in ("school", "class") else "MIDDLE"),
                                     ("VALIGN", (0, len(lesson_rows) - 1), (-1, -1), "BOTTOM"),
                                     ("LEFTPADDING", (0, 0), (-1, -1), 0),
                                     ("RIGHTPADDING", (0, 0), (-1, -1), 0),
