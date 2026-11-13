@@ -464,25 +464,27 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                                     resource_meta = allocated_room_name(lesson) if view_type == "teacher" else teacher_initials
                                     duration = pdf_text(str(max(1, int(lesson.get("duration_periods") or 1))) + "P")
                                     resource_width = max(1, slot_width * cell["span"] - 6)
-                                    subject_style = ParagraphStyle("PrintResourceSubject", parent=cell_style, alignment=TA_LEFT, fontSize=10, leading=11, wordWrap=None, splitLongWords=0, textColor=colors.black)
+                                    subject_style = ParagraphStyle("PrintResourceSubject", parent=cell_style, alignment=TA_CENTER if view_type == "room" else TA_RIGHT, fontSize=15, leading=16, wordWrap=None, splitLongWords=0, textColor=colors.black)
                                     class_style = ParagraphStyle("PrintResourceClass", parent=cell_style, alignment=TA_CENTER, fontSize=14, leading=15, textColor=colors.black)
-                                    meta_style = ParagraphStyle("PrintResourceMeta", parent=cell_style, alignment=TA_LEFT, fontSize=5, leading=6, textColor=colors.black)
-                                    period_style = ParagraphStyle("PrintResourcePeriod", parent=cell_style, alignment=TA_RIGHT, fontSize=6, leading=7, textColor=colors.black)
+                                    meta_style = ParagraphStyle("PrintResourceMeta", parent=cell_style, alignment=TA_RIGHT, fontSize=5, leading=6, textColor=colors.black)
+                                    period_style = ParagraphStyle("PrintResourcePeriod", parent=cell_style, alignment=TA_LEFT if view_type == "room" else TA_RIGHT, fontSize=6, leading=7, textColor=colors.black)
                                     resource_table = Table([
-                                        [Paragraph("<b>" + subject_initial + "</b>", subject_style)],
-                                        [Paragraph("<b>" + pdf_text(class_initials) + "</b>", class_style)],
-                                        [Paragraph(pdf_text(resource_meta), meta_style) if resource_meta else Paragraph("&nbsp;", meta_style)],
-                                        [Paragraph(duration, period_style)],
-                                    ], colWidths=[resource_width])
+                                        [Paragraph(duration, period_style) if view_type == "room" else "", Paragraph("<b>" + subject_initial + "</b>", subject_style), ""],
+                                        [Paragraph("<b>" + pdf_text(class_initials) + "</b>", class_style), "", ""],
+                                        ["", "", Paragraph(pdf_text(resource_meta), meta_style) if resource_meta else Paragraph("&nbsp;", meta_style)],
+                                    ], colWidths=[resource_width * .30, resource_width * .40, resource_width * .30])
                                     resource_table.setStyle(TableStyle([
-                                        ("ALIGN", (0, 0), (-1, -1), "LEFT"),
-                                        ("VALIGN", (0, 0), (0, 0), "TOP"),
-                                        ("VALIGN", (0, 1), (-1, -1), "MIDDLE"),
+                                        ("SPAN", (0, 1), (2, 1)),
+                                        ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+                                        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                                        ("VALIGN", (0, 0), (-1, 0), "TOP"),
+                                        ("ALIGN", (0, 0), (0, 0), "LEFT" if view_type == "room" else "CENTER"),
+                                        ("ALIGN", (1, 0), (1, 0), "CENTER" if view_type == "room" else "RIGHT"),
+                                        ("ALIGN", (2, 2), (2, 2), "RIGHT"),
                                         ("LEFTPADDING", (0, 0), (-1, -1), 0),
                                         ("RIGHTPADDING", (0, 0), (-1, -1), 0),
                                         ("TOPPADDING", (0, 0), (-1, -1), 0),
                                         ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
-                                        ("ALIGN", (0, 3), (0, 3), "RIGHT"),
                                     ]))
                                     resource_rows.append([resource_table])
                                 cells.append(Table(resource_rows, colWidths=[max(1, slot_width * cell["span"] - 6)]))
@@ -557,22 +559,22 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                                 class_initials = str(lesson.get("class_initials") or "").strip().upper() or class_full or "—"
                                 footer_style = ParagraphStyle("ExportCellFooter", parent=teacher_style, alignment=2, fontSize=5, leading=6)
                                 if view_type in ("teacher", "room"):
-                                    resource_subject_style = ParagraphStyle("ResourceSubject", parent=cell_style, alignment=TA_LEFT, fontSize=8, leading=9, wordWrap=None, splitLongWords=0, textColor=colors.black if print_sheet else colors.HexColor("#365b40"))
-                                    resource_period_style = ParagraphStyle("ResourcePeriod", parent=cell_style, alignment=TA_RIGHT, fontSize=7, leading=8, wordWrap=None, textColor=colors.black if print_sheet else colors.HexColor("#536b58"))
-                                    resource_class_style = ParagraphStyle("ResourceClass", parent=cell_style, alignment=TA_CENTER, fontSize=25, leading=27, textColor=colors.black if print_sheet else colors.HexColor("#263f30"))
+                                    resource_subject_style = ParagraphStyle("ResourceSubject", parent=cell_style, alignment=TA_CENTER if view_type == "room" else TA_RIGHT, fontSize=15, leading=16, wordWrap=None, splitLongWords=0, textColor=colors.black if print_sheet else colors.HexColor("#365b40"))
+                                    resource_period_style = ParagraphStyle("ResourcePeriod", parent=cell_style, alignment=TA_LEFT if view_type == "room" else TA_RIGHT, fontSize=7, leading=8, wordWrap=None, textColor=colors.black if print_sheet else colors.HexColor("#536b58"))
+                                    resource_class_style = ParagraphStyle("ResourceClass", parent=cell_style, alignment=TA_CENTER, fontSize=29, leading=31, textColor=colors.black if print_sheet else colors.HexColor("#263f30"))
                                     resource_meta = allocated_room if view_type == "teacher" else teacher_initials
                                     resource_card_height = max(28, (individual_row_height - 8) / max(1, len(cell["lessons"])))
                                     card_rows = [
                                         [
-                                            Paragraph("<b>" + subject_initial + "</b>", resource_subject_style),
-                                            "",
                                             Paragraph(pdf_text(str(max(1, int(lesson.get("duration_periods") or 1))) + "P"), resource_period_style) if view_type == "room" else "",
+                                            Paragraph("<b>" + subject_initial + "</b>", resource_subject_style) if view_type == "room" else "",
+                                            Paragraph("<b>" + subject_initial + "</b>", resource_subject_style) if view_type == "teacher" else "",
                                         ],
                                         [Paragraph("<b>" + pdf_text(class_initials) + "</b>", resource_class_style), "", ""],
                                         [
-                                            Paragraph(pdf_text(resource_meta), footer_style) if resource_meta else "",
+                                            Paragraph(pdf_text(resource_meta), footer_style) if view_type == "teacher" and resource_meta else "",
                                             "",
-                                            Paragraph(pdf_text(str(max(1, int(lesson.get("duration_periods") or 1))) + "P"), resource_period_style) if view_type == "teacher" else "",
+                                            Paragraph(pdf_text(resource_meta), footer_style) if view_type == "room" and resource_meta else Paragraph(pdf_text(str(max(1, int(lesson.get("duration_periods") or 1))) + "P"), resource_period_style) if view_type == "teacher" else "",
                                         ],
                                     ]
                                 else:
