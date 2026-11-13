@@ -593,6 +593,10 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                                 subject_style = ParagraphStyle("PrintSubjectInitials", parent=cell_style, alignment=TA_CENTER, fontSize=18, leading=20, textColor=colors.black)
                                 room_style = ParagraphStyle("PrintCellRoom", parent=cell_style, alignment=TA_LEFT, fontSize=5, leading=6, textColor=colors.black)
                                 teacher_style = ParagraphStyle("PrintCellTeacher", parent=cell_style, alignment=TA_RIGHT, fontSize=5, leading=6, textColor=colors.black)
+                                cell_height = max(24, individual_row_height)
+                                top_band = max(6, cell_height * 0.20)
+                                bottom_band = max(6, cell_height * 0.20)
+                                center_band = max(8, cell_height - top_band - bottom_band)
                                 anchored = Table(
                                     [
                                         [Paragraph(duration, period_style), ""],
@@ -600,6 +604,7 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                                         [Paragraph("⌂ " + room_text, room_style) if room_text else "", Paragraph(teacher_initials, teacher_style)],
                                     ],
                                     colWidths=[resource_width * 0.5, resource_width * 0.5],
+                                    rowHeights=[top_band, center_band, bottom_band],
                                 )
                                 anchored.setStyle(TableStyle([
                                     ("SPAN", (0, 1), (1, 1)),
