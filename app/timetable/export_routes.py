@@ -750,7 +750,8 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                                 )
                                 card.setStyle(TableStyle([
                                     ("SPAN", (0,0), (1,0)) if view_type == "teacher" else ("ALIGN", (0,0), (-1,-1), "CENTER"),
-                                    ("SPAN", (0,1), (2,1)) if view_type in ("teacher", "room") else ("ALIGN", (0,0), (-1,-1), "CENTER"),\n                                    ("SPAN", (0,2), (2,2)) if view_type == "room" else ("ALIGN", (0,2), (-1,2), "RIGHT"),
+                                    ("SPAN", (0,1), (2,1)) if view_type in ("teacher", "room") else ("ALIGN", (0,0), (-1,-1), "CENTER"),
+                                    ("SPAN", (0,2), (2,2)) if view_type == "room" else ("ALIGN", (0,2), (-1,2), "RIGHT"),
                                     ("VALIGN", (0,2), (-1,2), "MIDDLE") if view_type in ("teacher", "room") else ("ALIGN", (0,0), (-1,-1), "CENTER"),
                                     ("BACKGROUND", (0,0), (-1,-1), tint),
                                     ("BOX", (0,0), (-1,-1), 0.45, card_border),
