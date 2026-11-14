@@ -253,7 +253,7 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
         body.individual-sheet .lesson+.lesson{{border-left-width:3px}}
         body.individual-sheet table.specialized-timetable td.slot{{height:100%}}
         td.slot{{background:#fff}}.resource-lesson{{position:relative;min-height:0;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:12px 4px 14px;border-radius:0;background:color-mix(in srgb,var(--teacher-color) 12%,white);border:1px solid color-mix(in srgb,var(--teacher-color) 42%,white);border-left:3px solid var(--teacher-color);margin:0}}.resource-subject{{position:absolute;top:4px;left:5px;right:auto;font-size:10px;line-height:1;font-weight:900;color:#365b40;white-space:nowrap;word-break:keep-all;overflow-wrap:normal;writing-mode:horizontal-tb;z-index:2}}.resource-class{{display:flex;flex:1;align-items:center;justify-content:center;width:100%;min-height:0;text-align:center;font-size:clamp(25px,2.2vw,34px);line-height:.95;font-weight:950;letter-spacing:-.04em;color:#263f30;overflow-wrap:anywhere}}.resource-duration{{position:absolute;bottom:3px;right:5px;left:auto;font-size:9px;line-height:1;font-weight:900;color:#536b58;white-space:nowrap;word-break:keep-all;overflow-wrap:normal;writing-mode:horizontal-tb;z-index:2}}.resource-footer{{position:absolute;bottom:3px;left:4px;right:30px;display:flex;justify-content:space-between;font-size:7px;color:#637968}}.resource-teacher{{margin-left:auto;font-weight:800;color:#245b39;white-space:nowrap;word-break:keep-all;overflow-wrap:normal;flex-wrap:nowrap}}.lesson{{position:relative;min-height:66px;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;background:color-mix(in srgb,var(--teacher-color) 17%,white);border:1px solid color-mix(in srgb,var(--teacher-color) 48%,white);border-left:4px solid var(--teacher-color);border-radius:6px;padding:13px 5px 5px;margin:2px;font-size:9px;line-height:1.2}}
-        .lesson .duration-label{{position:absolute;top:3px;right:5px;font-size:8px;font-weight:bold;background:#d5e9d9;border-radius:8px;padding:2px 4px}}.lesson .subject-initials{{display:block;text-align:center;font-size:12px;font-weight:900;letter-spacing:.4px}}body.view-class .lesson{{justify-content:center;padding:15px 5px 15px}}body.view-class .lesson .duration-label{{left:5px;right:auto}}body.view-class .lesson .subject-initials{{position:absolute;left:4px;right:4px;top:50%;transform:translateY(-50%);font-size:18px;line-height:1.1}}body.view-class .lesson .teacher-initials{{position:absolute;right:5px;bottom:3px;margin:0}}body.view-room .resource-subject{{top:50%;left:4px;right:4px;transform:translateY(-50%);text-align:center;font-size:14px;line-height:1.1;white-space:nowrap;word-break:keep-all;overflow-wrap:normal}}body.view-room .resource-class{{position:absolute;top:4px;left:4px;width:auto;min-height:0;font-size:20px;line-height:1.05;font-weight:900}}body.view-room .resource-duration{{top:3px;left:5px;right:auto;bottom:auto}}body.view-room .resource-footer{{left:auto;right:5px;bottom:3px;white-space:nowrap;flex-wrap:nowrap;overflow:visible}}body.view-room .resource-teacher{{margin:0}}body.view-teacher .resource-subject{{left:auto;right:5px;text-align:right}}body.view-teacher .resource-duration{{right:5px;bottom:3px;top:auto}}.lesson .room-detail{{display:block;color:#55705d;font-size:8px;margin-top:4px;max-width:100%;overflow-wrap:anywhere}}.lesson .teacher-initials,.lesson .class-detail{{align-self:flex-end;margin-top:auto;background:#245b39;color:#fff;border-radius:4px;padding:2px 5px;font-size:8px;font-weight:900}}.lesson .class-detail{{max-width:100%;text-align:right;overflow-wrap:anywhere}}th.break-header{{width:90%}}td.break{{width:90%;background:#f1ead8;color:#75551d;vertical-align:middle;text-align:center;min-width:24px;padding:0;position:relative}}td.break>span{{display:flex;flex-direction:column;justify-content:center;align-items:center;min-height:100%;height:100%;font-size:18px;font-weight:950;line-height:1}}td.break>span i{{display:block;font-style:normal;line-height:1}}td.free{{background:#fbfdfb}}td.continued{{background:#f6faf6;color:#7b9480;font-size:8px}}
+        .lesson .duration-label{{position:absolute;top:3px;right:5px;font-size:8px;font-weight:bold;background:#d5e9d9;border-radius:8px;padding:2px 4px}}.lesson .subject-initials{{display:block;text-align:center;font-size:12px;font-weight:900;letter-spacing:.4px}}body.view-class .lesson{{justify-content:center;padding:15px 5px 15px}}body.view-class .lesson .duration-label{{left:5px;right:auto}}body.view-class .lesson .subject-initials{{position:absolute;left:4px;right:4px;top:50%;transform:translateY(-50%);font-size:18px;line-height:1.1}}body.view-class .lesson .teacher-initials{{position:absolute;right:5px;bottom:3px;margin:0}}body.view-room .resource-subject{{top:50%;left:4px;right:4px;transform:translateY(-50%);text-align:center;font-size:14pt;line-height:1.1;white-space:nowrap;word-break:keep-all;overflow-wrap:normal}}body.view-room .resource-class{{position:absolute;top:4px;left:4px;width:auto;min-height:0;font-size:20pt;line-height:1.05;font-weight:900}}body.view-room .resource-duration{{top:3px;left:5px;right:auto;bottom:auto}}body.view-room .resource-footer{{left:auto;right:5px;bottom:3px;white-space:nowrap;flex-wrap:nowrap;overflow:visible}}body.view-room .resource-teacher{{margin:0}}body.view-teacher .resource-subject{{left:auto;right:5px;text-align:right}}body.view-teacher .resource-duration{{right:5px;bottom:3px;top:auto}}.lesson .room-detail{{display:block;color:#55705d;font-size:8px;margin-top:4px;max-width:100%;overflow-wrap:anywhere}}.lesson .teacher-initials,.lesson .class-detail{{align-self:flex-end;margin-top:auto;background:#245b39;color:#fff;border-radius:4px;padding:2px 5px;font-size:8px;font-weight:900}}.lesson .class-detail{{max-width:100%;text-align:right;overflow-wrap:anywhere}}th.break-header{{width:90%}}td.break{{width:90%;background:#f1ead8;color:#75551d;vertical-align:middle;text-align:center;min-width:24px;padding:0;position:relative}}td.break>span{{display:flex;flex-direction:column;justify-content:center;align-items:center;min-height:100%;height:100%;font-size:18px;font-weight:950;line-height:1}}td.break>span i{{display:block;font-style:normal;line-height:1}}td.free{{background:#fbfdfb}}td.continued{{background:#f6faf6;color:#7b9480;font-size:8px}}
         .actions{{text-align:center;margin-bottom:10px}}button{{padding:8px 15px;background:#17633b;color:#fff;border:0;border-radius:7px}}.export-footer{{display:flex;justify-content:space-between;gap:12px;position:fixed;bottom:0;left:0;right:0;padding:5px 12px;font-size:8px;color:#536b58;border-top:1px solid #c7d9ca;background:#fff}}body.individual-sheet{{padding-bottom:24px}}
         .extra-section{{margin-top:18px;break-inside:avoid}}.extra-section h3{{font-size:12px;color:#1d563b;margin:0 0 8px}}.session-table{{width:100%;border-collapse:collapse;table-layout:fixed;min-width:0;font-size:8px}}.session-table th{{background:#17633b;color:#fff;padding:5px}}.session-table td{{padding:5px;border:1px solid #dce7de;text-align:left}}.empty{{color:#64748b;font-size:9px}}
         body.individual-sheet{{min-height:calc(100vh - 14mm);display:flex;flex-direction:column}}
@@ -500,9 +500,9 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                                 # Use the complete timetable row height: the outer lesson cell
                                 # has zero padding, so the anchored labels can meet its edges.
                                 cell_height = max(24, individual_row_height)
-                                top_band = max(6, cell_height * 0.20)
-                                bottom_band = max(6, cell_height * 0.20)
-                                center_band = max(8, cell_height - top_band - bottom_band)
+                                top_band = max(16 if view_type == "room" else 6, cell_height * (0.25 if view_type == "room" else 0.20))
+                                bottom_band = max(8 if view_type == "room" else 6, cell_height * (0.15 if view_type == "room" else 0.20))
+                                center_band = max(22 if view_type == "room" else 8, cell_height - top_band - bottom_band)
 
                                 # Keep the small corner labels inside their own
                                 # half-cell areas. Long initials or duration labels
@@ -626,9 +626,9 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                                 room_style = ParagraphStyle("PrintCellRoom", parent=cell_style, alignment=TA_LEFT, fontSize=5, leading=6, textColor=colors.black)
                                 teacher_style = ParagraphStyle("PrintCellTeacher", parent=cell_style, alignment=TA_RIGHT, fontSize=5, leading=6, textColor=colors.black)
                                 cell_height = max(24, individual_row_height)
-                                top_band = max(6, cell_height * 0.20)
-                                bottom_band = max(6, cell_height * 0.20)
-                                center_band = max(8, cell_height - top_band - bottom_band)
+                                top_band = max(16 if view_type == "room" else 6, cell_height * (0.25 if view_type == "room" else 0.20))
+                                bottom_band = max(8 if view_type == "room" else 6, cell_height * (0.15 if view_type == "room" else 0.20))
+                                center_band = max(22 if view_type == "room" else 8, cell_height - top_band - bottom_band)
                                 anchored = Table(
                                     [
                                         [Paragraph(duration, period_style), ""],
@@ -709,7 +709,7 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                                     resource_period_style = ParagraphStyle("ResourcePeriod", parent=cell_style, alignment=(TA_LEFT if view_type == "room" else TA_RIGHT), fontSize=7, leading=8, wordWrap=None, textColor=colors.black if print_sheet else colors.HexColor("#536b58"))
                                     resource_class_style = ParagraphStyle("ResourceClass", parent=cell_style, alignment=TA_CENTER, fontSize=20 if view_type == "room" else 30, leading=22 if view_type == "room" else 32, textColor=colors.black if print_sheet else colors.HexColor("#263f30"))
                                     resource_meta = allocated_room if view_type == "teacher" else teacher_initials
-                                    resource_card_height = max(28, (individual_row_height - 8) / max(1, len(cell["lessons"])))
+                                    resource_card_height = max(72 if view_type == "room" else 28, (individual_row_height - 8) / max(1, len(cell["lessons"]))))
                                     if view_type == "room":
                                         card_rows = [
                                             [
@@ -747,7 +747,7 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                                     card_rows,
                                     colWidths=([card_width * 0.30, card_width * 0.40, card_width * 0.30] if view_type in ("teacher", "room") else [card_width]),
                                     rowHeights=(
-                                        [resource_card_height * 0.20, resource_card_height * 0.60, resource_card_height * 0.20]
+                                        [resource_card_height * (0.25 if view_type == "room" else 0.20), resource_card_height * (0.50 if view_type == "room" else 0.60), resource_card_height * (0.25 if view_type == "room" else 0.20)]
                                         if view_type in ("teacher", "room") else
                                         [max(4, (individual_row_height - 8) / (len(card_rows) * max(1, len(cell["lessons"]))))] * len(card_rows)
                                         if view_type == "class" else
@@ -793,11 +793,11 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                 natural_heights = list(table._rowHeights)
                 header_height = natural_heights[0] if natural_heights else 22
                 target_grid_height = max(header_height, doc.height - 82)
-                equal_data_row_height = max(24, (target_grid_height - header_height) / max(1, len(day_rows)))
+                equal_data_row_height = max(74 if view_type == "room" else 24, (target_grid_height - header_height) / max(1, len(day_rows)))
                 table = Table(
                     data,
                     colWidths=widths,
-                    rowHeights=[header_height] + [equal_data_row_height] * len(day_rows),
+                    rowHeights=[header_height] + [max(74, equal_data_row_height) if view_type == "room" else equal_data_row_height] * len(day_rows),
                     repeatRows=1,
                 )
             commands = [
