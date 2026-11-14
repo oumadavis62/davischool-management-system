@@ -89,7 +89,8 @@ def get_timetable_view(connection: Any, school_id: int, profile_id: int, view_ty
         title = str(target["name"]) + " — room timetable"
 
     lessons = cur.execute(
-        """SELECT l.*,c.name class_name,c.stream,c.initials class_initials,s.name subject_name,s.initial subject_initial,
+        """SELECT l.*,c.name class_name,c.stream,c.initials current_class_initials,
+                  s.name subject_name,s.initial current_subject_initial,
                   t.name teacher_name,t.teacher_color,t.teacher_initials,
                   rm.name room_name,p.period_no,p.label period_label,p.start_time,p.end_time,d.day_name
            FROM ds_timetable_lessons l
@@ -105,7 +106,16 @@ def get_timetable_view(connection: Any, school_id: int, profile_id: int, view_ty
     ).fetchall()
     # Normalize database rows to mappings: the view renderer uses .get()
     # for optional lesson fields, which sqlite3.Row does not implement.
-    lessons = [dict(row) for row in lessons]
+    # Prefer the live values from the Classes and Subjects tables.  The
+    # lesson table is selected with l.* above and may contain legacy snapshot
+    # columns named class_initials / subject_initial.  Explicit aliases avoid
+    # SQLite's duplicate-column-name lookup returning those stale snapshots.
+    lessons = []
+    for row in lessons:
+        lesson = dict(row)
+        lesson["class_initials"] = str(lesson.pop("current_class_initials", "") or "").strip().upper()
+        lesson["subject_initial"] = str(lesson.pop("current_subject_initial", "") or "").strip().upper()
+        lessons.append(lesson)
     advanced_sessions = _load_advanced_sessions(connection, cur, school_id, profile_id, view_type, target_id)
     weekend_sessions = [row for row in advanced_sessions if row["is_weekend"]]
     remedial_sessions = [row for row in advanced_sessions if row["is_remedial"]]
