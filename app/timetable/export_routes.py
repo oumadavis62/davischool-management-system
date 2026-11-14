@@ -217,7 +217,7 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
             weekend_html = "<section class='extra-section extra-weekend'><h3>Weekend lessons &amp; remedials</h3>" + print_session_table(result["weekend_sessions"], True) + "</section>"
 
         school_name=escape(str(field_value(school,"name","School")))
-        title=escape("MASTER TIMETABLE" if view_type == "school" else ("TEACHER " + str(result["target"]["name"]) if view_type == "teacher" else ("" if view_type == "room" else str(result["title"]))))
+        title=escape("MASTER TIMETABLE" if view_type == "school" else ("TEACHER " + str(result["target"]["name"]) if view_type == "teacher" else (str(result["target"]["name"]) if view_type == "room" else str(result["title"])))
         logo_src=school_logo_data(school)
         logo_img=("<img style='width:60px;height:60px;object-fit:contain' src='" + escape(logo_src, quote=True) + "' alt='School logo'>") if logo_src else ""
         school_details_html=" · ".join(escape(label + ": " + value) for label,value in school_details(school))
@@ -320,7 +320,7 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                 logo_cell = ReportLabImage(BytesIO(base64.b64decode(encoded)), width=52, height=52, kind="proportional")
             except Exception:
                 logo_cell = ""
-        cover_title = "MASTER TIMETABLE" if view_type == "school" else ("TEACHER " + str(result["target"]["name"]) if view_type == "teacher" else ("" if view_type == "room" else str(result["title"]).upper()))
+        cover_title = "MASTER TIMETABLE" if view_type == "school" else ("TEACHER " + str(result["target"]["name"]) if view_type == "teacher" else (str(result["target"]["name"]).upper() if view_type == "room" else str(result["title"]).upper()))
         details = "   |   ".join(pdf_text(label + ": " + value) for label,value in school_details(school))
         cover_center = [Paragraph("<u><b>" + school_name + "</b></u>", school_style)]
         if details:
