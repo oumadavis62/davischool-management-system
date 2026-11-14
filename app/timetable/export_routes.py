@@ -723,12 +723,12 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                                                 Paragraph("<b>" + subject_initial + "</b>", resource_subject_style),
                                             ],
                                             [Paragraph("<b>" + pdf_text(class_initials) + "</b>", resource_class_style), "", ""],
-                                        [
-                                            Paragraph(pdf_text(resource_meta), footer_style) if resource_meta and view_type == "teacher" else "",
-                                            "",
-                                            Paragraph(pdf_text(resource_meta), teacher_initial_style) if resource_meta and view_type == "room" else Paragraph(pdf_text(str(max(1, int(lesson.get("duration_periods") or 1))) + "P"), resource_period_style) if view_type == "teacher" else "",
-                                        ],
-                                    ]
+                                            [
+                                                Paragraph(pdf_text(resource_meta), footer_style) if resource_meta else "",
+                                                "",
+                                                Paragraph(pdf_text(str(max(1, int(lesson.get("duration_periods") or 1))) + "P"), resource_period_style),
+                                            ],
+                                        ]
                                 else:
                                     card_rows = [
                                         [Paragraph(str(max(1, int(lesson.get("duration_periods") or 1))) + "P", top_style)],
