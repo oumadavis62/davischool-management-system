@@ -537,7 +537,11 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                                 elif view_type == "room":
                                     top_left = Paragraph("<b>" + subject_initial + "</b>", subject_left_style)
                                     top_right = period_top_right_fit
-                                    center = KeepInFrame(\n                                        resource_width, center_band,\n                                        [Paragraph("<b>" + pdf_text(class_initials) + "</b>", room_class_style)],\n                                        mode="shrink", hAlign="CENTER", vAlign="MIDDLE",\n                                    )
+                                    center = KeepInFrame(
+                                        resource_width, center_band,
+                                        [Paragraph("<b>" + pdf_text(class_initials) + "</b>", room_class_style)],
+                                        mode="shrink", hAlign="CENTER", vAlign="MIDDLE",
+                                    )
                                     bottom_right = teacher_fit
                                 else:
                                     top_left = KeepInFrame(
@@ -717,7 +721,11 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                                                 "",
                                                 Paragraph(pdf_text(str(max(1, int(lesson.get("duration_periods") or 1))) + "P"), ParagraphStyle("RoomPeriodTopRight", parent=resource_period_style, alignment=TA_RIGHT)),
                                             ],
-                                            [KeepInFrame(\n                                                card_width, max(1, resource_card_height * 0.50),\n                                                [Paragraph("<b>" + pdf_text(class_initials) + "</b>", resource_class_style)],\n                                                mode="shrink", hAlign="CENTER", vAlign="MIDDLE",\n                                            ), "", ""],
+                                            [KeepInFrame(
+                                                card_width, max(1, resource_card_height * 0.50),
+                                                [Paragraph("<b>" + pdf_text(class_initials) + "</b>", resource_class_style)],
+                                                mode="shrink", hAlign="CENTER", vAlign="MIDDLE",
+                                            ), "", ""],
                                             ["", "", Paragraph(pdf_text(resource_meta), teacher_initial_style)],
                                         ]
                                     else:
