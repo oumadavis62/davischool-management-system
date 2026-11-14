@@ -12,21 +12,20 @@ def timetable_workspace(request, body):
     profile_qs = ("?profile_id=" + escape(profile_id, quote=True)) if profile_id.isdigit() and int(profile_id) > 0 else ""
     links = [
         ("/app/timetable", "Overview", "overview"),
-        ("/app/timetable/setup", "Configure", "setup"),
-        ("/app/timetable/setup?tab=requirements", "Requirements", "requirements"),
+        ("/app/timetable/setup", "Configuration", "configuration"),
+        ("/app/timetable/setup?tab=requirements", "Set-up", "setup-requirements"),
+        ("/app/timetable/automatic", "Auto-Builder", "automatic"),
         ("/app/timetable/builder", "Manual Builder", "builder"),
-        ("/app/timetable/automatic", "Generate", "automatic"),
-        ("/app/timetable/room-allocation", "Room Allocation", "room-allocation"),
-        ("/app/timetable/views", "Views", "views"),
+        ("/app/timetable/views", "Review", "review"),
         ("/app/timetable/publishing", "Publish", "publishing"),
     ]
     active = {
         "/app/timetable": "overview",
-        "/app/timetable/setup": "requirements" if str(request.query_params.get("tab", "")) == "requirements" else "setup",
+        "/app/timetable/setup": "setup-requirements" if str(request.query_params.get("tab", "")) == "requirements" else "configuration",
+        "/app/timetable/room-allocation": "configuration",
         "/app/timetable/builder": "builder",
         "/app/timetable/automatic": "automatic",
-        "/app/timetable/room-allocation": "room-allocation",
-        "/app/timetable/views": "views",
+        "/app/timetable/views": "review",
         "/app/timetable/publishing": "publishing",
     }.get(path, "")
     nav_items = []
