@@ -537,11 +537,18 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                                 elif view_type == "room":
                                     top_left = Paragraph("<b>" + subject_initial + "</b>", subject_left_style)
                                     top_right = period_top_right_fit
-                                    center = KeepInFrame(
-                                        resource_width, center_band,
-                                        [Paragraph("<b>" + pdf_text(class_initials) + "</b>", room_class_style)],
-                                        mode="shrink", hAlign="CENTER", vAlign="MIDDLE",
+                                    center = Table(
+                                        [[Paragraph("<b>" + pdf_text(class_initials) + "</b>", room_class_style)]],
+                                        colWidths=[resource_width], rowHeights=[center_band],
                                     )
+                                    center.setStyle(TableStyle([
+                                        ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+                                        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                                        ("LEFTPADDING", (0, 0), (-1, -1), 0),
+                                        ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+                                        ("TOPPADDING", (0, 0), (-1, -1), 0),
+                                        ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
+                                    ]))
                                     bottom_right = teacher_fit
                                 else:
                                     top_left = KeepInFrame(
@@ -721,10 +728,17 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                                                 "",
                                                 Paragraph(pdf_text(str(max(1, int(lesson.get("duration_periods") or 1))) + "P"), ParagraphStyle("RoomPeriodTopRight", parent=resource_period_style, alignment=TA_RIGHT)),
                                             ],
-                                            [KeepInFrame(
-                                                card_width, max(1, resource_card_height * 0.50),
-                                                [Paragraph("<b>" + pdf_text(class_initials) + "</b>", resource_class_style)],
-                                                mode="shrink", hAlign="CENTER", vAlign="MIDDLE",
+                                            [Table(
+                                                [[Paragraph("<b>" + pdf_text(class_initials) + "</b>", resource_class_style)]],
+                                                colWidths=[card_width], rowHeights=[max(1, resource_card_height * 0.50)],
+                                                style=TableStyle([
+                                                    ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+                                                    ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                                                    ("LEFTPADDING", (0, 0), (-1, -1), 0),
+                                                    ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+                                                    ("TOPPADDING", (0, 0), (-1, -1), 0),
+                                                    ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
+                                                ]),
                                             ), "", ""],
                                             ["", "", Paragraph(pdf_text(resource_meta), teacher_initial_style)],
                                         ]
