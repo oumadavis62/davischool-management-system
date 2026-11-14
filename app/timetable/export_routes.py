@@ -825,7 +825,10 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
             del story[timetable_story_start:]
             story.append(KeepInFrame(
                 doc.width, max(1, doc.height - 82), timetable_flowables,
-                mode="shrink", hAlign="LEFT", vAlign="TOP",
+                # Room subject/class font sizes are explicit export settings.
+                # Do not scale the complete room sheet down after applying them.
+                mode=("overflow" if view_type == "room" else "shrink"),
+                hAlign="LEFT", vAlign="TOP",
             ))
 
         if result.get("dated_instructional_sessions"):
