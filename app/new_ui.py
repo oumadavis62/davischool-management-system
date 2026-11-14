@@ -818,25 +818,9 @@ def _shell(title, name, role, body, school_id=None, request=None):
         timetable_group = (
             "<details class='nav-group' id='timetableManagerNav' "
             + ("open" if request_path.startswith("/app/timetable/") or request_path == "/app/timetable" else "") + ">"
-            + f"<summary class='nav staff-manager-summary'><span>{_modern_icon('calendar')}</span><b>Timetable Management</b><span class='nav-chevron'>▾</span></summary>"
+            + f"<summary class='nav staff-manager-summary'><span>{_modern_icon('calendar')}</span><b>Timetable Manager</b><span class='nav-chevron'>▾</span></summary>"
             + "<div class='nav-submenu'>"
-            + _nav_sub("/app/timetable", "Timetable Overview")
-            + "<details class='nav-group nav-subgroup' " + ("open" if request_path.startswith("/app/timetable/setup") or request_path.startswith("/app/timetable/constraints") else "") + "><summary class='nav-sub nav-subgroup-summary' onclick='event.preventDefault();event.stopPropagation();this.parentElement.open=!this.parentElement.open'><span class='nav-sub-icon'>" + _modern_icon("settings") + "</span><b>Configuration &amp; Requirements</b><span class='nav-chevron'>▾</span></summary><div class='nav-submenu nav-nested-submenu'>"
-            + _nav_sub("/app/timetable/setup", "Timetable Setup")
-            + _nav_sub("/app/timetable/setup?tab=requirements", "Teaching Requirements")
-            + "<details class='nav-group nav-subgroup' " + ("open" if request_path.startswith("/app/timetable/constraints") or request_path.startswith("/app/timetable/setup?tab=availability") else "") + "><summary class='nav-sub nav-subgroup-summary' onclick='event.preventDefault();event.stopPropagation();this.parentElement.open=!this.parentElement.open'><span class='nav-sub-icon'>" + _modern_icon("sliders") + "</span><b>Timetable Constraints</b><span class='nav-chevron'>▾</span></summary><div class='nav-submenu nav-nested-submenu'>"
-            + _nav_sub("/app/timetable/constraints" + (str(request.scope.get("davischool_tab_id") or "") and ("?ds_tab=" + str(request.scope.get("davischool_tab_id"))) or ""), "Timetable Constraints")
-            + _nav_sub("/app/timetable/setup?tab=availability" + (str(request.scope.get("davischool_tab_id") or "") and ("&ds_tab=" + str(request.scope.get("davischool_tab_id"))) or ""), "Staff Availability")
-            + "</div></details>"
-            + "</div></details>"
-            + "<details class='nav-group nav-subgroup' " + ("open" if request_path.startswith("/app/timetable/automatic") else "") + "><summary class='nav-sub nav-subgroup-summary' onclick='event.preventDefault();event.stopPropagation();this.parentElement.open=!this.parentElement.open'><span class='nav-sub-icon'>" + _modern_icon("calendar") + "</span><b>Generation</b><span class='nav-chevron'>▾</span></summary><div class='nav-submenu nav-nested-submenu'>"
-            + _nav_sub("/app/timetable/automatic", "Smart Timetable Generator")
-            + "</div></details>"
-            + "<details class='nav-group nav-subgroup' " + ("open" if request_path.startswith("/app/timetable/builder") or request_path.startswith("/app/timetable/views") else "") + "><summary class='nav-sub nav-subgroup-summary' onclick='event.preventDefault();event.stopPropagation();this.parentElement.open=!this.parentElement.open'><span class='nav-sub-icon'>" + _modern_icon("school") + "</span><b>Timetable Workspace</b><span class='nav-chevron'>▾</span></summary><div class='nav-submenu nav-nested-submenu'>"
-            + _nav_sub("/app/timetable/builder", "Manual Timetable Builder")
-            + _nav_sub("/app/timetable/views", "Generated Timetables & Printing")
-            + "</div></details>"
-            + _nav_sub("/app/timetable/publishing", "Validation, Review & Publish")
+            + _nav_sub("/app/timetable", "Smart Timetable")
             + "</div></details>"
         )
         def _academic_dropdown(label, items, active=False, group_id=""):
