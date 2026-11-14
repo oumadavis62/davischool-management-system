@@ -487,7 +487,7 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                                 class_initials = str(lesson.get("class_initials") or "").strip().upper() or (class_label + ((" " + stream_label) if stream_label else "") or "—")
                                 period_style = ParagraphStyle("PrintAnchoredPeriod", parent=cell_style, alignment=TA_LEFT, fontSize=6, leading=7, textColor=colors.black)
                                 subject_style = ParagraphStyle("PrintAnchoredSubject", parent=cell_style, alignment=TA_CENTER, fontSize=12 if view_type == "room" else 21 if view_type == "class" else 13, leading=14 if view_type == "room" else 23 if view_type == "class" else 14, textColor=colors.black)
-                                room_class_style = ParagraphStyle("PrintAnchoredRoomClass", parent=cell_style, alignment=TA_CENTER, fontSize=20, leading=22, textColor=colors.black)
+                                room_class_style = ParagraphStyle("PrintAnchoredRoomClass", parent=cell_style, alignment=TA_CENTER, fontSize=22, leading=24, textColor=colors.black)
                                 subject_left_style = ParagraphStyle("PrintAnchoredSubjectLeft", parent=subject_style, alignment=TA_LEFT)
                                 class_style = ParagraphStyle("PrintAnchoredClass", parent=cell_style, alignment=TA_CENTER, fontSize=25 if view_type == "teacher" else 7, leading=27 if view_type == "teacher" else 8, textColor=colors.black)
                                 teacher_style = ParagraphStyle("PrintAnchoredTeacher", parent=cell_style, alignment=TA_RIGHT, fontSize=6, leading=7, textColor=colors.black)
