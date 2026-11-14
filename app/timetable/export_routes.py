@@ -514,6 +514,11 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                                     [Paragraph(duration, teacher_style)],
                                     mode="shrink", hAlign="RIGHT", vAlign="BOTTOM",
                                 )
+                                period_top_right_fit = KeepInFrame(
+                                    label_width, max(1, top_band - 1),
+                                    [Paragraph(duration, teacher_style)],
+                                    mode="shrink", hAlign="RIGHT", vAlign="TOP",
+                                )
 
                                 if view_type == "class":
                                     top_left = period_fit
@@ -521,9 +526,13 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                                     center = Paragraph("<b>" + subject_initial + "</b>", subject_style)
                                     bottom_right = teacher_fit
                                 elif view_type == "room":
-                                    top_left = period_fit
-                                    top_right = Paragraph(pdf_text(class_initials), right_style)
-                                    center = Paragraph("<b>" + subject_initial + "</b>", subject_style)
+                                    top_left = KeepInFrame(
+                                        label_width, max(1, top_band - 1),
+                                        [Paragraph("<b>" + subject_initial + "</b>", subject_left_style)],
+                                        mode="shrink", hAlign="LEFT", vAlign="TOP",
+                                    )
+                                    top_right = period_top_right_fit
+                                    center = Paragraph("<b>" + pdf_text(class_initials) + "</b>", subject_style)
                                     bottom_right = teacher_fit
                                 else:
                                     top_left = KeepInFrame(
@@ -693,16 +702,27 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                                 if view_type in ("teacher", "room"):
                                     resource_subject_style = ParagraphStyle("ResourceSubject", parent=cell_style, alignment=(TA_CENTER if view_type == "room" else TA_RIGHT), fontSize=20 if view_type == "room" else 8, leading=22 if view_type == "room" else 9, wordWrap=None, splitLongWords=0, textColor=colors.black if print_sheet else colors.HexColor("#365b40"))
                                     resource_period_style = ParagraphStyle("ResourcePeriod", parent=cell_style, alignment=(TA_LEFT if view_type == "room" else TA_RIGHT), fontSize=7, leading=8, wordWrap=None, textColor=colors.black if print_sheet else colors.HexColor("#536b58"))
-                                    resource_class_style = ParagraphStyle("ResourceClass", parent=cell_style, alignment=TA_CENTER, fontSize=30, leading=32, textColor=colors.black if print_sheet else colors.HexColor("#263f30"))
+                                    resource_class_style = ParagraphStyle("ResourceClass", parent=cell_style, alignment=TA_CENTER, fontSize=20 if view_type == "room" else 30, leading=22 if view_type == "room" else 32, textColor=colors.black if print_sheet else colors.HexColor("#263f30"))
                                     resource_meta = allocated_room if view_type == "teacher" else teacher_initials
                                     resource_card_height = max(28, (individual_row_height - 8) / max(1, len(cell["lessons"])))
-                                    card_rows = [
-                                        [
-                                            Paragraph(pdf_text(str(max(1, int(lesson.get("duration_periods") or 1))) + "P"), resource_period_style) if view_type == "room" else "",
-                                            Paragraph("<b>" + subject_initial + "</b>", resource_subject_style) if view_type == "room" else "",
-                                            Paragraph("<b>" + subject_initial + "</b>", resource_subject_style) if view_type == "teacher" else "",
-                                        ],
-                                        [Paragraph("<b>" + pdf_text(class_initials) + "</b>", resource_class_style), "", ""],
+                                    if view_type == "room":
+                                        card_rows = [
+                                            [
+                                                Paragraph("<b>" + subject_initial + "</b>", ParagraphStyle("RoomSubjectTopLeft", parent=resource_subject_style, alignment=TA_LEFT)),
+                                                "",
+                                                Paragraph(pdf_text(str(max(1, int(lesson.get("duration_periods") or 1))) + "P"), ParagraphStyle("RoomPeriodTopRight", parent=resource_period_style, alignment=TA_RIGHT)),
+                                            ],
+                                            [Paragraph("<b>" + pdf_text(class_initials) + "</b>", resource_class_style), "", ""],
+                                            ["", "", Paragraph(pdf_text(resource_meta), teacher_initial_style)],
+                                        ]
+                                    else:
+                                        card_rows = [
+                                            [
+                                                "",
+                                                "",
+                                                Paragraph("<b>" + subject_initial + "</b>", resource_subject_style),
+                                            ],
+                                            [Paragraph("<b>" + pdf_text(class_initials) + "</b>", resource_class_style), "", ""],
                                         [
                                             Paragraph(pdf_text(resource_meta), footer_style) if resource_meta and view_type == "teacher" else "",
                                             "",
@@ -731,7 +751,7 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                                     ),
                                 )
                                 card.setStyle(TableStyle([
-                                    ("SPAN", (0,0), (1,0)) if view_type in ("teacher", "room") else ("ALIGN", (0,0), (-1,-1), "CENTER"),
+                                    ("SPAN", (0,0), (1,0)) if view_type == "teacher" else ("ALIGN", (0,0), (-1,-1), "CENTER"),
                                     ("SPAN", (0,1), (2,1)) if view_type in ("teacher", "room") else ("ALIGN", (0,0), (-1,-1), "CENTER"),
                                     ("VALIGN", (0,2), (-1,2), "MIDDLE") if view_type in ("teacher", "room") else ("ALIGN", (0,0), (-1,-1), "CENTER"),
                                     ("BACKGROUND", (0,0), (-1,-1), tint),
