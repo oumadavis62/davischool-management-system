@@ -217,7 +217,7 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
             weekend_html = "<section class='extra-section extra-weekend'><h3>Weekend lessons &amp; remedials</h3>" + print_session_table(result["weekend_sessions"], True) + "</section>"
 
         school_name=escape(str(field_value(school,"name","School")))
-        title=escape("MASTER TIMETABLE" if view_type == "school" else ("TEACHER " + str(result["target"]["name"]) if view_type == "teacher" else str(result["title"])))
+        title=escape("MASTER TIMETABLE" if view_type == "school" else ("TEACHER " + str(result["target"]["name"]) if view_type == "teacher" else ("" if view_type == "room" else str(result["title"]))))
         logo_src=school_logo_data(school)
         logo_img=("<img style='width:60px;height:60px;object-fit:contain' src='" + escape(logo_src, quote=True) + "' alt='School logo'>") if logo_src else ""
         school_details_html=" · ".join(escape(label + ": " + value) for label,value in school_details(school))
@@ -254,7 +254,7 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
         body.individual-sheet>table.specialized-timetable tbody tr{{height:1px}}
         @media print{{body{{margin:0}}.actions{{display:none}}tr{{break-inside:avoid}}table{{min-width:0}}body.individual-sheet{{display:block;height:auto;min-height:0;padding-bottom:0}}body.individual-sheet>table.specialized-timetable{{display:table;height:auto;min-height:0;flex:none;width:100%;table-layout:fixed}}body.individual-sheet table.specialized-timetable tbody tr{{height:auto;break-inside:avoid}}body.individual-sheet table.specialized-timetable td.slot{{display:table-cell;height:auto;min-height:0;padding:2px;vertical-align:middle}}body.individual-sheet .lesson{{display:flex;width:100%;height:auto;min-height:54px;flex:initial;margin:0;border-radius:0;padding:13px 5px 5px}}.extra-remedial-separate,.extra-weekend{{break-before:page}}}}
         </style></head><body class="{'individual-sheet' if view_type in ('class', 'teacher', 'room') else ''} view-{view_type}"><div class="actions"><button onclick="window.print()">Print timetable</button></div>
-        <div style="display:grid;grid-template-columns:68px 1fr 68px;align-items:center;gap:8px;margin-bottom:4px"><div>{logo_img}</div><div><h1 style="text-decoration:underline">{school_name}</h1><p style="font-size:8px;color:#405b49;margin:3px 0">{school_details_html}</p><h2 style="text-decoration:underline">{title}</h2></div><div style="text-align:right">{logo_img}</div></div>
+        <div style="display:grid;grid-template-columns:68px 1fr 68px;align-items:center;gap:8px;margin-bottom:4px"><div>{logo_img}</div><div><h1 style="text-decoration:underline">{school_name}</h1><p style="font-size:8px;color:#405b49;margin:3px 0">{school_details_html}</p>{"<h2 style='text-decoration:underline'>" + title + "</h2>" if title else ""}</div><div style="text-align:right">{logo_img}</div></div>
         <p style="font-size:9px;font-weight:500;text-align:center;margin:10px 0 14px">{meta_html}</p>
         <table class="{timetable_table_class}"><thead><tr>{header_html}</tr></thead><tbody>{"".join(body_rows)}</tbody></table>
         {dated_html}{weekday_html}{weekend_html}{export_footer}
@@ -320,13 +320,14 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                 logo_cell = ReportLabImage(BytesIO(base64.b64decode(encoded)), width=52, height=52, kind="proportional")
             except Exception:
                 logo_cell = ""
-        cover_title = "MASTER TIMETABLE" if view_type == "school" else ("TEACHER " + str(result["target"]["name"]) if view_type == "teacher" else str(result["title"]).upper())
+        cover_title = "MASTER TIMETABLE" if view_type == "school" else ("TEACHER " + str(result["target"]["name"]) if view_type == "teacher" else ("" if view_type == "room" else str(result["title"]).upper()))
         details = "   |   ".join(pdf_text(label + ": " + value) for label,value in school_details(school))
         cover_center = [Paragraph("<u><b>" + school_name + "</b></u>", school_style)]
         if details:
             details_style = ParagraphStyle("SchoolDetails", parent=styles["Normal"], alignment=TA_CENTER, fontSize=7, leading=9)
             cover_center.append(Paragraph(details, details_style))
-        cover_center.append(Paragraph("<u><b>" + pdf_text(cover_title) + "</b></u>", title_style))
+        if cover_title:
+            cover_center.append(Paragraph("<u><b>" + pdf_text(cover_title) + "</b></u>", title_style))
         cover = Table([[logo_cell, cover_center, logo_cell]], colWidths=[60, doc.width-120, 60])
         cover.setStyle(TableStyle([("ALIGN",(0,0),(-1,-1),"CENTER"),("VALIGN",(0,0),(-1,-1),"MIDDLE"),
                                    ("LEFTPADDING",(0,0),(-1,-1),2),("RIGHTPADDING",(0,0),(-1,-1),2)]))
