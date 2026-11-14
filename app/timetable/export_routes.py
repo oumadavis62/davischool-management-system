@@ -438,7 +438,7 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                             continue
                     if cell["kind"] == "break":
                         col = len(cells)
-                        if print_sheet and view_type in ("class", "teacher", "room"):
+                        if view_type in ("class", "teacher", "room"):
                             if col in merged_print_break_columns:
                                 cells.append("")
                             else:
