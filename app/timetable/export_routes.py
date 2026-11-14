@@ -709,7 +709,7 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                                     resource_period_style = ParagraphStyle("ResourcePeriod", parent=cell_style, alignment=(TA_LEFT if view_type == "room" else TA_RIGHT), fontSize=7, leading=8, wordWrap=None, textColor=colors.black if print_sheet else colors.HexColor("#536b58"))
                                     resource_class_style = ParagraphStyle("ResourceClass", parent=cell_style, alignment=TA_CENTER, fontSize=20 if view_type == "room" else 30, leading=22 if view_type == "room" else 32, textColor=colors.black if print_sheet else colors.HexColor("#263f30"))
                                     resource_meta = allocated_room if view_type == "teacher" else teacher_initials
-                                    resource_card_height = max(72 if view_type == "room" else 28, (individual_row_height - 8) / max(1, len(cell["lessons"]))))
+                                    resource_card_height = max(72 if view_type == "room" else 28, (individual_row_height - 8) / max(1, len(cell["lessons"])))
                                     if view_type == "room":
                                         card_rows = [
                                             [
