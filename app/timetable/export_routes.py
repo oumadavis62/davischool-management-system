@@ -217,7 +217,14 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
             weekend_html = "<section class='extra-section extra-weekend'><h3>Weekend lessons &amp; remedials</h3>" + print_session_table(result["weekend_sessions"], True) + "</section>"
 
         school_name=escape(str(field_value(school,"name","School")))
-        title=escape("MASTER TIMETABLE" if view_type == "school" else ("TEACHER " + str(result["target"]["name"]) if view_type == "teacher" else (str(result["target"]["name"]) if view_type == "room" else str(result["title"])))
+        if view_type == "school":
+            title = escape("MASTER TIMETABLE")
+        elif view_type == "teacher":
+            title = escape("TEACHER " + str(result["target"]["name"]))
+        elif view_type == "room":
+            title = escape(str(result["target"]["name"]))
+        else:
+            title = escape(str(result["title"]))
         logo_src=school_logo_data(school)
         logo_img=("<img style='width:60px;height:60px;object-fit:contain' src='" + escape(logo_src, quote=True) + "' alt='School logo'>") if logo_src else ""
         school_details_html=" · ".join(escape(label + ": " + value) for label,value in school_details(school))
