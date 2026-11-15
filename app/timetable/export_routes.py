@@ -245,7 +245,7 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
         @page{{size:A4 landscape;margin:7mm}}*{{box-sizing:border-box;-webkit-print-color-adjust:exact;print-color-adjust:exact}}body{{font:10px Arial,sans-serif;color:#234638;margin:12px}}
         h1,h2,p{{text-align:center;margin:3px}}h1{{font-size:17px}}h2{{font-size:13px}}p{{color:#647b6a;margin-bottom:12px}}
         table{{width:100%;border-collapse:collapse;table-layout:fixed;min-width:900px}}th,td{{border:2px solid #000000;padding:4px;text-align:center;vertical-align:middle;overflow-wrap:anywhere}}
-        thead th{{background:#347b50;color:white;font-size:9px;padding:7px 3px}}th.day{{background:#edf5ee;color:#315b3e;width:38px;font-size:14px;font-weight:900;text-align:center;vertical-align:middle}}th.class{{background:#f5f9f5;color:#315b3e;width:64px;font-size:20pt;font-weight:900;text-align:center;vertical-align:middle}}
+        thead th{{background:#347b50;color:white;font-size:9px;padding:7px 3px}}th.day{{background:#edf5ee;color:#315b3e;width:60px;min-width:60px;font-size:14px;font-weight:900;text-align:center;vertical-align:middle}}th.class{{background:#f5f9f5;color:#315b3e;width:64px;font-size:20pt;font-weight:900;text-align:center;vertical-align:middle}}
         table.specialized-timetable{{width:auto;min-width:0}}table.specialized-timetable{{width:max-content;max-width:100%;table-layout:auto}}table.specialized-timetable th.period-header,table.specialized-timetable td.slot{{width:28px;min-width:28px}}table.specialized-timetable th.break-header,table.specialized-timetable td.break{{width:12px;min-width:12px;max-width:12px}}table.specialized-timetable td.break>span{{font-size:11px}}body.individual-sheet table.specialized-timetable{{width:100%;max-width:100%;table-layout:fixed}}body.individual-sheet table.specialized-timetable th.period-header,body.individual-sheet table.specialized-timetable td.slot{{width:auto;min-width:0}}body.individual-sheet table.specialized-timetable th.break-header,body.individual-sheet table.specialized-timetable td.break{{width:auto;min-width:0;max-width:none}}body.individual-sheet table.specialized-timetable{{height:100%;border-collapse:collapse}}
         body.individual-sheet table.specialized-timetable tbody tr{{height:1px}}
         body.individual-sheet table.specialized-timetable td.slot{{display:flex;align-items:stretch;padding:0;vertical-align:stretch}}
@@ -350,7 +350,7 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
         layout = build_export_grid(result, view_type)
         timeline = layout["timeline"]
         individual_row_height = max(24, (doc.height - 82 - 22) / max(1, len(layout["rows"]))) if view_type in ("class", "teacher", "room") else 58
-        first_width = 30 if not layout["show_class_column"] else 30
+        first_width = 48
         class_width = 52 if layout["show_class_column"] else 0
         if view_type == "school":
             timeline_weight = sum(0.9 if kind == "break" else 1.0 for _, kind, _ in timeline) or 1
@@ -1077,7 +1077,7 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
             sheet.row_dimensions[row_index].height=66 if view_type in ("teacher", "room") else 58
             row_index+=1
         last_col=1+(1 if layout["show_class_column"] else 0)+len(timeline)
-        sheet.column_dimensions["A"].width = 9
+        sheet.column_dimensions["A"].width = 16
         if layout["show_class_column"]:
             sheet.column_dimensions["B"].width = 14
         for col in range(2+(1 if layout["show_class_column"] else 0),last_col+1):
