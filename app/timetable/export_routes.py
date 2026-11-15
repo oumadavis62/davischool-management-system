@@ -751,7 +751,7 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                                     else:
                                         card_rows = [
                                             [
-                                                "",
+                                                Paragraph(pdf_text(str(max(1, int(lesson.get("duration_periods") or 1))) + "P"), resource_period_style),
                                                 "",
                                                 Paragraph("<b>" + subject_initial + "</b>", resource_subject_style),
                                             ],
@@ -793,7 +793,8 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                                     ("SPAN", (0,1), (2,1)) if view_type in ("teacher", "room") else ("ALIGN", (0,0), (-1,-1), "CENTER"),
                                     ("ALIGN", (0,1), (2,1), "CENTER") if view_type == "room" else ("ALIGN", (0,0), (-1,-1), "CENTER"),
                                     ("VALIGN", (0,1), (2,1), "MIDDLE") if view_type == "room" else ("VALIGN", (0,0), (-1,-1), "MIDDLE"),
-                                    ("SPAN", (0,2), (2,2)) if view_type == "room" else ("ALIGN", (0,2), (-1,2), "RIGHT"),
+                                    ("ALIGN", (0,2), (0,2), "LEFT"),
+                                    ("ALIGN", (2,2), (2,2), "RIGHT"),
                                     ("VALIGN", (0,2), (-1,2), "MIDDLE") if view_type in ("teacher", "room") else ("ALIGN", (0,0), (-1,-1), "CENTER"),
                                     ("BACKGROUND", (0,0), (-1,-1), tint),
                                     ("BOX", (0,0), (-1,-1), 0.45, card_border),
