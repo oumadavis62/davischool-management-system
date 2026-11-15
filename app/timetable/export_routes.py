@@ -1167,7 +1167,7 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
         for lesson_row, lesson_col, accent in lesson_color_cells:
             target=sheet.cell(lesson_row,lesson_col)
             target.fill=PatternFill("solid",fgColor=teacher_tint_hex(accent))
-            target.border=Border(left=Side(style="medium",color=accent[1:]),right=grid_side,top=grid_side,bottom=grid_side)
+            target.border=Border(left=grid_side,right=grid_side,top=grid_side,bottom=grid_side)
         # Keep every worksheet printable on standard A4 paper. Wide timetables
         # and details scale to one page wide; weekend rotations remain a single
         # consolidated A4 page as explicitly requested.
