@@ -171,7 +171,7 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                         class_initials = escape(str(lesson.get("class_initials") or "").strip().upper() or class_full or "—")
                         if view_type in ("teacher", "room"):
                             footer_detail = "<span class='resource-teacher'>" + escape(teacher_initials) + "</span>"
-                            room_label = ("<span class='resource-room'>⌂ " + escape(allocated_room) + "</span>") if allocated_room else ""
+                            room_label = ("<span class='resource-room'>⌂ " + escape(allocated_room) + "</span>") if allocated_room and view_type != "room" else ""
                             detail = (
                                 "<small class='resource-subject'>" + subject_initial + "</small>"
                                 "<b class='resource-class'>" + class_initials + "</b>"
@@ -494,7 +494,7 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                                     name_parts = [part for part in str(lesson.get("teacher_name") or "").split() if part]
                                     teacher_initials = "".join(part[0] for part in (name_parts[:1] + (name_parts[-1:] if len(name_parts) > 1 else []))).upper()[:4] or "—"
                                 duration = pdf_text(str(max(1, int(lesson.get("duration_periods") or 1))) + "P")
-                                room_text = pdf_text(allocated_room_name(lesson))
+                                room_text = "" if view_type == "room" else pdf_text(allocated_room_name(lesson))
                                 class_label = str(lesson.get("class_name") or "").strip()
                                 stream_label = str(lesson.get("stream") or "").strip()
                                 class_initials = str(lesson.get("class_initials") or "").strip().upper() or (class_label + ((" " + stream_label) if stream_label else "") or "—")
@@ -573,7 +573,7 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                                     top_right = ""
                                     center = Paragraph("<b>" + pdf_text(class_initials) + "</b>", class_style)
                                     bottom_right = period_right_fit
-                                room_bottom = Paragraph("⌂ " + room_text, ParagraphStyle("PrintRoomBottomLeft", parent=resource_room_style, alignment=TA_LEFT)) if room_text else ""
+                                room_bottom = Paragraph("⌂ " + room_text, ParagraphStyle("PrintRoomBottomLeft", parent=resource_room_style, alignment=TA_LEFT)) if room_text and view_type != "room" else ""
                                 anchored = Table(
                                     [[top_left, top_right], [center, ""], [room_bottom, bottom_right]],
                                     colWidths=[resource_width * 0.5, resource_width * 0.5],
@@ -751,7 +751,7 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                                                 Paragraph(pdf_text(str(max(1, int(lesson.get("duration_periods") or 1))) + "P"), ParagraphStyle("RoomPeriodTopRight", parent=resource_period_style, alignment=TA_RIGHT)),
                                             ],
                                             [Paragraph("<b>" + pdf_text(class_initials) + "</b>", resource_class_style), "", ""],
-                                            [Paragraph("⌂ " + pdf_text(allocated_room), ParagraphStyle("RoomAssignedBottomLeft", parent=teacher_initial_style, alignment=TA_LEFT)) if allocated_room else "", "", Paragraph(pdf_text(resource_meta), teacher_initial_style)],
+                                            ["", "", Paragraph(pdf_text(resource_meta), teacher_initial_style)],
                                         ]
                                     else:
                                         card_rows = [
