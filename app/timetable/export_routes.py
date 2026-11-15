@@ -399,8 +399,6 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
             for _, kind, item in timeline:
                 label = (
                     pdf_text(str(item["start_time"])) + "–" + pdf_text(str(item["end_time"]))
-                    if print_sheet and view_type in ("class", "teacher", "room") else
-                    (pdf_text(str(item["start_time"])) + "–" + pdf_text(str(item["end_time"])))
                     if kind == "break" else
                     "<b>" + pdf_text(str(item["label"])) + "</b><br/>" +
                     pdf_text(str(item["start_time"])) + "–" + pdf_text(str(item["end_time"]))
