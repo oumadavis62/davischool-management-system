@@ -13,6 +13,7 @@ from fastapi import Request
 from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
 
 from app.timetable.views import get_timetable_view
+from app.timetable.publishing import profile_display_name
 from app.timetable.setup import TimetableSetupError
 from app.timetable.export_grid import build_export_grid
 from app.timetable.time_utils import EAT
@@ -240,7 +241,7 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
         logo_img=("<img style='width:60px;height:60px;object-fit:contain' src='" + escape(logo_src, quote=True) + "' alt='School logo'>") if logo_src else ""
         school_details_html=" · ".join(escape(label + ": " + value) for label,value in school_details(school))
         timetable_fields = [
-            ("Timetable", str(result["profile"]["name"] or "")),
+            ("Timetable", profile_display_name(result["profile"]["name"])),
             ("Term", str(result["profile"]["term"])),
             ("Year", str(result["profile"]["academic_year"])),
             ("Status", status_label(result["profile"])),
