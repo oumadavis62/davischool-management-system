@@ -12,8 +12,8 @@ def timetable_workspace(request, body):
     profile_qs = ("?profile_id=" + escape(profile_id, quote=True)) if profile_id.isdigit() and int(profile_id) > 0 else ""
     links = [
         ("/app/timetable", "Overview", "overview"),
-        ("/app/timetable/setup", "Configuration", "configuration"),
-        ("/app/timetable/setup?tab=requirements", "Set-up", "setup-requirements"),
+        ("/app/timetable/setup", "Configure", "configuration"),
+        ("/app/timetable/setup?tab=requirements", "Schedule", "setup-requirements"),
         ("/app/timetable/automatic", "Auto-Builder", "automatic"),
         ("/app/timetable/builder", "Manual Builder", "builder"),
         ("/app/timetable/views", "Review", "review"),
