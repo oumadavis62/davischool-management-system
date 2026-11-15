@@ -496,6 +496,7 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                                 room_text = "" if view_type == "room" else pdf_text(allocated_room_name(lesson))
                                 class_label = str(lesson.get("class_name") or "").strip()
                                 stream_label = str(lesson.get("stream") or "").strip()
+                                class_initials = str(lesson.get("class_initials") or "").strip().upper() or (class_label + ((" " + stream_label) if stream_label else "") or "—")
                                 period_style = ParagraphStyle("PrintAnchoredPeriod", parent=cell_style, alignment=TA_LEFT, fontSize=6, leading=7, textColor=colors.black)
                                 subject_style = ParagraphStyle("PrintAnchoredSubject", parent=cell_style, alignment=TA_CENTER, fontSize=12 if view_type == "room" else 21 if view_type == "class" else 13, leading=14 if view_type == "room" else 23 if view_type == "class" else 14, textColor=colors.black)
                                 room_class_style = ParagraphStyle("PrintAnchoredRoomClass", parent=cell_style, alignment=TA_CENTER, fontSize=22, leading=24, textColor=colors.black)
@@ -670,8 +671,8 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                                     ("SPAN", (0, 1), (1, 1)),
                                     ("ALIGN", (0, 0), (0, 0), "LEFT"),
                                     ("ALIGN", (0, 1), (1, 1), "CENTER"),
-                                    ("ALIGN", (0, 3), (0, 3), "LEFT"),
-                                    ("ALIGN", (1, 3), (1, 3), "RIGHT"),
+                                    ("ALIGN", (0, 2), (0, 2), "LEFT"),
+                                    ("ALIGN", (1, 2), (1, 2), "RIGHT"),
                                     ("VALIGN", (0, 0), (-1, 0), "TOP"),
                                     ("VALIGN", (0, 1), (-1, 1), "MIDDLE"),
                                     ("VALIGN", (0, 2), (-1, 2), "BOTTOM"),
