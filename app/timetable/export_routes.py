@@ -354,7 +354,7 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
         story = [cover]
         meta_style = ParagraphStyle("TimetableCoverMeta", parent=styles["Normal"], alignment=TA_CENTER, fontSize=8, leading=10)
         meta_line = Paragraph(
-            "<b>Timetable:</b> " + pdf_text(result["profile"]["name"] or "") +
+            "<b>Timetable:</b> " + pdf_text(profile_display_name(result["profile"]["name"])) +
             " &nbsp;&nbsp;|&nbsp;&nbsp; <b>Term:</b> " + pdf_text(result["profile"]["term"]) +
             " &nbsp;&nbsp;|&nbsp;&nbsp; <b>Year:</b> " + pdf_text(result["profile"]["academic_year"]) +
             " &nbsp;&nbsp;|&nbsp;&nbsp; <b>Status:</b> " + pdf_text(current_status),
@@ -1000,7 +1000,7 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
         sheet.cell(2,1).font = Font(bold=True,size=12,color="315B3E")
         sheet.cell(2,1).alignment = Alignment(horizontal="center")
         sheet.merge_cells(start_row=3,start_column=1,end_row=3,end_column=last_col)
-        profile_text = "Timetable: " + str(result["profile"]["name"] or "") + " · " + str(result["profile"]["academic_year"]) + " · " + str(result["profile"]["term"]) + " · " + str(scheduled_period_count(result["lessons"])) + " scheduled periods"
+        profile_text = "Timetable: " + profile_display_name(result["profile"]["name"]) + " · " + str(result["profile"]["academic_year"]) + " · " + str(result["profile"]["term"]) + " · " + str(scheduled_period_count(result["lessons"])) + " scheduled periods"
         sheet.cell(3,1,profile_text)
         sheet.cell(3,1).alignment = Alignment(horizontal="center")
         header_row = 5
