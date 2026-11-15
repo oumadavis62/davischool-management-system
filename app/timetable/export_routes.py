@@ -245,7 +245,7 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
         @page{{size:A4 landscape;margin:7mm}}*{{box-sizing:border-box;-webkit-print-color-adjust:exact;print-color-adjust:exact}}body{{font:10px Arial,sans-serif;color:#234638;margin:12px}}
         h1,h2,p{{text-align:center;margin:3px}}h1{{font-size:17px}}h2{{font-size:13px}}p{{color:#647b6a;margin-bottom:12px}}
         table{{width:100%;border-collapse:collapse;table-layout:fixed;min-width:900px}}th,td{{border:2px solid #000000;padding:4px;text-align:center;vertical-align:middle;overflow-wrap:anywhere}}
-        thead th{{background:#347b50;color:white;font-size:9px;padding:7px 3px}}th.day{{background:#edf5ee;color:#315b3e;width:38px;text-align:center;vertical-align:middle}}th.class{{background:#f5f9f5;color:#315b3e;width:64px;font-size:20pt;font-weight:900;text-align:center;vertical-align:middle}}
+        thead th{{background:#347b50;color:white;font-size:9px;padding:7px 3px}}th.day{{background:#edf5ee;color:#315b3e;width:38px;font-size:14px;font-weight:900;text-align:center;vertical-align:middle}}th.class{{background:#f5f9f5;color:#315b3e;width:64px;font-size:20pt;font-weight:900;text-align:center;vertical-align:middle}}
         table.specialized-timetable{{width:auto;min-width:0}}table.specialized-timetable{{width:max-content;max-width:100%;table-layout:auto}}table.specialized-timetable th.period-header,table.specialized-timetable td.slot{{width:28px;min-width:28px}}table.specialized-timetable th.break-header,table.specialized-timetable td.break{{width:12px;min-width:12px;max-width:12px}}table.specialized-timetable td.break>span{{font-size:11px}}body.individual-sheet table.specialized-timetable{{width:100%;max-width:100%;table-layout:fixed}}body.individual-sheet table.specialized-timetable th.period-header,body.individual-sheet table.specialized-timetable td.slot{{width:auto;min-width:0}}body.individual-sheet table.specialized-timetable th.break-header,body.individual-sheet table.specialized-timetable td.break{{width:auto;min-width:0;max-width:none}}body.individual-sheet table.specialized-timetable{{height:100%;border-collapse:collapse}}
         body.individual-sheet table.specialized-timetable tbody tr{{height:1px}}
         body.individual-sheet table.specialized-timetable td.slot{{display:flex;align-items:stretch;padding:0;vertical-align:stretch}}
@@ -311,7 +311,7 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
         title_style = ParagraphStyle("TimetableTitle", parent=styles["Heading2"], alignment=TA_CENTER, fontSize=11, leading=14, textColor=colors.HexColor("#315b3e"))
         cell_style = ParagraphStyle("TimetableCell", parent=styles["BodyText"], fontSize=5.5, leading=6.5)
         class_initials_style = ParagraphStyle("TimetableClassInitials", parent=cell_style, fontSize=20, leading=22, alignment=TA_CENTER)
-        day_style = ParagraphStyle("TimetableDay", parent=cell_style, alignment=TA_CENTER)
+        day_style = ParagraphStyle("TimetableDay", parent=cell_style, fontSize=12, leading=14, alignment=TA_CENTER, fontName="Helvetica-Bold")
         header_style = ParagraphStyle("TimetableHeader", parent=styles["BodyText"], fontSize=6, leading=7, textColor=colors.black if print_sheet else colors.white, alignment=TA_CENTER)
         break_header_style = ParagraphStyle("TimetableBreakHeader", parent=header_style, textColor=colors.black if print_sheet else colors.HexColor("#75551d"))
         def pdf_text(value):
@@ -1011,6 +1011,7 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
             col=1
             if row["day_first"]:
                 day_cell = sheet.cell(row_index,col,row["day"]["day_name"])
+                day_cell.font = Font(name="Arial",bold=True,size=14,color="000000")
                 day_cell.alignment = Alignment(horizontal="center",vertical="center",wrap_text=True)
                 if row["day_rowspan"]>1: sheet.merge_cells(start_row=row_index,start_column=col,end_row=row_index+row["day_rowspan"]-1,end_column=col)
             col+=1
