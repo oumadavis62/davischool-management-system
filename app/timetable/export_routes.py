@@ -498,6 +498,7 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                                 subject_left_style = ParagraphStyle("PrintAnchoredSubjectLeft", parent=subject_style, alignment=TA_LEFT)
                                 class_style = ParagraphStyle("PrintAnchoredClass", parent=cell_style, alignment=TA_CENTER, fontSize=25 if view_type == "teacher" else 7, leading=27 if view_type == "teacher" else 8, textColor=colors.black)
                                 teacher_style = ParagraphStyle("PrintAnchoredTeacher", parent=cell_style, alignment=TA_RIGHT, fontSize=6, leading=7, textColor=colors.black)
+                                resource_room_style = ParagraphStyle("PrintAnchoredRoom", parent=cell_style, alignment=TA_CENTER, fontSize=5, leading=6, textColor=colors.black)
                                 right_style = ParagraphStyle("PrintAnchoredRight", parent=cell_style, alignment=TA_RIGHT, fontSize=6, leading=7, textColor=colors.black)
 
                                 # The outer timetable cell will have zero horizontal
@@ -569,7 +570,7 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                                 if view_type in ("teacher", "room") and room_text:
                                     center = Table(
                                         [[Paragraph("<b>" + pdf_text(class_initials) + "</b>", class_style)],
-                                         [Paragraph("⌂ " + room_text, ParagraphStyle("PrintResourceRoom", parent=room_style, alignment=TA_CENTER))]],
+                                         [Paragraph("⌂ " + room_text, ParagraphStyle("PrintResourceRoom", parent=resource_room_style, alignment=TA_CENTER))]],
                                         colWidths=[resource_width],
                                         rowHeights=[center_band * 0.72, center_band * 0.28],
                                         style=TableStyle([("ALIGN",(0,0),(-1,-1),"CENTER"),("VALIGN",(0,0),(-1,-1),"MIDDLE"),("LEFTPADDING",(0,0),(-1,-1),0),("RIGHTPADDING",(0,0),(-1,-1),0),("TOPPADDING",(0,0),(-1,-1),0),("BOTTOMPADDING",(0,0),(-1,-1),0)]),
@@ -577,7 +578,7 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                                 elif view_type == "class" and room_text:
                                     center = Table(
                                         [[Paragraph("<b>" + subject_initial + "</b>", subject_style)],
-                                         [Paragraph("⌂ " + room_text, ParagraphStyle("PrintClassRoom", parent=room_style, alignment=TA_CENTER))]],
+                                         [Paragraph("⌂ " + room_text, ParagraphStyle("PrintClassRoom", parent=resource_room_style, alignment=TA_CENTER))]],
                                         colWidths=[resource_width],
                                         rowHeights=[center_band * 0.72, center_band * 0.28],
                                         style=TableStyle([("ALIGN",(0,0),(-1,-1),"CENTER"),("VALIGN",(0,0),(-1,-1),"MIDDLE"),("LEFTPADDING",(0,0),(-1,-1),0),("RIGHTPADDING",(0,0),(-1,-1),0),("TOPPADDING",(0,0),(-1,-1),0),("BOTTOMPADDING",(0,0),(-1,-1),0)]),
@@ -760,7 +761,7 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                                             [Table(
                                                 [[Paragraph("<b>" + pdf_text(class_initials) + "</b>", resource_class_style)],
                                                  [Paragraph("⌂ " + pdf_text(allocated_room), ParagraphStyle("RoomAssignedUnderClass", parent=teacher_initial_style, alignment=TA_CENTER)) if allocated_room else ""]],
-                                                colWidths=[card_width], rowHeights=[max(1, resource_card_height * 0.50)],
+                                                colWidths=[card_width], rowHeights=[max(1, resource_card_height * 0.35), max(1, resource_card_height * 0.15)],
                                                 style=TableStyle([
                                                     ("ALIGN", (0, 0), (-1, -1), "CENTER"),
                                                     ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
