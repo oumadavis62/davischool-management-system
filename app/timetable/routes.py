@@ -110,7 +110,7 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
                 for p in profiles
             )
             profile_control = f"<form class='tt-home-profile' method='get' action='/app/timetable'><label for='tt-home-profile'>Working timetable</label><select id='tt-home-profile' name='profile_id' onchange='this.form.submit()'>{profile_options}</select></form>"
-            status = esc('Revised' if str(selected['status']).lower() in ('published','archived') else str(selected['status']).replace('_', ' ').title())
+            status = esc(str(selected['status']).replace('_', ' ').title())
             profile_name = esc(profile_display_name(selected["name"], selected["status"]))
             profile_meta = f"{esc(selected['academic_year'])} · {esc(selected['term'])} · {esc(str(selected['profile_type'] or 'main').replace('_',' ').title())}"
             profile_panel = f"""
