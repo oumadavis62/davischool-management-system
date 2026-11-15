@@ -240,6 +240,7 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
         logo_img=("<img style='width:60px;height:60px;object-fit:contain' src='" + escape(logo_src, quote=True) + "' alt='School logo'>") if logo_src else ""
         school_details_html=" · ".join(escape(label + ": " + value) for label,value in school_details(school))
         timetable_fields = [
+            ("Timetable", str(result["profile"]["name"] or "")),
             ("Term", str(result["profile"]["term"])),
             ("Year", str(result["profile"]["academic_year"])),
             ("Status", status_label(result["profile"])),
@@ -352,7 +353,8 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
         story = [cover]
         meta_style = ParagraphStyle("TimetableCoverMeta", parent=styles["Normal"], alignment=TA_CENTER, fontSize=8, leading=10)
         meta_line = Paragraph(
-            "<b>Term:</b> " + pdf_text(result["profile"]["term"]) +
+            "<b>Timetable:</b> " + pdf_text(result["profile"]["name"] or "") +
+            " &nbsp;&nbsp;|&nbsp;&nbsp; <b>Term:</b> " + pdf_text(result["profile"]["term"]) +
             " &nbsp;&nbsp;|&nbsp;&nbsp; <b>Year:</b> " + pdf_text(result["profile"]["academic_year"]) +
             " &nbsp;&nbsp;|&nbsp;&nbsp; <b>Status:</b> " + pdf_text(current_status),
             meta_style,
@@ -997,7 +999,7 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
         sheet.cell(2,1).font = Font(bold=True,size=12,color="315B3E")
         sheet.cell(2,1).alignment = Alignment(horizontal="center")
         sheet.merge_cells(start_row=3,start_column=1,end_row=3,end_column=last_col)
-        profile_text = str(result["profile"]["academic_year"]) + " · " + str(result["profile"]["term"]) + " · " + str(scheduled_period_count(result["lessons"])) + " scheduled periods"
+        profile_text = "Timetable: " + str(result["profile"]["name"] or "") + " · " + str(result["profile"]["academic_year"]) + " · " + str(result["profile"]["term"]) + " · " + str(scheduled_period_count(result["lessons"])) + " scheduled periods"
         sheet.cell(3,1,profile_text)
         sheet.cell(3,1).alignment = Alignment(horizontal="center")
         header_row = 5
