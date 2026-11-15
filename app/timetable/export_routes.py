@@ -655,8 +655,12 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                                     teacher_initials = "".join(part[0] for part in (name_parts[:1] + (name_parts[-1:] if len(name_parts) > 1 else []))).upper()[:4] or "—"
                                 duration = pdf_text(str(max(1, int(lesson.get("duration_periods") or 1))) + "P")
                                 room_text = pdf_text(allocated_room_name(lesson))
+                                class_label = str(lesson.get("class_name") or "").strip()
+                                stream_label = str(lesson.get("stream") or "").strip()
+                                class_initials = str(lesson.get("class_initials") or "").strip().upper() or (class_label + ((" " + stream_label) if stream_label else "") or "—")
                                 period_style = ParagraphStyle("PrintPeriodMarker", parent=cell_style, alignment=TA_LEFT, fontSize=5, leading=6, textColor=colors.black)
                                 subject_style = ParagraphStyle("PrintSubjectInitials", parent=cell_style, alignment=TA_CENTER, fontSize=18, leading=20, textColor=colors.black)
+                                school_class_style = ParagraphStyle("PrintSchoolClass", parent=cell_style, alignment=TA_CENTER, fontSize=8, leading=9, textColor=colors.black)
                                 room_style = ParagraphStyle("PrintCellRoom", parent=cell_style, alignment=TA_CENTER, fontSize=5, leading=6, textColor=colors.black)
                                 teacher_style = ParagraphStyle("PrintCellTeacher", parent=cell_style, alignment=TA_RIGHT, fontSize=5, leading=6, textColor=colors.black)
                                 cell_height = max(24, individual_row_height)
@@ -667,20 +671,22 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                                     [
                                         [Paragraph(duration, period_style), ""],
                                         [Paragraph("<b>" + subject_initial + "</b>", subject_style), ""],
+                                        [Paragraph("<b>" + pdf_text(class_initials) + "</b>", school_class_style), ""],
                                         [Paragraph("⌂ " + room_text, room_style) if room_text else "", Paragraph(teacher_initials, teacher_style)],
                                     ],
                                     colWidths=[resource_width * 0.5, resource_width * 0.5],
-                                    rowHeights=[top_band, center_band, bottom_band],
+                                    rowHeights=[top_band, center_band * 0.25, center_band * 0.45, center_band * 0.30 + bottom_band],
                                 )
                                 anchored.setStyle(TableStyle([
                                     ("SPAN", (0, 1), (1, 1)),
+                                    ("SPAN", (0, 2), (1, 2)),
                                     ("ALIGN", (0, 0), (0, 0), "LEFT"),
-                                    ("ALIGN", (0, 1), (1, 1), "CENTER"),
-                                    ("ALIGN", (0, 2), (0, 2), "LEFT"),
-                                    ("ALIGN", (1, 2), (1, 2), "RIGHT"),
+                                    ("ALIGN", (0, 1), (1, 2), "CENTER"),
+                                    ("ALIGN", (0, 3), (0, 3), "CENTER"),
+                                    ("ALIGN", (1, 3), (1, 3), "RIGHT"),
                                     ("VALIGN", (0, 0), (-1, 0), "TOP"),
-                                    ("VALIGN", (0, 1), (-1, 1), "MIDDLE"),
-                                    ("VALIGN", (0, 2), (-1, 2), "BOTTOM"),
+                                    ("VALIGN", (0, 1), (-1, 2), "MIDDLE"),
+                                    ("VALIGN", (0, 3), (-1, 3), "BOTTOM"),
                                     ("LEFTPADDING", (0, 0), (-1, -1), edge_inset),
                                     ("RIGHTPADDING", (0, 0), (-1, -1), edge_inset),
                                     ("TOPPADDING", (0, 0), (-1, -1), 0),
@@ -791,6 +797,8 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                                         [Paragraph(str(max(1, int(lesson.get("duration_periods") or 1))) + "P", top_style)],
                                         [Paragraph("<b>" + subject_initial + "</b>", subject_style)],
                                     ]
+                                    if whole_school_cell:
+                                        card_rows.append([Paragraph("<b>" + pdf_text(class_initials) + "</b>", ParagraphStyle("SchoolCellClass", parent=subject_style, fontSize=8, leading=9))])
                                     if room_text:
                                         card_rows.append([Paragraph("⌂ " + room_text, ParagraphStyle("ClassRoomUnderSubject", parent=room_style, alignment=TA_CENTER))])
                                     footer_label = teacher_initials
