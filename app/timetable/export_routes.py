@@ -57,10 +57,15 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
         return sum(max(1, int(lesson.get("duration_periods") or 1)) for lesson in lessons)
 
     def allocated_room_name(lesson):
-        """Return a room label only for a real, explicitly allocated room."""
-        room_id = lesson.get("room_id")
+        """Return the joined room label when one is present and assigned.
+
+        The room name is supplied by the LEFT JOIN to the timetable room
+        registry. Do not additionally require a truthy room_id here: some
+        teacher-view rows may expose a valid joined room name while the raw
+        identifier is absent/zero-like in the export mapping.
+        """
         room_name = str(lesson.get("room_name") or "").strip()
-        if not room_id or not room_name or room_name.casefold() in {
+        if not room_name or room_name.casefold() in {
             "room not assigned", "not assigned", "unassigned", "—", "-"
         }:
             return ""
