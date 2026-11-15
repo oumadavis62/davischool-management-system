@@ -967,7 +967,7 @@ def profile_display_name(value: Any, status: Any = "") -> str:
     """Return the timetable's base name without an internal revision suffix."""
     name = str(value or "")
     # Revision metadata belongs in version control, not in the timetable name.
-    name = re.sub(r"\s*[·|–—-]\s*Revision(?:\s+\d+)?\s*$", "", name, flags=re.IGNORECASE)
+    name = re.sub(r"(?:\s*[·|–—-]\s*)?Revision(?:\s+\d+)?\s*$", "", name, flags=re.IGNORECASE)
     return name.strip()
 
 def revision_display_label(value: Any) -> str:
