@@ -908,7 +908,7 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                     pdf_text(item.get("class_names") or "—"),pdf_text(item.get("teacher_names") or "—"),
                     pdf_text(item.get("room_name") or "—")])
             rt=Table(remedial_rows,colWidths=[65,70,130,100,115,75],repeatRows=1)
-            rt.setStyle(TableStyle([("BACKGROUND",(0,0),(-1,0),colors.white if print_sheet else colors.HexColor("#17633b")),("TEXTCOLOR",(0,0),(-1,0),colors.black if print_sheet else colors.white),("GRID",(0,0),(-1,-1),.3,colors.HexColor("#cbd8ce")),("FONTSIZE",(0,1),(-1,-1),7),("VALIGN",(0,0),(-1,-1),"TOP")]))
+            rt.setStyle(TableStyle([("BACKGROUND",(0,0),(-1,0),colors.white if print_sheet else colors.HexColor("#17633b")),("TEXTCOLOR",(0,0),(-1,0),colors.black if print_sheet else colors.white),("GRID",(0,0),(-1,-1),.85,colors.HexColor("#52665A")),("FONTSIZE",(0,1),(-1,-1),7),("VALIGN",(0,0),(-1,-1),"TOP")]))
             story.append(rt)
 
         if result.get("weekend_sessions"):
