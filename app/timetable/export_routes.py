@@ -828,7 +828,7 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                 ("BACKGROUND", (0,0), (-1,-1), colors.white if print_sheet else colors.white),
                 ("BACKGROUND", (0,0), (-1,0), colors.white if print_sheet else colors.HexColor("#17633b")),
                 ("TEXTCOLOR", (0,0), (-1,-1), colors.black),
-                ("GRID", (0,0), (-1,-1), 0.8 if print_sheet else 0.35, colors.black if print_sheet else colors.HexColor("#cbd8ce")),
+                ("GRID", (0,0), (-1,-1), 1.0, colors.HexColor("#52665A")),
                 ("BACKGROUND", (0,1), (0,-1), colors.white if print_sheet else colors.HexColor("#eef5ef")),
                 ("VALIGN", (0,0), (-1,-1), "MIDDLE"),
                 ("LEFTPADDING", (0,0), (-1,-1), 3), ("RIGHTPADDING", (0,0), (-1,-1), 3),
@@ -877,7 +877,7 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                     Paragraph(pdf_text(item.get("room_name") or "—"),cell_style),
                 ])
             dated_table = Table(dated_rows,colWidths=[doc.width*.16,doc.width*.13,doc.width*.20,doc.width*.18,doc.width*.18,doc.width*.15],repeatRows=1)
-            dated_table.setStyle(TableStyle([("BACKGROUND",(0,0),(-1,0),colors.white if print_sheet else colors.HexColor("#17633b")),("TEXTCOLOR",(0,0),(-1,0),colors.black if print_sheet else colors.white),("GRID",(0,0),(-1,-1),.3,colors.HexColor("#cbd8ce")),("VALIGN",(0,0),(-1,-1),"TOP"),("FONTSIZE",(0,1),(-1,-1),6),("LEFTPADDING",(0,0),(-1,-1),3),("RIGHTPADDING",(0,0),(-1,-1),3),("TOPPADDING",(0,0),(-1,-1),3),("BOTTOMPADDING",(0,0),(-1,-1),3)]))
+            dated_table.setStyle(TableStyle([("BACKGROUND",(0,0),(-1,0),colors.white if print_sheet else colors.HexColor("#17633b")),("TEXTCOLOR",(0,0),(-1,0),colors.black if print_sheet else colors.white),("GRID",(0,0),(-1,-1),.85,colors.HexColor("#52665A")),("VALIGN",(0,0),(-1,-1),"TOP"),("FONTSIZE",(0,1),(-1,-1),6),("LEFTPADDING",(0,0),(-1,-1),3),("RIGHTPADDING",(0,0),(-1,-1),3),("TOPPADDING",(0,0),(-1,-1),3),("BOTTOMPADDING",(0,0),(-1,-1),3)]))
             story.append(dated_table)
 
         def session_paragraphs(items, rotation=False):
@@ -935,7 +935,7 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                 ])
             widths = [doc.width*.14,doc.width*.15,doc.width*.12,doc.width*.19,doc.width*.15,doc.width*.15,doc.width*.10]
             weekend_table = Table(weekend_rows,colWidths=widths,repeatRows=1)
-            weekend_table.setStyle(TableStyle([("BACKGROUND",(0,0),(-1,0),colors.white if print_sheet else colors.HexColor("#17633b")),("TEXTCOLOR",(0,0),(-1,0),colors.black if print_sheet else colors.white),("GRID",(0,0),(-1,-1),.35,colors.HexColor("#b8d2bd")),("VALIGN",(0,0),(-1,-1),"TOP"),("LEFTPADDING",(0,0),(-1,-1),3),("RIGHTPADDING",(0,0),(-1,-1),3),("TOPPADDING",(0,0),(-1,-1),3),("BOTTOMPADDING",(0,0),(-1,-1),3)]))
+            weekend_table.setStyle(TableStyle([("BACKGROUND",(0,0),(-1,0),colors.white if print_sheet else colors.HexColor("#17633b")),("TEXTCOLOR",(0,0),(-1,0),colors.black if print_sheet else colors.white),("GRID",(0,0),(-1,-1),.85,colors.HexColor("#52665A")),("VALIGN",(0,0),(-1,-1),"TOP"),("LEFTPADDING",(0,0),(-1,-1),3),("RIGHTPADDING",(0,0),(-1,-1),3),("TOPPADDING",(0,0),(-1,-1),3),("BOTTOMPADDING",(0,0),(-1,-1),3)]))
             # Keep both weekend rotations together on one A4 landscape page.
             # Shrink only this consolidated sheet when a school has many entries.
             story.append(KeepInFrame(doc.width, doc.height - 34, [weekend_table], mode="shrink", hAlign="LEFT", vAlign="TOP"))
@@ -1158,16 +1158,16 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
         details.auto_filter.ref = details.dimensions
         for col in range(1,len(detail_headers)+1):
             details.column_dimensions[chr(64+col)].width = 20
-        thin = Side(style="thin",color="DCE7DE")
-        for ws in (sheet,details):
+        grid_side = Side(style="thin", color="52665A")
+        for ws in workbook.worksheets:
             for row in ws.iter_rows():
                 for cell in row:
-                    cell.border = Border(bottom=thin)
+                    cell.border = Border(left=grid_side, right=grid_side, top=grid_side, bottom=grid_side)
         # Reapply teacher accents after the shared grid borders.
         for lesson_row, lesson_col, accent in lesson_color_cells:
             target=sheet.cell(lesson_row,lesson_col)
             target.fill=PatternFill("solid",fgColor=teacher_tint_hex(accent))
-            target.border=Border(left=Side(style="medium",color=accent[1:]),bottom=thin)
+            target.border=Border(left=Side(style="medium",color=accent[1:]),right=grid_side,top=grid_side,bottom=grid_side)
         # Keep every worksheet printable on standard A4 paper. Wide timetables
         # and details scale to one page wide; weekend rotations remain a single
         # consolidated A4 page as explicitly requested.
