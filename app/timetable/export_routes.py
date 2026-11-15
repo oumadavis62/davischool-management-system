@@ -647,7 +647,7 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                                     name_parts = [part for part in str(lesson.get("teacher_name") or "").split() if part]
                                     teacher_initials = "".join(part[0] for part in (name_parts[:1] + (name_parts[-1:] if len(name_parts) > 1 else []))).upper()[:4] or "—"
                                 duration = pdf_text(str(max(1, int(lesson.get("duration_periods") or 1))) + "P")
-                                room_text = pdf_text(allocated_room_name(lesson))
+                                room_text = "" if view_type == "room" else pdf_text(allocated_room_name(lesson))
                                 class_label = str(lesson.get("class_name") or "").strip()
                                 stream_label = str(lesson.get("stream") or "").strip()
                                 class_initials = str(lesson.get("class_initials") or "").strip().upper() or (class_label + ((" " + stream_label) if stream_label else "") or "—")
