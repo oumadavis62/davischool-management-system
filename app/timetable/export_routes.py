@@ -908,7 +908,7 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                     pdf_text(item.get("class_names") or "—"),pdf_text(item.get("teacher_names") or "—"),
                     pdf_text(item.get("room_name") or "—")])
             rt=Table(remedial_rows,colWidths=[65,70,130,100,115,75],repeatRows=1)
-            rt.setStyle(TableStyle([("BACKGROUND",(0,0),(-1,0),colors.white if print_sheet else colors.HexColor("#17633b")),("TEXTCOLOR",(0,0),(-1,0),colors.black if print_sheet else colors.white),("GRID",(0,0),(-1,-1),.85,colors.HexColor("#52665A")),("FONTSIZE",(0,1),(-1,-1),7),("VALIGN",(0,0),(-1,-1),"TOP")]))
+            rt.setStyle(TableStyle([("BACKGROUND",(0,0),(-1,0),colors.white if print_sheet else colors.HexColor("#17633b")),("TEXTCOLOR",(0,0),(-1,0),colors.black if print_sheet else colors.white),("GRID",(0,0),(-1,-1), 1.5, colors.black),("FONTSIZE",(0,1),(-1,-1),7),("VALIGN",(0,0),(-1,-1),"TOP")]))
             story.append(rt)
 
         if result.get("weekend_sessions"):
@@ -935,7 +935,7 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                 ])
             widths = [doc.width*.14,doc.width*.15,doc.width*.12,doc.width*.19,doc.width*.15,doc.width*.15,doc.width*.10]
             weekend_table = Table(weekend_rows,colWidths=widths,repeatRows=1)
-            weekend_table.setStyle(TableStyle([("BACKGROUND",(0,0),(-1,0),colors.white if print_sheet else colors.HexColor("#17633b")),("TEXTCOLOR",(0,0),(-1,0),colors.black if print_sheet else colors.white),("GRID",(0,0),(-1,-1),.85,colors.HexColor("#52665A")),("VALIGN",(0,0),(-1,-1),"TOP"),("LEFTPADDING",(0,0),(-1,-1),3),("RIGHTPADDING",(0,0),(-1,-1),3),("TOPPADDING",(0,0),(-1,-1),3),("BOTTOMPADDING",(0,0),(-1,-1),3)]))
+            weekend_table.setStyle(TableStyle([("BACKGROUND",(0,0),(-1,0),colors.white if print_sheet else colors.HexColor("#17633b")),("TEXTCOLOR",(0,0),(-1,0),colors.black if print_sheet else colors.white),("GRID",(0,0),(-1,-1), 1.5, colors.black),("VALIGN",(0,0),(-1,-1),"TOP"),("LEFTPADDING",(0,0),(-1,-1),3),("RIGHTPADDING",(0,0),(-1,-1),3),("TOPPADDING",(0,0),(-1,-1),3),("BOTTOMPADDING",(0,0),(-1,-1),3)]))
             # Keep both weekend rotations together on one A4 landscape page.
             # Shrink only this consolidated sheet when a school has many entries.
             story.append(KeepInFrame(doc.width, doc.height - 34, [weekend_table], mode="shrink", hAlign="LEFT", vAlign="TOP"))
