@@ -964,14 +964,11 @@ def compare_timetable_versions(connection: Any, school_id: int, first_version_id
 
 
 def profile_display_name(value: Any, status: Any = "") -> str:
-    """Hide internal revision numbers; published revision profiles are labelled Revised."""
+    """Return the timetable's base name without an internal revision suffix."""
     name = str(value or "")
-    marker = " · Revision "
-    if marker in name:
-        name = name.split(marker, 1)[0] + " · Revision"
-    if str(status or "").strip().lower() in {"published", "archived"}:
-        name = re.sub(r" · Revision$", " · Revised", name)
-    return name
+    # Revision metadata belongs in version control, not in the timetable name.
+    name = re.sub(r"\s*[·|–—-]\s*Revision(?:\s+\d+)?\s*$", "", name, flags=re.IGNORECASE)
+    return name.strip()
 
 def revision_display_label(value: Any) -> str:
     """Hide internal revision numbers and use Revised for published version labels."""
