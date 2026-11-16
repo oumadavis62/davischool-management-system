@@ -691,7 +691,8 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
                 (school_id, pid, int(req["id"])),
             ).fetchall()
             requirement_links_values[int(req["id"])] = json.dumps([
-                {"classes": json.loads(item["linked_class_ids_json"] or "[]"),
+                {"duration": int(item["duration_periods"] or 1),
+                 "classes": json.loads(item["linked_class_ids_json"] or "[]"),
                  "teachers": json.loads(item["co_teacher_ids_json"] or "[]")}
                 for item in saved_pattern
             ])
