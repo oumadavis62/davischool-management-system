@@ -517,7 +517,19 @@ def validate_timetable_for_publication(connection: Any, school_id: int, profile_
         if not valid_span:
             errors.append("A scheduled multi-period lesson is not consecutive or crosses a non-teaching period.")
             continue
-        if any((int(lesson["teacher_id"]),day_id,int(p["id"])) in unavailable for p in span):
+        try:
+            co_teacher_ids = sorted({
+                int(value) for value in json.loads(lesson["co_teacher_ids_json"] or "[]")
+                if int(value) > 0 and int(value) != int(lesson["teacher_id"])
+            })
+        except (TypeError, ValueError):
+            co_teacher_ids = []
+            errors.append("A scheduled lesson contains invalid co-teacher data.")
+        lesson_teacher_ids = [int(lesson["teacher_id"]), *co_teacher_ids]
+        if any(
+            (teacher_id,day_id,int(p["id"])) in unavailable
+            for teacher_id in lesson_teacher_ids for p in span
+        ):
             errors.append("A scheduled lesson falls inside a teacher's unavailable time.")
         if any(
             str(span[0]["start_time"]) < str(b["end_time"])
@@ -531,7 +543,7 @@ def validate_timetable_for_publication(connection: Any, school_id: int, profile_
         placements.append({
             "class_id":key[0],"subject_id":key[1],"teacher_id":key[2],"room_id":room_id,
             "lesson_group":str(lesson["lesson_group"] or ""),
-            "class_ids":[key[0]],"learner_ids":[],"teacher_ids":[key[2]],
+            "class_ids":[key[0]],"learner_ids":[],"teacher_ids":lesson_teacher_ids,
             "day_id":day_id,"day_key":"day:"+str(day_id),
             "start_time":str(span[0]["start_time"]),"end_time":str(span[-1]["end_time"]),
             "start_index":start_index,"end_index":start_index + duration - 1,
@@ -919,11 +931,12 @@ def create_revision(connection: Any, school_id: int, source_profile_id: int, act
             continue
         cur.execute(
             """INSERT INTO ds_timetable_lessons
-               (school_id,profile_id,class_id,subject_id,teacher_id,room_id,day_id,period_id,duration_periods,lesson_group,generation_run_id,status,created_by,created_at,updated_at)
-               VALUES(?,?,?,?,?,?,?,?,?,?,NULL,'scheduled',?,?,?)""",
+               (school_id,profile_id,class_id,subject_id,teacher_id,room_id,day_id,period_id,duration_periods,lesson_group,co_teacher_ids_json,generation_run_id,status,created_by,created_at,updated_at)
+               VALUES(?,?,?,?,?,?,?,?,?,?,?,NULL,'scheduled',?,?,?)""",
             (
                 school_id,new_id,row["class_id"],row["subject_id"],row["teacher_id"],row["room_id"],
                 day_map[int(row["day_id"])],period_map[int(row["period_id"])],row["duration_periods"],row["lesson_group"],
+                row["co_teacher_ids_json"] if "co_teacher_ids_json" in row.keys() else "[]",
                 actor,now,now,
             ),
         )
