@@ -2127,7 +2127,65 @@ def del_stud(sid: int, request: Request):
     school = get_school_obj(request)
     if not school: return RedirectResponse("/",303)
     con = get_db(); cur = con.cursor()
-    cur.execute("DELETE FROM students WHERE id=? AND school_id=?", (sid, school["id"]))
+    school_id = school["id"]
+
+    # Remove only this learner's parent links and saved credentials. Keep the
+    # parent login itself so it can still be used for other children or later.
+    try:
+        linked_users = cur.execute(
+            "SELECT user_id FROM parent_student_links WHERE school_id=? AND student_id=?",
+            (school_id, sid)
+        ).fetchall()
+    except Exception:
+        linked_users = []
+
+    try:
+        cur.execute(
+            "DELETE FROM parent_student_links WHERE school_id=? AND student_id=?",
+            (school_id, sid)
+        )
+    except Exception:
+        pass
+    try:
+        cur.execute(
+            "DELETE FROM parent_access_credentials WHERE school_id=? AND student_id=?",
+            (school_id, sid)
+        )
+    except Exception:
+        pass
+
+    # Older parent accounts may also carry a fallback users.student_id. Point
+    # that fallback at another still-linked child, or clear it if none remain.
+    affected_user_ids = {int(row["user_id"]) for row in linked_users if row["user_id"] is not None}
+    try:
+        fallback_users = cur.execute(
+            "SELECT id FROM users WHERE school_id=? AND role='parent' AND student_id=?",
+            (school_id, sid)
+        ).fetchall()
+        affected_user_ids.update(int(row["id"]) for row in fallback_users)
+    except Exception:
+        pass
+
+    for parent_user_id in affected_user_ids:
+        try:
+            remaining = cur.execute(
+                """SELECT s.id
+                   FROM parent_student_links l
+                   JOIN students s ON s.id=l.student_id AND s.school_id=l.school_id
+                   WHERE l.school_id=? AND l.user_id=?
+                   ORDER BY l.created_at, s.id LIMIT 1""",
+                (school_id, parent_user_id)
+            ).fetchone()
+            cur.execute(
+                "UPDATE users SET student_id=? WHERE id=? AND school_id=? AND role='parent' AND student_id=?",
+                (remaining["id"] if remaining else None, parent_user_id, school_id, sid)
+            )
+        except Exception:
+            # Keep deletion available for older installations without the
+            # optional parent-link schema.
+            pass
+
+    cur.execute("DELETE FROM students WHERE id=? AND school_id=?", (sid, school_id))
     con.commit(); con.close()
     return RedirectResponse("/school/students",303)
 
