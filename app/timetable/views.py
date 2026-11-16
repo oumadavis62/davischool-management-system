@@ -1,6 +1,7 @@
 """Read-only school, class, teacher and room timetable views."""
 from __future__ import annotations
 
+import json
 from typing import Any
 
 from app.timetable.setup import TimetableSetupError
@@ -76,8 +77,19 @@ def get_timetable_view(connection: Any, school_id: int, profile_id: int, view_ty
         ).fetchone()
         if not target:
             raise TimetableSetupError("Select a staff member designated as Teacher in the Staff List.")
-        where = " AND (l.teacher_id=? OR l.co_teacher_ids_json LIKE ?)"
-        params.extend((target_id, '%"' + str(int(target_id)) + '"%'))
+        where = """ AND (
+            l.teacher_id=?
+            OR l.co_teacher_ids_json=?
+            OR l.co_teacher_ids_json LIKE ?
+            OR l.co_teacher_ids_json LIKE ?
+            OR l.co_teacher_ids_json LIKE ?
+        )"""
+        teacher_token = str(int(target_id))
+        params.extend((
+            target_id, "[" + teacher_token + "]",
+            "[" + teacher_token + ",%", "%," + teacher_token + ",%",
+            "%," + teacher_token + "]",
+        ))
         title = str(target["name"]) + " — teacher timetable"
     elif view_type == "room":
         target = cur.execute(
@@ -113,7 +125,7 @@ def get_timetable_view(connection: Any, school_id: int, profile_id: int, view_ty
         all_teacher_ids = set()
         for lesson in lessons:
             try:
-                co_ids = [int(value) for value in __import__("json").loads(lesson.get("co_teacher_ids_json") or "[]")]
+                co_ids = [int(value) for value in json.loads(lesson.get("co_teacher_ids_json") or "[]")]
             except (TypeError, ValueError):
                 co_ids = []
             ids = list(dict.fromkeys([int(lesson["teacher_id"]), *[value for value in co_ids if value > 0]]))
