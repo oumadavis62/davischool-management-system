@@ -817,7 +817,7 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
                 linked_pattern_value = requirement_pattern_values.get(int(r["id"]), "")
                 linked_links_value = requirement_links_values.get(int(r["id"]), "[]")
                 requirement_manage_modals.append(
-                    f\"\"\"<div class="tt-modal tt-req-manage-modal" id="{linked_modal_id}" role="dialog" aria-modal="true" aria-labelledby="{linked_modal_id}-title">
+                    f"""<div class="tt-modal tt-req-manage-modal" id="{linked_modal_id}" role="dialog" aria-modal="true" aria-labelledby="{linked_modal_id}-title">
                     <div class="tt-modal-dialog tt-req-manage-dialog"><div class="tt-modal-head"><div><span class="tt-kicker">SUBJECT REQUIREMENT</span>
                     <h3 id="{linked_modal_id}-title">Manage {esc(r['subject_name'])}</h3><p>{esc(linked_label)} · {esc(r['teacher_name'])}</p></div>
                     <button type="button" class="tt-modal-close" data-req-manage-close aria-label="Close">&times;</button></div>
@@ -838,7 +838,7 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
                       <input type="hidden" name="weekly_pattern" data-weekly-pattern value="{esc(linked_pattern_value)}"><input type="hidden" name="weekly_links" value="{esc(linked_links_value)}"><input type="hidden" name="pattern_mode" value="replace">
                       <p class="tt-session-instructions">Set each occurrence's duration until the assigned total matches the weekly target. Leave start periods on Automatic if you have no preference. Optional class and co-teacher links apply to each occurrence.</p>
                     </div>
-                    <button class="tt-btn">Save changes</button></form></div></div></div>\"\"\"
+                    <button class="tt-btn">Save changes</button></form></div></div></div>"""
                 )
                 linked_used = shared_periods
                 linked_remaining = max(0, linked_target - linked_used)
