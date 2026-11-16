@@ -766,7 +766,7 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
                         f"<span class='tt-req-card-teacher'>Lead teacher · {esc(r['teacher_name'])}</span></div>"
                         f"<div class='tt-req-card-load'><span class='tt-session-chip'>"
                         f"{int(session_link.get('duration', 1))} period(s) · Session {session_index + 1}</span></div>"
-                        f"<div class='tt-req-card-action'>{manage_editor}</div></div></article>"
+                        f"<div class='tt-req-card-action'><button type='button' class='tt-req-manage-button' data-req-manage-open='tt-req-manage-{int(r['id'])}'>Manage</button></div></div></article>"
                     )
                     requirement_cards_by_class.setdefault(linked_id, {"label": linked_label, "cards": []})["cards"].append(shared_card)
         requirement_rows = "".join(
@@ -1102,7 +1102,7 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
  <div class='tt-req-overview'>
   <div><span>Configured requirements</span><b>{len(requirements)}</b><small>Class · subject allocations</small></div>
   <div><span>Allocated classes</span><b>{len(set(int(x['class_id']) for x in requirements))}</b><small>With weekly requirements</small></div>
-  <div><span>Weekly periods</span><b>{sum(int(x['lessons_per_week'] or 0)*int(x['duration_periods'] or 1) for x in requirements)}</b><small>Configured period load</small></div>
+  <div><span>Weekly periods</span><b>{sum(int(x['lessons_per_week'] or 0)*int(x['duration_periods'] or 1) for x in requirements) + sum(int(session.get('duration', 1) or 1) * len({int(linked_id) for linked_id in session.get('classes', []) if str(linked_id).isdigit()}) for links_json in requirement_links_values.values() for session in (json.loads(links_json or '[]') if isinstance(links_json, str) else []) if isinstance(session, dict))}</b><small>Configured class period load, including shared classes</small></div>
   <div><span>Teachers involved</span><b>{len(set(int(x['teacher_id']) for x in requirements))}</b><small>Lead allocations</small></div>
  </div>
  <div class='tt-req-main-layout'>
