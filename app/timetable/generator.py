@@ -1400,34 +1400,46 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
            WHERE school_id=? AND profile_id=? AND generation_run_id IS NULL AND status='scheduled'""",
         (school_id, profile_id),
     )
-    for placement in generated:
+    for placement_index, placement in enumerate(generated, 1):
         now = _now()
-        cur.execute(
-            """INSERT INTO ds_timetable_lessons
-               (school_id,profile_id,class_id,subject_id,teacher_id,room_id,day_id,period_id,duration_periods,generation_run_id,status,created_by,created_at,updated_at)
-               VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
-            (
-                school_id, profile_id, placement["class_id"], placement["subject_id"], placement["teacher_id"],
-                placement["room_id"], placement["day_id"], placement["period_id"], placement["duration"],
-                run_id, "scheduled", created_by, now, now,
-            ),
-        )
-        lesson_id = int(cur.lastrowid or 0)
-        if not lesson_id:
-            row = cur.execute(
-                """SELECT id FROM ds_timetable_lessons
-                   WHERE school_id=? AND profile_id=? AND generation_run_id=? AND class_id=? AND subject_id=?
-                     AND teacher_id=? AND day_id=? AND period_id=? ORDER BY id DESC LIMIT 1""",
-                (school_id, profile_id, run_id, placement["class_id"], placement["subject_id"], placement["teacher_id"], placement["day_id"], placement["period_id"]),
-            ).fetchone()
-            lesson_id = int(row["id"])
-        after = cur.execute("SELECT * FROM ds_timetable_lessons WHERE id=? AND school_id=?", (lesson_id, school_id)).fetchone()
-        cur.execute(
-            """INSERT INTO ds_timetable_change_log
-               (school_id,profile_id,lesson_id,action,before_json,after_json,changed_by,changed_at)
-               VALUES(?,?,?,?,?,?,?,?)""",
-            (school_id, profile_id, lesson_id, "AUTO_GENERATE", None, json.dumps(dict(after), default=str, sort_keys=True), created_by, _now()),
-        )
+        # Persist one timetable row for each participating class. Rows from
+        # the same solver placement share lesson_group so the UI can show the
+        # lesson in every linked class while validation still recognises it
+        # as one teacher/room booking.
+        participating_class_ids = sorted({
+            int(value) for value in placement.get("class_ids", [placement["class_id"]])
+            if int(value) > 0
+        })
+        if not participating_class_ids:
+            participating_class_ids = [int(placement["class_id"])]
+        lesson_group = "auto:%s:%s" % (int(run_id), placement_index) if len(participating_class_ids) > 1 else None
+        for participating_class_id in participating_class_ids:
+            cur.execute(
+                """INSERT INTO ds_timetable_lessons
+                   (school_id,profile_id,class_id,subject_id,teacher_id,room_id,day_id,period_id,duration_periods,lesson_group,generation_run_id,status,created_by,created_at,updated_at)
+                   VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                (
+                    school_id, profile_id, participating_class_id, placement["subject_id"], placement["teacher_id"],
+                    placement["room_id"], placement["day_id"], placement["period_id"], placement["duration"],
+                    lesson_group, run_id, "scheduled", created_by, now, now,
+                ),
+            )
+            lesson_id = int(cur.lastrowid or 0)
+            if not lesson_id:
+                row = cur.execute(
+                    """SELECT id FROM ds_timetable_lessons
+                       WHERE school_id=? AND profile_id=? AND generation_run_id=? AND class_id=? AND subject_id=?
+                         AND teacher_id=? AND day_id=? AND period_id=? ORDER BY id DESC LIMIT 1""",
+                    (school_id, profile_id, run_id, participating_class_id, placement["subject_id"], placement["teacher_id"], placement["day_id"], placement["period_id"]),
+                ).fetchone()
+                lesson_id = int(row["id"])
+            after = cur.execute("SELECT * FROM ds_timetable_lessons WHERE id=? AND school_id=?", (lesson_id, school_id)).fetchone()
+            cur.execute(
+                """INSERT INTO ds_timetable_change_log
+                   (school_id,profile_id,lesson_id,action,before_json,after_json,changed_by,changed_at)
+                   VALUES(?,?,?,?,?,?,?,?)""",
+                (school_id, profile_id, lesson_id, "AUTO_GENERATE", None, json.dumps(dict(after), default=str, sort_keys=True), created_by, _now()),
+            )
     # Do not commit a generated schedule that collides with another active
     # timetable programme for the same school and overlapping academic dates.
     from app.timetable.publishing import _cross_profile_conflicts
