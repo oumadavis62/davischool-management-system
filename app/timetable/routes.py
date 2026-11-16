@@ -2471,6 +2471,8 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
         lead_requirement_id: int = Form(...), linked_class_id: int = Form(...),
         lessons_per_week: int = Form(...), max_lessons_per_day: str = Form(""),
         linked_session_indices: list[int] = Form([]),
+        weekly_pattern: str = Form(""), weekly_links: str = Form(""),
+        pattern_mode: str = Form("replace"),
     ):
         school = school_for(request)
         if not school:
@@ -2483,41 +2485,102 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
             if max_day is not None and not 1 <= max_day <= 10:
                 raise TimetableSetupError("Maximum lessons per day must be between 1 and 10.")
             lead = con.execute(
-                """SELECT id FROM ds_timetable_class_requirements
+                """SELECT id,class_id,lessons_per_week FROM ds_timetable_class_requirements
                    WHERE id=? AND school_id=? AND profile_id=?""",
                 (lead_requirement_id, int(school["id"]), profile_id),
             ).fetchone()
             if not lead:
                 raise TimetableSetupError("The lead subject requirement could not be found.")
-            patterns = con.execute(
-                """SELECT id,session_no,duration_periods,linked_class_ids_json
-                   FROM ds_timetable_requirement_patterns
-                   WHERE school_id=? AND profile_id=? AND requirement_id=? ORDER BY session_no""",
-                (int(school["id"]), profile_id, lead_requirement_id),
-            ).fetchall()
-            kept = {int(value) for value in linked_session_indices}
-            active_periods = 0
-            found = False
-            for pattern in patterns:
-                classes = json.loads(pattern["linked_class_ids_json"] or "[]")
-                if linked_class_id not in [int(value) for value in classes]:
-                    continue
-                found = True
-                session_index = int(pattern["session_no"]) - 1
-                if session_index in kept:
-                    active_periods += int(pattern["duration_periods"] or 1)
-                else:
-                    classes = [int(value) for value in classes if int(value) != linked_class_id]
-                    con.execute(
-                        "UPDATE ds_timetable_requirement_patterns SET linked_class_ids_json=? WHERE id=? AND school_id=?",
-                        (json.dumps(classes), int(pattern["id"]), int(school["id"])),
-                    )
-            if not found:
-                raise TimetableSetupError("This class is no longer linked to the selected lead requirement.")
-            if int(lessons_per_week) < active_periods:
-                raise TimetableSetupError(
-                    f"The weekly target cannot be less than the {active_periods} periods still linked to this class."
+
+            # The linked popup uses the same full session editor as the lead
+            # popup. Session durations, preferred starts and sharing remain
+            # stored on the single lead requirement; only this linked class's
+            # target and daily limit are saved independently.
+            if weekly_pattern.strip():
+                try:
+                    session_links = json.loads(weekly_links or "[]")
+                except (TypeError, ValueError):
+                    raise TimetableSetupError("Session links are invalid.")
+                if not isinstance(session_links, list):
+                    raise TimetableSetupError("Session links must be a list.")
+                sessions = []
+                for session_index, item in enumerate(weekly_pattern.split(",")):
+                    token = item.strip()
+                    if not token:
+                        continue
+                    if "@" in token:
+                        duration_text, period_text = token.split("@", 1)
+                        duration, period_no = int(duration_text.strip()), int(period_text.strip())
+                        period = con.execute(
+                            "SELECT id FROM ds_timetable_periods WHERE school_id=? AND profile_id=? AND period_no=? AND period_type='lesson'",
+                            (int(school["id"]), profile_id, period_no),
+                        ).fetchone()
+                        if not period:
+                            raise TimetableSetupError("A preferred start period does not exist or is not a teaching period.")
+                        preferred_period_id = int(period["id"])
+                    else:
+                        duration, preferred_period_id = int(token), None
+                    if not 1 <= duration <= 4:
+                        raise TimetableSetupError("Session duration must be between one and four periods.")
+                    links = session_links[session_index] if session_index < len(session_links) and isinstance(session_links[session_index], dict) else {}
+                    class_ids = [int(value) for value in links.get("classes", [])]
+                    teacher_ids = [int(value) for value in links.get("teachers", [])]
+                    sessions.append({
+                        "duration_periods": duration,
+                        "preferred_period_id": preferred_period_id,
+                        "linked_class_ids": class_ids,
+                        "co_teacher_ids": teacher_ids,
+                    })
+                lead_used = sum(int(item["duration_periods"]) for item in sessions)
+                linked_used = sum(
+                    int(item["duration_periods"])
+                    for item in sessions
+                    if int(linked_class_id) in item["linked_class_ids"]
                 )
+                if lead_used > int(lead["lessons_per_week"] or 0):
+                    raise TimetableSetupError(
+                        f"These sessions use {lead_used} periods, exceeding the lead class weekly target of {int(lead['lessons_per_week'] or 0)}."
+                    )
+                if linked_used > int(lessons_per_week):
+                    raise TimetableSetupError(
+                        f"Sessions linked to this class use {linked_used} periods, exceeding its weekly target of {int(lessons_per_week)}."
+                    )
+                save_requirement_session_pattern(
+                    con, int(school["id"]), profile_id, int(lead_requirement_id), sessions
+                )
+            else:
+                # Backward compatibility for older forms that only submitted
+                # the per-class keep/unlink checkboxes.
+                patterns = con.execute(
+                    """SELECT id,session_no,duration_periods,linked_class_ids_json
+                       FROM ds_timetable_requirement_patterns
+                       WHERE school_id=? AND profile_id=? AND requirement_id=? ORDER BY session_no""",
+                    (int(school["id"]), profile_id, lead_requirement_id),
+                ).fetchall()
+                kept = {int(value) for value in linked_session_indices}
+                active_periods = 0
+                found = False
+                for pattern in patterns:
+                    classes = json.loads(pattern["linked_class_ids_json"] or "[]")
+                    if int(linked_class_id) not in [int(value) for value in classes]:
+                        continue
+                    found = True
+                    session_index = int(pattern["session_no"]) - 1
+                    if session_index in kept:
+                        active_periods += int(pattern["duration_periods"] or 1)
+                    else:
+                        classes = [int(value) for value in classes if int(value) != int(linked_class_id)]
+                        con.execute(
+                            "UPDATE ds_timetable_requirement_patterns SET linked_class_ids_json=? WHERE id=? AND school_id=?",
+                            (json.dumps(classes), int(pattern["id"]), int(school["id"])),
+                        )
+                if not found:
+                    raise TimetableSetupError("This class is no longer linked to the selected lead requirement.")
+                if int(lessons_per_week) < active_periods:
+                    raise TimetableSetupError(
+                        f"The weekly target cannot be less than the {active_periods} periods still linked to this class."
+                    )
+
             con.execute(
                 """INSERT INTO ds_timetable_linked_requirement_settings
                    (school_id,profile_id,lead_requirement_id,linked_class_id,lessons_per_week,max_lessons_per_day)
@@ -2528,7 +2591,7 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
                 (int(school["id"]), profile_id, lead_requirement_id, linked_class_id, int(lessons_per_week), max_day),
             )
             con.commit()
-            return redirect_setup(profile_id, "Linked class requirement saved. Shared sessions were updated independently.", request=request, tab="requirements", section="subject")
+            return redirect_setup(profile_id, "Linked class requirement saved.", request=request, tab="requirements", section="subject")
         except (TimetableSetupError, ValueError, TypeError) as exc:
             con.rollback()
             return redirect_setup(profile_id, str(exc), True, request=request, tab="requirements", section="subject")
