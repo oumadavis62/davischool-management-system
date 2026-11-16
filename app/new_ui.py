@@ -20873,7 +20873,7 @@ def enrolment_complete(request: Request, application_id: int, class_id: str = Fo
         applicant_parent_phone = str(app_row["parent_phone"] or "").strip()
         applicant_parent_name = str(app_row["parent_name"] or "").strip()
         if applicant_parent_phone or applicant_parent_name:
-            existing_student = cur.execute("""SELECT id,admission_no FROM students
+            existing_student = cur.execute("""SELECT id,admission_no,parent_name,parent_phone FROM students
                 WHERE school_id=? AND lower(trim(coalesce(name,'')))=lower(trim(?))
                   AND ((?<>'' AND lower(trim(coalesce(parent_phone,'')))=lower(trim(?)))
                     OR (?<>'' AND lower(trim(coalesce(parent_name,'')))=lower(trim(?))))
@@ -20886,6 +20886,29 @@ def enrolment_complete(request: Request, application_id: int, class_id: str = Fo
                 existing_no = _next_admission_number(cur,sid,_admission_academic_year(cur,sid))
                 cur.execute("UPDATE students SET admission_no=? WHERE id=? AND school_id=?",
                     (existing_no,int(existing_student["id"]),sid))
+            existing_parent_name = str(existing_student["parent_name"] or "").strip() or applicant_parent_name
+            existing_parent_phone = str(existing_student["parent_phone"] or "").strip() or applicant_parent_phone
+            if existing_parent_name or existing_parent_phone:
+                cur.execute("""UPDATE students SET
+                    parent_name=CASE WHEN COALESCE(trim(parent_name),'')='' THEN ? ELSE parent_name END,
+                    parent_phone=CASE WHEN COALESCE(trim(parent_phone),'')='' THEN ? ELSE parent_phone END
+                    WHERE id=? AND school_id=?""",
+                    (existing_parent_name,existing_parent_phone,int(existing_student["id"]),sid))
+                if existing_parent_phone:
+                    cur.execute("SAVEPOINT parent_access_sync")
+                    try:
+                        from app.main import _create_or_link_parent_access
+                        _create_or_link_parent_access(cur,sid,int(existing_student["id"]),existing_no,
+                            existing_parent_name,existing_parent_phone)
+                    except Exception as parent_exc:
+                        try:
+                            cur.execute("ROLLBACK TO SAVEPOINT parent_access_sync")
+                            cur.execute("RELEASE SAVEPOINT parent_access_sync")
+                        except Exception:
+                            pass
+                        print("DAVISCHOOL ADMISSION PARENT ACCESS SETUP WARNING:",repr(parent_exc),flush=True)
+                    else:
+                        cur.execute("RELEASE SAVEPOINT parent_access_sync")
             now = datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y-%m-%d %H:%M:%S")
             cur.execute("""UPDATE admission_applications SET status='enrolled',enrolled_student_id=?,admission_no=?,updated_at=?
                 WHERE id=? AND school_id=? AND enrolled_student_id IS NULL""",
@@ -20914,6 +20937,21 @@ def enrolment_complete(request: Request, application_id: int, class_id: str = Fo
         student = cur.execute("SELECT id FROM students WHERE school_id=? AND lower(admission_no)=lower(?) ORDER BY id DESC LIMIT 1",(sid,admission_no)).fetchone()
         if not student: raise RuntimeError("Student record was not created.")
         student_id = int(student["id"])
+        if str(app_row["parent_phone"] or "").strip():
+            cur.execute("SAVEPOINT parent_access_sync")
+            try:
+                from app.main import _create_or_link_parent_access
+                _create_or_link_parent_access(cur,sid,student_id,admission_no,parent_name,
+                    str(app_row["parent_phone"] or "").strip())
+            except Exception as parent_exc:
+                try:
+                    cur.execute("ROLLBACK TO SAVEPOINT parent_access_sync")
+                    cur.execute("RELEASE SAVEPOINT parent_access_sync")
+                except Exception:
+                    pass
+                print("DAVISCHOOL ADMISSION PARENT ACCESS SETUP WARNING:",repr(parent_exc),flush=True)
+            else:
+                cur.execute("RELEASE SAVEPOINT parent_access_sync")
         entry_year_row = cur.execute("SELECT MAX(CAST(year AS INTEGER)) AS entry_year FROM exams WHERE school_id=?",(sid,)).fetchone()
         entry_year = int(entry_year_row["entry_year"]) if entry_year_row and entry_year_row["entry_year"] else int(year)
         cur.execute("""INSERT INTO student_class_history
