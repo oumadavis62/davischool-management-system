@@ -717,12 +717,16 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
                 ) or "<span class='tt-session-chip muted'>Not yet broken into sessions</span>"
             ) + f"<small class='tt-req-subline'>{used} of {int(req['lessons_per_week'])} periods configured · {max(0, int(req['lessons_per_week'])-used)} remaining</small>"
         requirement_cards_by_class = {}
+        requirement_manage_modals = []
         for r in requirements:
             cid = int(r["class_id"])
             class_label = str(r["class_name"]) + (" " + str(r["stream"] or "")).rstrip()
             search_text = (class_label + " " + str(r["subject_name"]) + " " + str(r["teacher_name"])).lower()
             manage_form = f"""<form method='post' data-native-post='true' action='/app/timetable/setup/requirement' class='tt-form compact'>{hidden}<input type='hidden' name='allocation' value='{int(r['class_id'])}|{int(r['subject_id'])}|{int(r['teacher_id'])}'><label>Weekly period target<input type='number' min='1' max='30' name='lessons_per_week' value='{int(r['lessons_per_week'])}' required></label><label>Max / day<input type='number' min='1' max='10' name='max_lessons_per_day' value='{esc(r['max_lessons_per_day'] or '')}'></label><div class='tt-session-guidance'>Choose Single, Double, Triple or Quadruple for each saved session. A selected start period anchors the full consecutive block; for example, a Triple starting at Period 3 occupies Periods 3, 4 and 5.</div><div class='wide tt-session-editor' data-session-editor> <div class='tt-session-editor-head'><b>Weekly session planner</b><span>Edit every weekly occurrence independently</span></div> <div class='tt-session-list' data-session-list><div class='tt-session-row'><span class='tt-session-number'>1</span><label>Lesson type<select data-session-duration><option value='1'>Single · 1 period</option><option value='2'>Double · 2 periods</option><option value='3'>Triple · 3 periods</option><option value='4'>Quadruple · 4 periods</option></select></label><label>Start period<select data-session-period><option value=''>Auto</option>{period_start_options}</select></label><small data-session-span>Auto placement</small><button type='button' data-remove-session disabled>Remove</button><details class='tt-session-sharing-details'><summary>Optional sharing · link classes or co-teachers</summary><div class='tt-session-row-sharing'><label>Link another class<select multiple data-session-classes>{class_group_options}</select></label><label>Add co-teacher<select multiple data-session-teachers>{teacher_group_options}</select></label></div></details></div></div> <button type='button' class='tt-btn secondary' data-add-session>＋ Add another session</button> <input type='hidden' name='weekly_pattern' data-weekly-pattern value='{esc(requirement_pattern_values.get(int(r['id']), ''))}'><input type='hidden' name='weekly_links' value='{esc(requirement_links_values.get(int(r['id']), '[]'))}'> <small>Set the duration and starting period for every occurrence (Single, Double, Triple or Quadruple). Optional class and co-teacher selections link that same session across allocations.</small> </div><button class='tt-btn'>Save changes</button></form><form method='post' data-native-post='true' action='/app/timetable/setup/row-delete' onsubmit='return confirm(&quot;Delete this subject requirement?&quot;)'>{hidden}<input type='hidden' name='kind' value='requirement'><input type='hidden' name='row_id' value='{int(r['id'])}'><button class='tt-btn danger'>Delete requirement</button></form>"""
-            manage_editor = f"""<button type="button" class="tt-req-manage-button" data-req-manage-open="tt-req-manage-{int(r['id'])}">Manage</button><div class="tt-modal tt-req-manage-modal" id="tt-req-manage-{int(r['id'])}" role="dialog" aria-modal="true" aria-labelledby="tt-req-manage-title-{int(r['id'])}"><div class="tt-modal-dialog tt-req-manage-dialog"><div class="tt-modal-head"><div><span class="tt-kicker">SUBJECT REQUIREMENT</span><h3 id="tt-req-manage-title-{int(r['id'])}">Manage {esc(r['subject_name'])}</h3><p>{esc(class_label)} · {esc(r['teacher_name'])}</p></div><button type="button" class="tt-modal-close" data-req-manage-close aria-label="Close">&times;</button></div><div class="tt-req-manage-content">{manage_form}</div></div></div>"""
+            manage_button = f"""<button type="button" class="tt-req-manage-button" data-req-manage-open="tt-req-manage-{int(r['id'])}">Manage</button>"""
+            requirement_manage_modals.append(
+                f"""<div class="tt-modal tt-req-manage-modal" id="tt-req-manage-{int(r['id'])}" role="dialog" aria-modal="true" aria-labelledby="tt-req-manage-title-{int(r['id'])}"><div class="tt-modal-dialog tt-req-manage-dialog"><div class="tt-modal-head"><div><span class="tt-kicker">SUBJECT REQUIREMENT</span><h3 id="tt-req-manage-title-{int(r['id'])}">Manage {esc(r['subject_name'])}</h3><p>{esc(class_label)} · {esc(r['teacher_name'])}</p></div><button type="button" class="tt-modal-close" data-req-manage-close aria-label="Close">&times;</button></div><div class="tt-req-manage-content">{manage_form}</div></div></div>"""
+            )
             card = (
                 f"<article class='tt-req-card' data-requirement-row data-class='{cid}' "
                 f"data-subject='{int(r['subject_id'])}' data-teacher='{int(r['teacher_id'])}' "
@@ -732,9 +736,9 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
                 f"<span class='tt-req-card-teacher'>Lead teacher · {esc(r['teacher_name'])}</span></div>"
                 f"<div class='tt-req-card-load'><div class='tt-session-chip-list'>{requirement_pattern_display.get(int(r['id']), '')}</div>"
                 f"<small class='tt-req-subline'>Weekly target · {int(r['lessons_per_week'])} periods</small></div>"
-                f"<div class='tt-req-card-action'>{manage_editor}</div></div></article>"
+                f"<div class='tt-req-card-action'>{manage_button}</div></div></article>"
             )
-            requirement_cards_by_class.setdefault(cid, {"label": class_label, "cards": []})["cards"].append(card)
+            requirement_cards_by_class.setdefault(cid, {"label": class_label, "cards": []})["cards"].append((str(r["subject_name"]).casefold(), card))
             # A shared session is one timetable occurrence attended by every
             # linked class. Surface it under each linked class as well, without
             # creating a duplicate editable requirement or weekly workload.
@@ -742,8 +746,8 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
                 saved_links = json.loads(requirement_links_values.get(int(r["id"]), "[]"))
             except (TypeError, ValueError):
                 saved_links = []
-            linked_class_ids = set()
-            for session_link in saved_links:
+            linked_sessions_by_class = {}
+            for session_index, session_link in enumerate(saved_links):
                 if not isinstance(session_link, dict):
                     continue
                 for linked_id in session_link.get("classes", []):
@@ -752,15 +756,22 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
                     except (TypeError, ValueError):
                         continue
                     if linked_id != cid:
-                        linked_class_ids.add(linked_id)
-            for linked_id in sorted(linked_class_ids):
+                        linked_sessions_by_class.setdefault(linked_id, []).append(
+                            (session_index, max(1, int(session_link.get("duration", 1) or 1)))
+                        )
+            for linked_id, linked_sessions in sorted(linked_sessions_by_class.items()):
                 linked_class = next((item for item in class_records if int(item["id"]) == linked_id), None)
                 if not linked_class:
                     continue
                 linked_label = str(linked_class["name"]) + (" " + str(linked_class["stream"] or "")).rstrip()
-                # Render one ordinary-looking subject row per linked class.
-                # All per-session sharing details remain in the single Manage
-                # popup attached to the original requirement.
+                # A linked class gets one ordinary subject row, with the
+                # same session/load details as an independent requirement.
+                shared_periods = sum(duration for _, duration in linked_sessions)
+                shared_session_chips = "".join(
+                    f"<span class='tt-session-chip' title='Session {index + 1}: {duration} period(s)'>"
+                    f"{'Single' if duration == 1 else ('Double' if duration == 2 else ('Triple' if duration == 3 else str(duration) + ' periods'))}"
+                    f"</span>" for index, duration in linked_sessions
+                )
                 shared_card = (
                     f"<article class='tt-req-card' data-requirement-row data-class='{linked_id}' "
                     f"data-subject='{int(r['subject_id'])}' data-teacher='{int(r['teacher_id'])}' "
@@ -768,12 +779,14 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
                     f"<div class='tt-req-card-main'><div class='tt-req-card-title'>"
                     f"<span class='tt-req-card-subject'>{esc(r['subject_name'])}</span>"
                     f"<span class='tt-req-card-teacher'>Lead teacher · {esc(r['teacher_name'])}</span></div>"
-                    f"<div class='tt-req-card-action'><button type='button' class='tt-req-manage-button' data-req-manage-open='tt-req-manage-{int(r['id'])}'>Manage</button></div></div></article>"
+                    f"<div class='tt-req-card-load'><div class='tt-session-chip-list'>{shared_session_chips}</div>"
+                    f"<small class='tt-req-subline'>Weekly target · {shared_periods} periods</small></div>"
+                    f"<div class='tt-req-card-action'>{manage_button}</div></div></article>"
                 )
-                requirement_cards_by_class.setdefault(linked_id, {"label": linked_label, "cards": []})["cards"].append(shared_card)
+                requirement_cards_by_class.setdefault(linked_id, {"label": linked_label, "cards": []})["cards"].append((str(r["subject_name"]).casefold(), shared_card))
         requirement_rows = "".join(
             f"<section class='tt-req-class-group' data-requirement-group><header><b>{esc(group['label'])}</b>"
-            f"<span>{len(group['cards'])} subject(s)</span></header>{''.join(group['cards'])}</section>"
+            f"<span>{len(group['cards'])} subject(s)</span></header>{''.join(card_html for _, card_html in sorted(group['cards'], key=lambda item: item[0]))}</section>"
             for _, group in sorted(requirement_cards_by_class.items(), key=lambda item: item[1]["label"].lower())
         ) or "<div class='tt-req-empty'>No weekly subject requirements configured yet. Use <b>Add subject requirement</b> to begin.</div>"
         requirement_class_filters = "".join(f"<option value='{int(cid)}' {'selected' if class_id and int(cid)==int(class_id) else ''}>{esc(group['label'])}</option>" for cid,group in sorted(requirement_cards_by_class.items(), key=lambda x:x[1]['label'].lower()))
@@ -1116,6 +1129,7 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
    </div>
    <div class='tt-req-results-head'><div><h3>Configured weekly requirements</h3><p>Open Manage to edit the weekly target and session pattern.</p></div><span class='tt-req-results-total'>{len(requirements)} records</span></div>
    <div class='tt-req-groups'>{requirement_rows}</div>
+   {''.join(requirement_manage_modals)}
    <div class='tt-req-pagination'><span id='tt-req-page-info'></span><div><button type='button' class='tt-btn secondary' id='tt-req-prev'>← Previous</button><button type='button' class='tt-btn secondary' id='tt-req-next'>Next →</button></div></div>
   </div>
  </div>
