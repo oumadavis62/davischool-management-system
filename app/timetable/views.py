@@ -134,15 +134,21 @@ def get_timetable_view(connection: Any, school_id: int, profile_id: int, view_ty
         if all_teacher_ids:
             marks = ",".join("?" for _ in all_teacher_ids)
             teacher_rows = cur.execute(
-                "SELECT id,name FROM teachers WHERE school_id=? AND id IN (" + marks + ")",
+                "SELECT id,name,teacher_initials FROM teachers WHERE school_id=? AND id IN (" + marks + ")",
                 (school_id, *sorted(all_teacher_ids)),
             ).fetchall()
             names = {int(row["id"]): str(row["name"]) for row in teacher_rows}
+            initials = {}
+            for row in teacher_rows:
+                value = str(row["teacher_initials"] or "").strip().upper()
+                if not value:
+                    parts = [part for part in str(row["name"] or "").split() if part]
+                    value = "".join(part[0] for part in (parts[:1] + (parts[-1:] if len(parts) > 1 else []))).upper()[:4] or "—"
+                initials[int(row["id"])] = value
             for lesson in lessons:
-                lesson["teacher_name"] = ", ".join(
-                    names[teacher_id] for teacher_id in lesson_teacher_ids[int(lesson["id"])]
-                    if teacher_id in names
-                ) or str(lesson.get("teacher_name") or "")
+                ids = lesson_teacher_ids[int(lesson["id"])]
+                lesson["teacher_name"] = ", ".join(names[teacher_id] for teacher_id in ids if teacher_id in names) or str(lesson.get("teacher_name") or "")
+                lesson["teacher_initials"] = "/".join(initials[teacher_id] for teacher_id in ids if teacher_id in initials) or str(lesson.get("teacher_initials") or "—")
     advanced_sessions = _load_advanced_sessions(connection, cur, school_id, profile_id, view_type, target_id)
     weekend_sessions = [row for row in advanced_sessions if row["is_weekend"]]
     remedial_sessions = [row for row in advanced_sessions if row["is_remedial"]]
