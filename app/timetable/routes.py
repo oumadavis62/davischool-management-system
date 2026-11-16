@@ -768,8 +768,6 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
                     f"<div class='tt-req-card-main'><div class='tt-req-card-title'>"
                     f"<span class='tt-req-card-subject'>{esc(r['subject_name'])}</span>"
                     f"<span class='tt-req-card-teacher'>Lead teacher · {esc(r['teacher_name'])}</span></div>"
-                    f"<div class='tt-req-card-load'><div class='tt-session-chip-list'>"
-                    f"<span class='tt-session-chip'>Shared subject</span></div></div>"
                     f"<div class='tt-req-card-action'><button type='button' class='tt-req-manage-button' data-req-manage-open='tt-req-manage-{int(r['id'])}'>Manage</button></div></div></article>"
                 )
                 requirement_cards_by_class.setdefault(linked_id, {"label": linked_label, "cards": []})["cards"].append(shared_card)
