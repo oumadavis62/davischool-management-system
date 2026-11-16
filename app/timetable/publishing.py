@@ -530,6 +530,7 @@ def validate_timetable_for_publication(connection: Any, school_id: int, profile_
             errors.append("A scheduled lesson uses an inactive or invalid room.")
         placements.append({
             "class_id":key[0],"subject_id":key[1],"teacher_id":key[2],"room_id":room_id,
+            "lesson_group":str(lesson["lesson_group"] or ""),
             "class_ids":[key[0]],"learner_ids":[],"teacher_ids":[key[2]],
             "day_id":day_id,"day_key":"day:"+str(day_id),
             "start_time":str(span[0]["start_time"]),"end_time":str(span[-1]["end_time"]),
@@ -647,11 +648,13 @@ def validate_timetable_for_publication(connection: Any, school_id: int, profile_
                 continue
             if set(first["class_ids"]) & set(second["class_ids"]):
                 errors.append("Two lessons overlap for the same class.")
-            if set(first["teacher_ids"]) & set(second["teacher_ids"]):
+            same_linked_placement = bool(first.get("lesson_group")) and first.get("lesson_group") == second.get("lesson_group")
+            if not same_linked_placement and set(first["teacher_ids"]) & set(second["teacher_ids"]):
                 errors.append("A teacher is assigned to overlapping lessons.")
             if set(first.get("learner_ids", [])) & set(second.get("learner_ids", [])):
                 errors.append("A learner is assigned to overlapping sessions.")
-            if first["room_id"] is not None and second["room_id"] is not None and first["room_id"] == second["room_id"]:
+            if (not same_linked_placement and first["room_id"] is not None
+                    and second["room_id"] is not None and first["room_id"] == second["room_id"]):
                 errors.append("A room is assigned to overlapping lessons.")
     # One combined placement may contain several linked classes; that is not
     # a self-conflict. Separate placements still obey teacher spacing rules.
