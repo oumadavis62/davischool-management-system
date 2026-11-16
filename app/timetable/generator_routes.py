@@ -59,7 +59,27 @@ def register_timetable_generator_routes(app, get_db, get_school_obj, module_page
             pid = int(selected["id"])
             days = cur.execute("SELECT COUNT(*) AS total FROM ds_timetable_days WHERE school_id=? AND profile_id=? AND is_instructional=1", (school_id,pid)).fetchone()["total"]
             periods = cur.execute("SELECT COUNT(*) AS total FROM ds_timetable_periods WHERE school_id=? AND profile_id=? AND period_type='lesson'", (school_id,pid)).fetchone()["total"]
-            requirements = cur.execute("SELECT COUNT(*) AS total FROM ds_timetable_class_requirements WHERE school_id=? AND profile_id=?", (school_id,pid)).fetchone()["total"]
+            base_requirements = cur.execute("SELECT id,class_id FROM ds_timetable_class_requirements WHERE school_id=? AND profile_id=?", (school_id,pid)).fetchall()
+            linked_requirement_keys = set()
+            for requirement in base_requirements:
+                linked_patterns = cur.execute(
+                    """SELECT linked_class_ids_json FROM ds_timetable_requirement_patterns
+                       WHERE school_id=? AND profile_id=? AND requirement_id=?""",
+                    (school_id, pid, int(requirement["id"])),
+                ).fetchall()
+                for pattern in linked_patterns:
+                    try:
+                        linked_ids = json.loads(pattern["linked_class_ids_json"] or "[]")
+                    except (TypeError, ValueError):
+                        linked_ids = []
+                    for linked_id in linked_ids if isinstance(linked_ids, list) else []:
+                        try:
+                            linked_class_id = int(linked_id)
+                        except (TypeError, ValueError):
+                            continue
+                        if linked_class_id != int(requirement["class_id"]):
+                            linked_requirement_keys.add((int(requirement["id"]), linked_class_id))
+            requirements = len(base_requirements) + len(linked_requirement_keys)
             advanced_requirements = cur.execute("""SELECT COUNT(*) AS total FROM ds_timetable_scheduling_requirements
                 WHERE school_id=? AND profile_id=? AND is_active=1""",
                 (school_id,pid)).fetchone()["total"]
