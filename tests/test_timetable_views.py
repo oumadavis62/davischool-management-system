@@ -181,6 +181,16 @@ class TimetableViewTests(unittest.TestCase):
         self.assertEqual(lesson_cell["lessons"][0]["class_name"], "Grade 7")
         self.assertEqual(lesson_cell["lessons"][0]["stream"], "Blue")
 
+    def test_teacher_export_groups_linked_classes_in_one_cell(self):
+        result = get_timetable_view(self.db, 1, self.profile_id, "teacher", 10)
+        lead = dict(result["lessons"][0], lesson_group="auto:55:1", class_initials="9B", class_name="Grade 9", stream="Blue")
+        linked = dict(result["lessons"][0], id=999, class_id=21, lesson_group="auto:55:1", class_initials="9G", class_name="Grade 9", stream="Green")
+        result["lessons"] = [lead, linked]
+        layout = build_export_grid(result, "teacher")
+        lesson_cell = next(cell for cell in layout["rows"][0]["cells"] if cell["kind"] == "lesson")
+        self.assertEqual(len(lesson_cell["lessons"]), 1)
+        self.assertEqual(lesson_cell["lessons"][0]["class_initials"], "9B/9G")
+
     def test_room_export_grid_uses_resource_rows(self):
         result = get_timetable_view(self.db, 1, self.profile_id, "room", self.room_id)
         layout = build_export_grid(result, "room")
