@@ -1416,12 +1416,14 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
         for participating_class_id in participating_class_ids:
             cur.execute(
                 """INSERT INTO ds_timetable_lessons
-                   (school_id,profile_id,class_id,subject_id,teacher_id,room_id,day_id,period_id,duration_periods,lesson_group,generation_run_id,status,created_by,created_at,updated_at)
-                   VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                   (school_id,profile_id,class_id,subject_id,teacher_id,room_id,day_id,period_id,duration_periods,lesson_group,co_teacher_ids_json,generation_run_id,status,created_by,created_at,updated_at)
+                   VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                 (
                     school_id, profile_id, participating_class_id, placement["subject_id"], placement["teacher_id"],
                     placement["room_id"], placement["day_id"], placement["period_id"], placement["duration"],
-                    lesson_group, run_id, "scheduled", created_by, now, now,
+                    lesson_group,
+                    json.dumps([int(value) for value in placement.get("teacher_ids", []) if int(value) > 0 and int(value) != int(placement["teacher_id"])]),
+                    run_id, "scheduled", created_by, now, now,
                 ),
             )
             lesson_id = int(cur.lastrowid or 0)
