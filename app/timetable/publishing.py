@@ -312,6 +312,47 @@ def validate_timetable_for_publication(connection: Any, school_id: int, profile_
         "SELECT * FROM ds_timetable_class_requirements WHERE school_id=? AND profile_id=?",
         (school_id, profile_id),
     ).fetchall()
+    # A linked class is an independent class-subject requirement even though
+    # its shared session pattern is stored against the lead requirement.
+    linked_requirement_keys = set()
+    linked_requirement_targets = {}
+    for requirement in requirements:
+        rid = int(requirement["id"])
+        patterns = cur.execute(
+            """SELECT linked_class_ids_json FROM ds_timetable_requirement_patterns
+               WHERE school_id=? AND profile_id=? AND requirement_id=?""",
+            (school_id, profile_id, rid),
+        ).fetchall()
+        linked_class_ids = set()
+        for pattern in patterns:
+            try:
+                linked_class_ids.update(
+                    int(value) for value in json.loads(pattern["linked_class_ids_json"] or "[]")
+                    if str(value).isdigit()
+                )
+            except (TypeError, ValueError):
+                continue
+        linked_class_ids.discard(int(requirement["class_id"]))
+        for linked_class_id in linked_class_ids:
+            linked_requirement_keys.add((rid, linked_class_id))
+    linked_settings = cur.execute(
+        """SELECT lead_requirement_id,linked_class_id,lessons_per_week
+           FROM ds_timetable_linked_requirement_settings
+           WHERE school_id=? AND profile_id=?""",
+        (school_id, profile_id),
+    ).fetchall()
+    linked_settings_map = {
+        (int(row["lead_requirement_id"]), int(row["linked_class_id"])): row
+        for row in linked_settings
+    }
+    for rid, linked_class_id in linked_requirement_keys:
+        lead = next((row for row in requirements if int(row["id"]) == rid), None)
+        setting = linked_settings_map.get((rid, linked_class_id))
+        linked_requirement_targets[(rid, linked_class_id)] = (
+            max(0, int(setting["lessons_per_week"] or 0))
+            if setting is not None and setting["lessons_per_week"] is not None
+            else max(0, int(lead["lessons_per_week"] or 0)) if lead is not None else 0
+        )
     advanced_requirements = cur.execute(
         """SELECT * FROM ds_timetable_scheduling_requirements
            WHERE school_id=? AND profile_id=? AND is_active=1 AND """ + advanced_layer_filter + " ORDER BY id",
@@ -396,6 +437,15 @@ def validate_timetable_for_publication(connection: Any, school_id: int, profile_
         (int(r["class_id"]),int(r["subject_id"]),int(r["teacher_id"])): r
         for r in requirements
     }
+    linked_requirement_period_targets = {}
+    for rid, linked_class_id in linked_requirement_keys:
+        lead = next((row for row in requirements if int(row["id"]) == rid), None)
+        if lead is None:
+            continue
+        key = (linked_class_id, int(lead["subject_id"]), int(lead["teacher_id"]))
+        # Linked weekly targets are stored as periods, matching the linked
+        # requirement workload shown in Timetable Setup.
+        linked_requirement_period_targets[key] = linked_requirement_targets[(rid, linked_class_id)]
     if is_main_profile:
         for key in sorted(allocation_keys - set(requirement_map) - advanced_coverage):
             errors.append("A current class/subject/teacher allocation is missing its weekly lesson requirement.")
@@ -581,6 +631,14 @@ def validate_timetable_for_publication(connection: Any, school_id: int, profile_
             count > max_per_day for daily_key, count in daily_counts.items() if daily_key[:3] == key
         ):
             errors.append("A subject exceeds its configured maximum number of lessons on a day.")
+    for key, expected in linked_requirement_period_targets.items():
+        actual = lesson_counts.get(key, 0)
+        if actual != expected:
+            errors.append(
+                "A linked class weekly requirement is not fully scheduled "
+                "(class ID %s, subject ID %s: %s of %s required periods)."
+                % (key[0], key[1], actual, expected)
+            )
     for i, first in enumerate(placements):
         for second in placements[i+1:]:
             if first["day_key"] != second["day_key"]:
@@ -619,13 +677,21 @@ def validate_timetable_for_publication(connection: Any, school_id: int, profile_
         # Readiness metrics use occupied periods, while the validation above
         # continues to compare lesson occurrences against weekly requirements.
         "scheduled_lessons": len(lessons) + len(advanced_sessions),
-        "required_lessons": sum(int(r["lessons_per_week"] or 0) for r in requirements) + advanced_required_lessons,
+        "required_lessons": (
+            sum(int(r["lessons_per_week"] or 0) for r in requirements)
+            + len(linked_requirement_keys)
+            + advanced_required_lessons
+        ),
         "scheduled_periods": sum(int(lesson["duration_periods"] or 1) for lesson in lessons) + sum(advanced_session_durations),
-        "required_periods": sum(
-            int(r["lessons_per_week"] or 0) * int(r["duration_periods"] or 1)
-            for r in requirements
-        ) + advanced_required_periods,
-        "requirements": len(requirements) + len(advanced_requirements),
+        "required_periods": (
+            sum(
+                int(r["lessons_per_week"] or 0) * int(r["duration_periods"] or 1)
+                for r in requirements
+            )
+            + sum(linked_requirement_targets.values())
+            + advanced_required_periods
+        ),
+        "requirements": len(requirements) + len(linked_requirement_keys) + len(advanced_requirements),
     }
 
 
