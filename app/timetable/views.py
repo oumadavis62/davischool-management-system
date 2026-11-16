@@ -69,11 +69,13 @@ def get_timetable_view(connection: Any, school_id: int, profile_id: int, view_ty
         title = str(target["name"]) + " — learner timetable"
     elif view_type == "teacher":
         target = cur.execute(
-            "SELECT id,name FROM teachers WHERE id=? AND school_id=?",
+            """SELECT id,name FROM teachers
+               WHERE id=? AND school_id=?
+                 AND lower(trim(COALESCE(role,'')))='teacher'""",
             (target_id, school_id),
         ).fetchone()
         if not target:
-            raise TimetableSetupError("Select a teacher belonging to this school.")
+            raise TimetableSetupError("Select a staff member designated as Teacher in the Staff List.")
         where = " AND l.teacher_id=?"
         params.append(target_id)
         title = str(target["name"]) + " — teacher timetable"
