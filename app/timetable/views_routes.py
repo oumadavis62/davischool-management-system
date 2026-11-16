@@ -44,7 +44,14 @@ def register_timetable_view_routes(app, get_db, get_school_obj, module_page):
         ).fetchall()
         selected = (next((p for p in profiles if int(p["id"]) == int(profile_id)), None) or (profiles[0] if profiles else None))
         classes = cur.execute("SELECT id,name,stream FROM classes WHERE school_id=? ORDER BY name,stream", (school_id,)).fetchall()
-        teachers = cur.execute("SELECT id,name FROM teachers WHERE school_id=? ORDER BY name", (school_id,)).fetchall()
+        # Only staff explicitly designated as Teacher may appear in the
+        # teacher timetable selector. Other staff roles are not teacher views.
+        teachers = cur.execute(
+            """SELECT id,name FROM teachers
+               WHERE school_id=? AND lower(trim(COALESCE(role,'')))='teacher'
+               ORDER BY name""",
+            (school_id,),
+        ).fetchall()
         rooms = cur.execute("SELECT id,name,room_code FROM ds_timetable_rooms WHERE school_id=? AND is_active=1 ORDER BY name", (school_id,)).fetchall()
         con.close()
 
