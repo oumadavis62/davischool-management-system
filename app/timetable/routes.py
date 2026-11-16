@@ -834,9 +834,9 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
                         <small data-session-span>Auto placement</small><button type="button" data-remove-session disabled>Remove</button>
                         <details class="tt-session-sharing-details"><summary>Optional sharing · link classes or co-teachers</summary><div class="tt-session-row-sharing"><label>Link another class<select multiple data-session-classes>{class_group_options}</select></label><label>Add co-teacher<select multiple data-session-teachers>{teacher_group_options}</select></label></div></details>
                       </div></div>
-                      <button type="button" class="tt-btn secondary" data-add-session>＋ Add another occurrence</button>
+                      <button type="button" class="tt-btn secondary" data-add-session>＋ Add another session</button>
                       <input type="hidden" name="weekly_pattern" data-weekly-pattern value="{esc(linked_pattern_value)}"><input type="hidden" name="weekly_links" value="{esc(linked_links_value)}"><input type="hidden" name="pattern_mode" value="replace">
-                      <p class="tt-session-instructions">Set each occurrence's duration until the assigned total matches the weekly target. Leave start periods on Automatic if you have no preference. Optional class and co-teacher links apply to each occurrence.</p>
+                      <small>Set the duration and starting period for every occurrence (Single, Double, Triple or Quadruple). Optional class and co-teacher selections link that same session across allocations.</small>
                     </div>
                     <button class="tt-btn">Save changes</button></form></div></div></div>"""
                 )
