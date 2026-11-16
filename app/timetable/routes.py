@@ -734,12 +734,44 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
                 f"<div class='tt-req-card-action'>{manage_editor}</div></div></article>"
             )
             requirement_cards_by_class.setdefault(cid, {"label": class_label, "cards": []})["cards"].append(card)
+            # A shared session is one timetable occurrence attended by every
+            # linked class. Surface it under each linked class as well, without
+            # creating a duplicate editable requirement or weekly workload.
+            try:
+                saved_links = json.loads(requirement_links_values.get(int(r["id"]), "[]"))
+            except (TypeError, ValueError):
+                saved_links = []
+            for session_index, session_link in enumerate(saved_links):
+                for linked_id in session_link.get("classes", []) if isinstance(session_link, dict) else []:
+                    try:
+                        linked_id = int(linked_id)
+                    except (TypeError, ValueError):
+                        continue
+                    if linked_id == cid:
+                        continue
+                    linked_class = next((item for item in class_records if int(item["id"]) == linked_id), None)
+                    if not linked_class:
+                        continue
+                    linked_label = str(linked_class["name"]) + (" " + str(linked_class["stream"] or "")).rstrip()
+                    shared_card = (
+                        f"<article class='tt-req-card tt-req-shared-card' data-requirement-row data-class='{linked_id}' "
+                        f"data-subject='{int(r['subject_id'])}' data-teacher='{int(r['teacher_id'])}' "
+                        f"data-search='{esc((linked_label + ' ' + str(r['subject_name']) + ' ' + str(r['teacher_name']) + ' shared').lower())}'>"
+                        f"<div class='tt-req-card-main'><div class='tt-req-card-title'>"
+                        f"<span class='tt-req-card-subject'>{esc(r['subject_name'])}</span>"
+                        f"<span class='tt-req-card-teacher'>Shared lesson · {esc(r['teacher_name'])}</span>"
+                        f"<small class='tt-req-subline'>Linked with {esc(class_label)} · same periods and teacher</small></div>"
+                        f"<div class='tt-req-card-load'><span class='tt-session-chip'>"
+                        f"{int(session_link.get('duration', 1))} period(s) · Session {session_index + 1}</span></div>"
+                        f"<div class='tt-req-card-action'><span class='tt-session-chip muted'>Shared allocation</span></div></div></article>"
+                    )
+                    requirement_cards_by_class.setdefault(linked_id, {"label": linked_label, "cards": []})["cards"].append(shared_card)
         requirement_rows = "".join(
             f"<section class='tt-req-class-group' data-requirement-group><header><b>{esc(group['label'])}</b>"
             f"<span>{len(group['cards'])} subject(s)</span></header>{''.join(group['cards'])}</section>"
             for _, group in sorted(requirement_cards_by_class.items(), key=lambda item: item[1]["label"].lower())
         ) or "<div class='tt-req-empty'>No weekly subject requirements configured yet. Use <b>Add subject requirement</b> to begin.</div>"
-        requirement_class_filters = "".join(f"<option value='{int(cid)}' {'selected' if class_id and int(cid)==int(class_id) else ''}>{esc(name)}</option>" for cid,name in sorted({(int(r['class_id']), str(r['class_name'])+' '+str(r['stream'] or '')) for r in requirements}, key=lambda x:x[1].lower()))
+        requirement_class_filters = "".join(f"<option value='{int(cid)}' {'selected' if class_id and int(cid)==int(class_id) else ''}>{esc(group['label'])}</option>" for cid,group in sorted(requirement_cards_by_class.items(), key=lambda x:x[1]['label'].lower()))
         requirement_subject_filters = "".join(f"<option value='{int(sid)}'>{esc(name)}</option>" for sid,name in sorted({(int(r['subject_id']), str(r['subject_name'])) for r in requirements}, key=lambda x:x[1].lower()))
         requirement_teacher_filters = "".join(f"<option value='{int(tid)}'>{esc(name)}</option>" for tid,name in sorted({(int(r['teacher_id']), str(r['teacher_name'])) for r in requirements}, key=lambda x:x[1].lower()))
         class_limit_rows = "".join(
