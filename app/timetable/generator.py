@@ -235,9 +235,44 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
         for r in requirements
         if (int(r["class_id"]), int(r["subject_id"]), int(r["teacher_id"])) not in normalized_coverage
     }
+    # A legacy linked-class session is stored against its lead requirement,
+    # but it still covers a distinct class/subject/teacher allocation for
+    # every linked class. Keep those allocation keys separate from the lead
+    # key so completeness checks do not mistake the linked allocation for a
+    # missing weekly requirement.
+    linked_allocation_keys = set()
+    for requirement in requirements:
+        linked_patterns = cur.execute(
+            """SELECT linked_class_ids_json FROM ds_timetable_requirement_patterns
+               WHERE school_id=? AND profile_id=? AND requirement_id=?""",
+            (school_id, profile_id, int(requirement["id"])),
+        ).fetchall()
+        for pattern in linked_patterns:
+            try:
+                linked_class_ids = json.loads(pattern["linked_class_ids_json"] or "[]")
+            except (TypeError, ValueError):
+                linked_class_ids = []
+            for linked_class_id in linked_class_ids if isinstance(linked_class_ids, list) else []:
+                try:
+                    linked_key = (
+                        int(linked_class_id),
+                        int(requirement["subject_id"]),
+                        int(requirement["teacher_id"]),
+                    )
+                except (TypeError, ValueError):
+                    continue
+                if linked_key[0] > 0 and linked_key != (
+                    int(requirement["class_id"]),
+                    int(requirement["subject_id"]),
+                    int(requirement["teacher_id"]),
+                ):
+                    linked_allocation_keys.add(linked_key)
+    # Only recognise a linked requirement as satisfying completeness when
+    # the matching class/subject/teacher allocation actually exists.
+    linked_allocation_keys.intersection_update(allocation_keys)
     if not requirements and not normalized_coverage:
         raise TimetableSetupError("Configure at least one weekly lesson requirement or shared instructional session before automatic generation.")
-    missing_requirements = allocation_keys - requirement_keys if is_main_profile else set()
+    missing_requirements = allocation_keys - requirement_keys - linked_allocation_keys if is_main_profile else set()
     stale_requirements = requirement_keys - allocation_keys if is_main_profile else set()
     if missing_requirements:
         raise TimetableSetupError(
