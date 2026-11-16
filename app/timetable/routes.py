@@ -973,7 +973,7 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
                     else int(lead_req["lessons_per_week"] or 0)
                 )
                 linked_targets_by_allocation[
-                    (linked_id, int(lead_req["subject_id"]), int(lead_req["teacher_id"]))
+                    (linked_id, int(lead_req["subject_id"]))
                 ] = linked_target
         limits_by_class = {int(x["class_id"]): x for x in class_limits}
         allocation_groups = {}
@@ -985,10 +985,11 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
             })
             allocation_key = (cid, int(a["subject_id"]), int(a["teacher_id"]))
             req = requirements_by_allocation.get(allocation_key)
-            is_linked_configured = allocation_key in linked_targets_by_allocation
+            linked_allocation_key = (cid, int(a["subject_id"]))
+            is_linked_configured = linked_allocation_key in linked_targets_by_allocation
             lessons = (
                 int(req["lessons_per_week"]) if req
-                else int(linked_targets_by_allocation[allocation_key]) if is_linked_configured
+                else int(linked_targets_by_allocation[linked_allocation_key]) if is_linked_configured
                 else 0
             )
             is_configured = req is not None or is_linked_configured
