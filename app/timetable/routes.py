@@ -749,6 +749,33 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
             (int(setting["lead_requirement_id"]), int(setting["linked_class_id"])): setting
             for setting in linked_requirement_settings_rows
         }
+        # Linked class rows are independent class-subject requirements for
+        # overview totals, even though their shared sessions are stored against
+        # the single lead requirement.
+        linked_requirement_keys = set()
+        linked_weekly_periods = 0
+        for req in requirements:
+            try:
+                saved_links = json.loads(requirement_links_values.get(int(req["id"]), "[]"))
+            except (TypeError, ValueError):
+                saved_links = []
+            linked_for_requirement = set()
+            for session in saved_links:
+                if not isinstance(session, dict):
+                    continue
+                try:
+                    duration = max(1, int(session.get("duration", 1) or 1))
+                    class_ids = {int(value) for value in session.get("classes", []) if str(value).isdigit()}
+                except (TypeError, ValueError):
+                    continue
+                linked_weekly_periods += duration * len(class_ids)
+                linked_for_requirement.update(class_ids)
+            linked_requirement_keys.update((int(req["id"]), class_id) for class_id in linked_for_requirement)
+        configured_requirement_count = len(requirements) + len(linked_requirement_keys)
+        configured_weekly_periods = (
+            sum(int(item["lessons_per_week"] or 0) * int(item["duration_periods"] or 1) for item in requirements)
+            + linked_weekly_periods
+        )
         requirement_cards_by_class = {}
         requirement_manage_modals = []
         for r in requirements:
@@ -1202,9 +1229,9 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
  </div>
  {bulk_requirement_form}
  <div class='tt-req-overview'>
-  <div><span>Configured requirements</span><b>{len(requirements)}</b><small>Class · subject allocations</small></div>
+  <div><span>Configured requirements</span><b>{configured_requirement_count}</b><small>Class · subject allocations, including linked classes</small></div>
   <div><span>Allocated classes</span><b>{len(set(int(x['class_id']) for x in requirements))}</b><small>With weekly requirements</small></div>
-  <div><span>Weekly periods</span><b>{sum(int(x['lessons_per_week'] or 0)*int(x['duration_periods'] or 1) for x in requirements) + sum(int(session.get('duration', 1) or 1) * len({int(linked_id) for linked_id in session.get('classes', []) if str(linked_id).isdigit()}) for links_json in requirement_links_values.values() for session in (json.loads(links_json or '[]') if isinstance(links_json, str) else []) if isinstance(session, dict))}</b><small>Configured class period load, including shared classes</small></div>
+  <div><span>Weekly periods</span><b>{configured_weekly_periods}</b><small>Configured class period load, including shared classes</small></div>
   <div><span>Teachers involved</span><b>{len(set(int(x['teacher_id']) for x in requirements))}</b><small>Lead allocations</small></div>
  </div>
  <div class='tt-req-main-layout'>
