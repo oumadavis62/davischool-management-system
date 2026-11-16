@@ -142,6 +142,7 @@ _TABLES = (
         period_id INTEGER NOT NULL,
         duration_periods INTEGER NOT NULL DEFAULT 1,
         lesson_group TEXT,
+        co_teacher_ids_json TEXT NOT NULL DEFAULT '[]',
         generation_run_id INTEGER,
         status TEXT NOT NULL DEFAULT 'scheduled',
         created_by TEXT,
@@ -553,6 +554,8 @@ def ensure_timetable_schema(connection: Any) -> None:
     }
     if "generation_run_id" not in lesson_columns:
         cursor.execute("ALTER TABLE ds_timetable_lessons ADD COLUMN generation_run_id INTEGER")
+    if "co_teacher_ids_json" not in lesson_columns:
+        cursor.execute("ALTER TABLE ds_timetable_lessons ADD COLUMN co_teacher_ids_json TEXT NOT NULL DEFAULT '[]'")
     for statement in _INDEXES:
         cursor.execute(statement)
     connection.commit()
