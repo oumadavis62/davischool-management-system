@@ -76,8 +76,8 @@ def get_timetable_view(connection: Any, school_id: int, profile_id: int, view_ty
         ).fetchone()
         if not target:
             raise TimetableSetupError("Select a staff member designated as Teacher in the Staff List.")
-        where = " AND l.teacher_id=?"
-        params.append(target_id)
+        where = " AND (l.teacher_id=? OR l.co_teacher_ids_json LIKE ?)"
+        params.extend((target_id, '%"' + str(int(target_id)) + '"%'))
         title = str(target["name"]) + " — teacher timetable"
     elif view_type == "room":
         target = cur.execute(
@@ -108,6 +108,29 @@ def get_timetable_view(connection: Any, school_id: int, profile_id: int, view_ty
     # Normalize database rows to mappings: the view renderer uses .get()
     # for optional lesson fields, which sqlite3.Row does not implement.
     lessons = [dict(row) for row in lessons]
+    if lessons:
+        lesson_teacher_ids = {}
+        all_teacher_ids = set()
+        for lesson in lessons:
+            try:
+                co_ids = [int(value) for value in __import__("json").loads(lesson.get("co_teacher_ids_json") or "[]")]
+            except (TypeError, ValueError):
+                co_ids = []
+            ids = list(dict.fromkeys([int(lesson["teacher_id"]), *[value for value in co_ids if value > 0]]))
+            lesson_teacher_ids[int(lesson["id"])] = ids
+            all_teacher_ids.update(ids)
+        if all_teacher_ids:
+            marks = ",".join("?" for _ in all_teacher_ids)
+            teacher_rows = cur.execute(
+                "SELECT id,name FROM teachers WHERE school_id=? AND id IN (" + marks + ")",
+                (school_id, *sorted(all_teacher_ids)),
+            ).fetchall()
+            names = {int(row["id"]): str(row["name"]) for row in teacher_rows}
+            for lesson in lessons:
+                lesson["teacher_name"] = ", ".join(
+                    names[teacher_id] for teacher_id in lesson_teacher_ids[int(lesson["id"])]
+                    if teacher_id in names
+                ) or str(lesson.get("teacher_name") or "")
     advanced_sessions = _load_advanced_sessions(connection, cur, school_id, profile_id, view_type, target_id)
     weekend_sessions = [row for row in advanced_sessions if row["is_weekend"]]
     remedial_sessions = [row for row in advanced_sessions if row["is_remedial"]]
