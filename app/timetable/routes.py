@@ -458,6 +458,17 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
         school_id = int(school["id"])
         con = get_db()
         cur = con.cursor()
+        cur.execute("""CREATE TABLE IF NOT EXISTS ds_timetable_linked_requirement_settings (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            school_id INTEGER NOT NULL,
+            profile_id INTEGER NOT NULL,
+            lead_requirement_id INTEGER NOT NULL,
+            linked_class_id INTEGER NOT NULL,
+            lessons_per_week INTEGER NOT NULL DEFAULT 5,
+            max_lessons_per_day INTEGER,
+            UNIQUE(school_id, profile_id, lead_requirement_id, linked_class_id)
+        )""")
+        con.commit()
         profiles = cur.execute(
             "SELECT * FROM ds_timetable_profiles WHERE school_id=? AND status IN ('draft','pending_approval','published') ORDER BY academic_year DESC,term,id DESC",
             (school_id,),
@@ -793,7 +804,7 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
                     f"</span>" for index, duration in linked_sessions
                 )
                 linked_setting = linked_requirement_settings.get((int(r["id"]), linked_id))
-                linked_target = int(linked_setting["lessons_per_week"]) if linked_setting else max(5, shared_periods)
+                linked_target = int(linked_setting["lessons_per_week"]) if linked_setting else shared_periods
                 linked_max_day = linked_setting["max_lessons_per_day"] if linked_setting else None
                 linked_modal_id = f"tt-req-linked-{int(r['id'])}-{linked_id}"
                 linked_manage_button = f"""<button type="button" class="tt-req-manage-button" data-req-manage-open="{linked_modal_id}">Manage</button>"""
