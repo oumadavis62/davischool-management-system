@@ -814,13 +814,8 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
                 linked_max_day = linked_setting["max_lessons_per_day"] if linked_setting else r["max_lessons_per_day"]
                 linked_modal_id = f"tt-req-linked-{int(r['id'])}-{linked_id}"
                 linked_manage_button = f"""<button type="button" class="tt-req-manage-button" data-req-manage-open="{linked_modal_id}">Manage</button>"""
-                linked_session_rows = "".join(
-                    f"<div class='tt-session-row'><div class='tt-session-row-main'><span class='tt-session-number'>{session_index + 1}</span>"
-                    f"<label>Lesson type<input type='text' value='{('Single' if duration == 1 else ('Double' if duration == 2 else ('Triple' if duration == 3 else str(duration) + ' periods')))} · {duration} period(s)' readonly></label>"
-                    f"<label>Start period<input type='text' value='{('P' + str(period_no)) if period_no else 'Auto'}' readonly></label>"
-                    f"<label class='tt-check'><input type='checkbox' name='linked_session_indices' value='{session_index}' checked> Keep linked to this class</label></div></div>"
-                    for session_index, duration, period_no in linked_sessions
-                )
+                linked_pattern_value = requirement_pattern_values.get(int(r["id"]), "")
+                linked_links_value = requirement_links_values.get(int(r["id"]), "[]")
                 requirement_manage_modals.append(
                     f\"\"\"<div class="tt-modal tt-req-manage-modal" id="{linked_modal_id}" role="dialog" aria-modal="true" aria-labelledby="{linked_modal_id}-title">
                     <div class="tt-modal-dialog tt-req-manage-dialog"><div class="tt-modal-head"><div><span class="tt-kicker">SUBJECT REQUIREMENT</span>
@@ -829,11 +824,20 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
                     <div class="tt-req-manage-content"><form method="post" data-native-post="true" action="/app/timetable/setup/requirement-linked" class="tt-form compact">
                     {hidden}<input type="hidden" name="lead_requirement_id" value="{int(r['id'])}"><input type="hidden" name="linked_class_id" value="{linked_id}">
                     <label>Weekly period target<input type="number" min="1" max="30" name="lessons_per_week" value="{linked_target}" required></label>
-                    <label>Max / day<input type="number" min="1" max="10" name="max_lessons_per_day" value="{esc(linked_max_day or '')}" placeholder="No daily limit"></label>
-                    <div class="wide tt-session-guidance">Session duration and start period are controlled by the lead class. Uncheck a session to unlink this class from that occurrence only.</div>
-                    <div class="wide tt-session-editor"><div class="tt-session-editor-head"><b>Weekly session planner</b><span>Review each shared weekly occurrence</span></div>
-                    <div class="tt-session-list">{linked_session_rows}</div>
-                    <small>Changes to session duration and starting period must be made in the lead class requirement. You can independently choose which sessions this class shares.</small></div>
+                    <label>Max / day<input type="number" min="1" max="10" name="max_lessons_per_day" value="{esc(linked_max_day or '')}"></label>
+                    <div class="tt-session-guidance">Choose Single, Double, Triple or Quadruple for each saved session. A selected start period anchors the full consecutive block; for example, a Triple starting at Period 3 occupies Periods 3, 4 and 5.</div>
+                    <div class="wide tt-session-editor" data-session-editor>
+                      <div class="tt-session-editor-head"><b>Weekly session planner</b><span>Edit every weekly occurrence independently</span></div>
+                      <div class="tt-session-list" data-session-list><div class="tt-session-row"><span class="tt-session-number">1</span>
+                        <label>Lesson type<select data-session-duration><option value="1">Single · 1 period</option><option value="2">Double · 2 periods</option><option value="3">Triple · 3 periods</option><option value="4">Quadruple · 4 periods</option></select></label>
+                        <label>Start period<select data-session-period><option value="">Auto</option>{period_start_options}</select></label>
+                        <small data-session-span>Auto placement</small><button type="button" data-remove-session disabled>Remove</button>
+                        <details class="tt-session-sharing-details"><summary>Optional sharing · link classes or co-teachers</summary><div class="tt-session-row-sharing"><label>Link another class<select multiple data-session-classes>{class_group_options}</select></label><label>Add co-teacher<select multiple data-session-teachers>{teacher_group_options}</select></label></div></details>
+                      </div></div>
+                      <button type="button" class="tt-btn secondary" data-add-session>＋ Add another occurrence</button>
+                      <input type="hidden" name="weekly_pattern" data-weekly-pattern value="{esc(linked_pattern_value)}"><input type="hidden" name="weekly_links" value="{esc(linked_links_value)}"><input type="hidden" name="pattern_mode" value="replace">
+                      <p class="tt-session-instructions">Set each occurrence's duration until the assigned total matches the weekly target. Leave start periods on Automatic if you have no preference. Optional class and co-teacher links apply to each occurrence.</p>
+                    </div>
                     <button class="tt-btn">Save changes</button></form></div></div></div>\"\"\"
                 )
                 linked_used = shared_periods
