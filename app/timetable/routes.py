@@ -806,8 +806,12 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
                     f"</span>" for index, duration, period_no in linked_sessions
                 )
                 linked_setting = linked_requirement_settings.get((int(r["id"]), linked_id))
-                linked_target = int(linked_setting["lessons_per_week"]) if linked_setting else shared_periods
-                linked_max_day = linked_setting["max_lessons_per_day"] if linked_setting else None
+                # Keep the linked class's workload independently editable.
+                # Until it has saved overrides, inherit the lead requirement's
+                # target and daily limit rather than treating shared sessions
+                # as its entire weekly allocation.
+                linked_target = int(linked_setting["lessons_per_week"]) if linked_setting else int(r["lessons_per_week"] or shared_periods)
+                linked_max_day = linked_setting["max_lessons_per_day"] if linked_setting else r["max_lessons_per_day"]
                 linked_modal_id = f"tt-req-linked-{int(r['id'])}-{linked_id}"
                 linked_manage_button = f"""<button type="button" class="tt-req-manage-button" data-req-manage-open="{linked_modal_id}">Manage</button>"""
                 linked_session_rows = "".join(
@@ -834,9 +838,10 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
                     f"data-search='{esc((linked_label + ' ' + str(r['subject_name']) + ' ' + str(r['teacher_name'])).lower())}'>"
                     f"<div class='tt-req-card-main'><div class='tt-req-card-title'>"
                     f"<span class='tt-req-card-subject'>{esc(r['subject_name'])}</span>"
-                    f"<span class='tt-req-card-teacher'>Lead teacher · {esc(r['teacher_name'])}</span></div>"
+                    f"<span class='tt-req-card-teacher'>Teacher · {esc(r['teacher_name'])}</span></div>"
                     f"<div class='tt-req-card-load'><div class='tt-session-chip-list'>{shared_session_chips}</div>"
-                    f"<small class='tt-req-subline'>{linked_used} of {linked_target} periods configured · {linked_remaining} remaining</small>"
+                    f"<small class='tt-req-subline'>Weekly target · {linked_target} periods</small>"
+                    f"<small class='tt-req-subline'>{linked_used} periods configured · {linked_remaining} remaining</small>"
                     f"<small class='tt-req-subline'>Maximum per day · {esc(linked_max_day if linked_max_day is not None else 'No limit')}</small></div>"
                     f"<div class='tt-req-card-action'>{linked_manage_button}</div></div></article>"
                 )
