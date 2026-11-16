@@ -3004,6 +3004,7 @@ def student_delete(request: Request, student_id: int):
         # Retain the parent login itself, including access to any siblings.
         linked_users = []
         try:
+            cur.execute("SAVEPOINT delete_parent_links")
             linked_users = cur.execute(
                 "SELECT user_id FROM parent_student_links WHERE school_id=? AND student_id=?",
                 (sid, student_id)
@@ -3012,26 +3013,45 @@ def student_delete(request: Request, student_id: int):
                 "DELETE FROM parent_student_links WHERE school_id=? AND student_id=?",
                 (sid, student_id)
             )
+            cur.execute("RELEASE SAVEPOINT delete_parent_links")
         except Exception:
+            try:
+                cur.execute("ROLLBACK TO SAVEPOINT delete_parent_links")
+                cur.execute("RELEASE SAVEPOINT delete_parent_links")
+            except Exception:
+                pass
             linked_users = []
         try:
+            cur.execute("SAVEPOINT delete_parent_credentials")
             cur.execute(
                 "DELETE FROM parent_access_credentials WHERE school_id=? AND student_id=?",
                 (sid, student_id)
             )
+            cur.execute("RELEASE SAVEPOINT delete_parent_credentials")
         except Exception:
-            pass
+            try:
+                cur.execute("ROLLBACK TO SAVEPOINT delete_parent_credentials")
+                cur.execute("RELEASE SAVEPOINT delete_parent_credentials")
+            except Exception:
+                pass
         affected_user_ids = {int(row["user_id"]) for row in linked_users if row["user_id"] is not None}
         try:
+            cur.execute("SAVEPOINT delete_parent_fallbacks")
             fallback_users = cur.execute(
                 "SELECT id FROM users WHERE school_id=? AND role='parent' AND student_id=?",
                 (sid, student_id)
             ).fetchall()
             affected_user_ids.update(int(row["id"]) for row in fallback_users)
+            cur.execute("RELEASE SAVEPOINT delete_parent_fallbacks")
         except Exception:
-            pass
+            try:
+                cur.execute("ROLLBACK TO SAVEPOINT delete_parent_fallbacks")
+                cur.execute("RELEASE SAVEPOINT delete_parent_fallbacks")
+            except Exception:
+                pass
         for parent_user_id in affected_user_ids:
             try:
+                cur.execute("SAVEPOINT delete_parent_fallback_lookup")
                 remaining = cur.execute(
                     """SELECT s.id FROM parent_student_links l
                        JOIN students s ON s.id=l.student_id AND s.school_id=l.school_id
@@ -3039,18 +3059,21 @@ def student_delete(request: Request, student_id: int):
                        ORDER BY l.created_at, s.id LIMIT 1""",
                     (sid, parent_user_id)
                 ).fetchone()
+                cur.execute("RELEASE SAVEPOINT delete_parent_fallback_lookup")
                 cur.execute(
                     "UPDATE users SET student_id=? WHERE id=? AND school_id=? AND role='parent' AND student_id=?",
                     (remaining["id"] if remaining else None, parent_user_id, sid, student_id)
                 )
             except Exception:
                 try:
-                    cur.execute(
-                        "UPDATE users SET student_id=NULL WHERE id=? AND school_id=? AND role='parent' AND student_id=?",
-                        (parent_user_id, sid, student_id)
-                    )
+                    cur.execute("ROLLBACK TO SAVEPOINT delete_parent_fallback_lookup")
+                    cur.execute("RELEASE SAVEPOINT delete_parent_fallback_lookup")
                 except Exception:
                     pass
+                cur.execute(
+                    "UPDATE users SET student_id=NULL WHERE id=? AND school_id=? AND role='parent' AND student_id=?",
+                    (parent_user_id, sid, student_id)
+                )
         cur.execute("DELETE FROM student_class_history WHERE student_id=? AND school_id=?", (student_id, sid))
         cur.execute("DELETE FROM students WHERE id=? AND school_id=?", (student_id, sid))
         _audit(cur, sid, request, "STUDENT_DELETE", f"Deleted accidentally added student {st['name']} ({st['admission_no']})")
