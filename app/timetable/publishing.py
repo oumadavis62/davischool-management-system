@@ -447,7 +447,7 @@ def validate_timetable_for_publication(connection: Any, school_id: int, profile_
         # requirement workload shown in Timetable Setup.
         linked_requirement_period_targets[key] = linked_requirement_targets[(rid, linked_class_id)]
     if is_main_profile:
-        for key in sorted(allocation_keys - set(requirement_map) - advanced_coverage):
+        for key in sorted(allocation_keys - set(requirement_map) - advanced_coverage - set(linked_requirement_period_targets)):
             errors.append("A current class/subject/teacher allocation is missing its weekly lesson requirement.")
             break
         for key in sorted(set(requirement_map) - allocation_keys):
