@@ -753,7 +753,7 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
         # overview totals, even though their shared sessions are stored against
         # the single lead requirement.
         linked_requirement_keys = set()
-        linked_weekly_periods = 0
+        linked_weekly_targets = {}
         for req in requirements:
             try:
                 saved_links = json.loads(requirement_links_values.get(int(req["id"]), "[]"))
@@ -764,18 +764,28 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
                 if not isinstance(session, dict):
                     continue
                 try:
-                    duration = max(1, int(session.get("duration", 1) or 1))
                     class_ids = {int(value) for value in session.get("classes", []) if str(value).isdigit()}
                 except (TypeError, ValueError):
                     continue
-                linked_weekly_periods += duration * len(class_ids)
                 linked_for_requirement.update(class_ids)
-            linked_requirement_keys.update((int(req["id"]), class_id) for class_id in linked_for_requirement)
+            lead_class_id = int(req["class_id"])
+            for linked_class_id in linked_for_requirement - {lead_class_id}:
+                linked_requirement_keys.add((int(req["id"]), linked_class_id))
+                linked_setting = linked_requirement_settings.get((int(req["id"]), linked_class_id))
+                linked_weekly_targets[(int(req["id"]), linked_class_id)] = (
+                    int(linked_setting["lessons_per_week"])
+                    if linked_setting and linked_setting["lessons_per_week"] is not None
+                    else int(req["lessons_per_week"] or 0)
+                )
         configured_requirement_count = len(requirements) + len(linked_requirement_keys)
         configured_weekly_periods = (
-            sum(int(item["lessons_per_week"] or 0) * int(item["duration_periods"] or 1) for item in requirements)
-            + linked_weekly_periods
+            sum(int(item["lessons_per_week"] or 0) for item in requirements)
+            + sum(linked_weekly_targets.values())
         )
+        configured_class_count = len({
+            int(req["class_id"]) for req in requirements
+        } | {class_id for _, class_id in linked_requirement_keys})
+        configured_teacher_count = len({int(req["teacher_id"]) for req in requirements})
         requirement_cards_by_class = {}
         requirement_manage_modals = []
         for r in requirements:
@@ -951,6 +961,7 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
         # its weekly target is stored against the lead requirement in the linked
         # requirement settings table, while its shared sessions remain on lead.
         linked_targets_by_allocation = {}
+        linked_teacher_by_allocation = {}
         linked_settings_by_key = {
             (int(item["lead_requirement_id"]), int(item["linked_class_id"])): item
             for item in linked_requirement_settings_rows
@@ -964,20 +975,46 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
                 int(linked_id)
                 for session in lead_sessions if isinstance(session, dict)
                 for linked_id in (session.get("classes") or [])
+                if str(linked_id).isdigit()
             }
-            for linked_id in linked_class_ids:
+            for linked_id in linked_class_ids - {int(lead_req["class_id"])}:
                 linked_setting = linked_settings_by_key.get((int(lead_req["id"]), linked_id))
                 linked_target = (
                     int(linked_setting["lessons_per_week"])
                     if linked_setting and linked_setting["lessons_per_week"] is not None
                     else int(lead_req["lessons_per_week"] or 0)
                 )
-                linked_targets_by_allocation[
-                    (linked_id, int(lead_req["subject_id"]))
-                ] = linked_target
+                linked_targets_by_allocation[(linked_id, int(lead_req["subject_id"]))] = linked_target
+                linked_teacher_by_allocation[(linked_id, int(lead_req["subject_id"]))] = (
+                    int(lead_req["teacher_id"]), str(lead_req["teacher_name"])
+                )
         limits_by_class = {int(x["class_id"]): x for x in class_limits}
+        # Include linked class-subjects even if their teacher-allocation row is
+        # absent. If a real allocation exists for that class and subject, keep
+        # its teacher row and do not add a duplicate virtual row.
+        monitor_allocations = list(allocations)
+        represented_class_subjects = {
+            (int(a["class_id"]), int(a["subject_id"])) for a in allocations
+        }
+        class_by_id = {int(item["id"]): item for item in class_records}
+        subject_by_id = {int(item["id"]): item for item in subjects}
+        teacher_by_id = {int(item["id"]): item for item in teachers}
+        for (linked_class_id, subject_id), (teacher_id, teacher_name) in linked_teacher_by_allocation.items():
+            key = (linked_class_id, subject_id)
+            linked_class = class_by_id.get(linked_class_id)
+            linked_subject = subject_by_id.get(subject_id)
+            if key in represented_class_subjects or not linked_class or not linked_subject:
+                continue
+            teacher = teacher_by_id.get(teacher_id)
+            monitor_allocations.append({
+                "class_id": linked_class_id, "subject_id": subject_id, "teacher_id": teacher_id,
+                "class_name": linked_class["name"], "stream": linked_class["stream"],
+                "subject_name": linked_subject["name"],
+                "teacher_name": teacher["name"] if teacher else teacher_name,
+            })
+            represented_class_subjects.add(key)
         allocation_groups = {}
-        for a in allocations:
+        for a in monitor_allocations:
             cid = int(a["class_id"])
             group = allocation_groups.setdefault(cid, {
                 "class_name": str(a["class_name"]), "stream": str(a["stream"] or ""),
@@ -1265,9 +1302,9 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
  {bulk_requirement_form}
  <div class='tt-req-overview'>
   <div><span>Configured requirements</span><b>{configured_requirement_count}</b><small>Class · subject allocations, including linked classes</small></div>
-  <div><span>Allocated classes</span><b>{len(set(int(x['class_id']) for x in requirements))}</b><small>With weekly requirements</small></div>
+  <div><span>Allocated classes</span><b>{configured_class_count}</b><small>Including linked classes</small></div>
   <div><span>Weekly periods</span><b>{configured_weekly_periods}</b><small>Configured class period load, including shared classes</small></div>
-  <div><span>Teachers involved</span><b>{len(set(int(x['teacher_id']) for x in requirements))}</b><small>Lead allocations</small></div>
+  <div><span>Teachers involved</span><b>{configured_teacher_count}</b><small>Across lead and linked requirements</small></div>
  </div>
  <div class='tt-req-main-layout'>
   <div class='tt-req-workspace'>
@@ -1276,7 +1313,7 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
     <details class='tt-req-filter'><summary>⚙ Filters <span id='tt-req-filter-count'>All</span></summary><div class='tt-req-filter-panel'><div class='tt-req-filter-head'><strong>Filter requirements</strong><button type='button' class='tt-req-filter-close' aria-label='Close filters' title='Close filters'>×</button></div><label>Class / stream<select id='tt-req-class'><option value=''>All classes</option>{requirement_class_filters}</select></label><label>Subject<select id='tt-req-subject'><option value=''>All subjects</option>{requirement_subject_filters}</select></label><label>Teacher<select id='tt-req-teacher'><option value=''>All teachers</option>{requirement_teacher_filters}</select></label><button type='button' class='tt-btn secondary' id='tt-req-reset'>Clear filters</button></div></details>
     <span class='tt-req-count' id='tt-req-count'></span>
    </div>
-   <div class='tt-req-results-head'><div><h3>Configured weekly requirements</h3><p>Open Manage to edit the weekly target and session pattern.</p></div><span class='tt-req-results-total'>{len(requirements)} records</span></div>
+   <div class='tt-req-results-head'><div><h3>Configured weekly requirements</h3><p>Open Manage to edit the weekly target and session pattern.</p></div><span class='tt-req-results-total'>{configured_requirement_count} records</span></div>
    <div class='tt-req-groups'>{requirement_rows}</div>
    {''.join(requirement_manage_modals)}
    <div class='tt-req-pagination'><span id='tt-req-page-info'></span><div><button type='button' class='tt-btn secondary' id='tt-req-prev'>← Previous</button><button type='button' class='tt-btn secondary' id='tt-req-next'>Next →</button></div></div>
