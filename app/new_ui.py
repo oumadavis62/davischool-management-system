@@ -2972,10 +2972,24 @@ def student_delete(request: Request, student_id: int):
         tab_id = ""
     con = _db()
     cur = con.cursor()
-    st = cur.execute("SELECT id, name, admission_no FROM students WHERE id=? AND school_id=?", (student_id, sid)).fetchone()
+    st = cur.execute("SELECT id, name, admission_no, status FROM students WHERE id=? AND school_id=?", (student_id, sid)).fetchone()
     if not st:
         con.close()
         return HTMLResponse("Student not found.", 404)
+    # Graduates are permanent alumni records. Keep their student row, admission
+    # number, academic history and parent links; reverse graduation explicitly
+    # before any exceptional deletion is considered.
+    is_graduated = str(st["status"] or "").strip().lower() == "graduated"
+    try:
+        is_graduated = is_graduated or bool(cur.execute(
+            "SELECT 1 FROM student_graduations WHERE school_id=? AND student_id=? LIMIT 1",
+            (sid, student_id)
+        ).fetchone())
+    except Exception:
+        pass
+    if is_graduated:
+        con.close()
+        return HTMLResponse("Graduated learners are protected alumni records. Their admission number and parent–learner link remain reserved. Reverse the graduation record first if this was recorded by mistake.", 409)
     # Do not remove a student if academic or financial records depend on them.
     for table in ("marks", "student_marks", "fee_payments", "fees", "receipts", "attendance"):
         try:
@@ -2986,6 +3000,57 @@ def student_delete(request: Request, student_id: int):
             con.close()
             return HTMLResponse("This student has linked academic or financial records and cannot be deleted here. Keep the record and mark the student inactive instead.", 409)
     try:
+        # Remove only this learner's parent relationship and saved credential.
+        # Retain the parent login itself, including access to any siblings.
+        linked_users = []
+        try:
+            linked_users = cur.execute(
+                "SELECT user_id FROM parent_student_links WHERE school_id=? AND student_id=?",
+                (sid, student_id)
+            ).fetchall()
+            cur.execute(
+                "DELETE FROM parent_student_links WHERE school_id=? AND student_id=?",
+                (sid, student_id)
+            )
+        except Exception:
+            linked_users = []
+        try:
+            cur.execute(
+                "DELETE FROM parent_access_credentials WHERE school_id=? AND student_id=?",
+                (sid, student_id)
+            )
+        except Exception:
+            pass
+        affected_user_ids = {int(row["user_id"]) for row in linked_users if row["user_id"] is not None}
+        try:
+            fallback_users = cur.execute(
+                "SELECT id FROM users WHERE school_id=? AND role='parent' AND student_id=?",
+                (sid, student_id)
+            ).fetchall()
+            affected_user_ids.update(int(row["id"]) for row in fallback_users)
+        except Exception:
+            pass
+        for parent_user_id in affected_user_ids:
+            try:
+                remaining = cur.execute(
+                    """SELECT s.id FROM parent_student_links l
+                       JOIN students s ON s.id=l.student_id AND s.school_id=l.school_id
+                       WHERE l.school_id=? AND l.user_id=?
+                       ORDER BY l.created_at, s.id LIMIT 1""",
+                    (sid, parent_user_id)
+                ).fetchone()
+                cur.execute(
+                    "UPDATE users SET student_id=? WHERE id=? AND school_id=? AND role='parent' AND student_id=?",
+                    (remaining["id"] if remaining else None, parent_user_id, sid, student_id)
+                )
+            except Exception:
+                try:
+                    cur.execute(
+                        "UPDATE users SET student_id=NULL WHERE id=? AND school_id=? AND role='parent' AND student_id=?",
+                        (parent_user_id, sid, student_id)
+                    )
+                except Exception:
+                    pass
         cur.execute("DELETE FROM student_class_history WHERE student_id=? AND school_id=?", (student_id, sid))
         cur.execute("DELETE FROM students WHERE id=? AND school_id=?", (student_id, sid))
         _audit(cur, sid, request, "STUDENT_DELETE", f"Deleted accidentally added student {st['name']} ({st['admission_no']})")
