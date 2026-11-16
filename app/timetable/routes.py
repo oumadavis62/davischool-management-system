@@ -840,9 +840,7 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
                     f"<span class='tt-req-card-subject'>{esc(r['subject_name'])}</span>"
                     f"<span class='tt-req-card-teacher'>Teacher · {esc(r['teacher_name'])}</span></div>"
                     f"<div class='tt-req-card-load'><div class='tt-session-chip-list'>{shared_session_chips}</div>"
-                    f"<small class='tt-req-subline'>Weekly target · {linked_target} periods</small>"
-                    f"<small class='tt-req-subline'>{linked_used} periods configured · {linked_remaining} remaining</small>"
-                    f"<small class='tt-req-subline'>Maximum per day · {esc(linked_max_day if linked_max_day is not None else 'No limit')}</small></div>"
+                    f"<small class='tt-req-subline'>{linked_used} of {linked_target} periods configured · {linked_remaining} remaining · Weekly target {linked_target} periods</small></div>"
                     f"<div class='tt-req-card-action'>{linked_manage_button}</div></div></article>"
                 )
                 requirement_cards_by_class.setdefault(linked_id, {"label": linked_label, "cards": []})["cards"].append((str(r["subject_name"]).casefold(), shared_card))
