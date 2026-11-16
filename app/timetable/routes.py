@@ -947,6 +947,34 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
             (int(r["class_id"]), int(r["subject_id"]), int(r["teacher_id"])): r
             for r in requirements
         }
+        # A linked class has no duplicate row in ds_timetable_class_requirements:
+        # its weekly target is stored against the lead requirement in the linked
+        # requirement settings table, while its shared sessions remain on lead.
+        linked_targets_by_allocation = {}
+        linked_settings_by_key = {
+            (int(item["lead_requirement_id"]), int(item["linked_class_id"])): item
+            for item in linked_requirement_settings_rows
+        }
+        for lead_req in requirements:
+            try:
+                lead_sessions = json.loads(requirement_links_values.get(int(lead_req["id"]), "[]"))
+            except (TypeError, ValueError):
+                lead_sessions = []
+            linked_class_ids = {
+                int(linked_id)
+                for session in lead_sessions if isinstance(session, dict)
+                for linked_id in (session.get("classes") or [])
+            }
+            for linked_id in linked_class_ids:
+                linked_setting = linked_settings_by_key.get((int(lead_req["id"]), linked_id))
+                linked_target = (
+                    int(linked_setting["lessons_per_week"])
+                    if linked_setting and linked_setting["lessons_per_week"] is not None
+                    else int(lead_req["lessons_per_week"] or 0)
+                )
+                linked_targets_by_allocation[
+                    (linked_id, int(lead_req["subject_id"]), int(lead_req["teacher_id"]))
+                ] = linked_target
         limits_by_class = {int(x["class_id"]): x for x in class_limits}
         allocation_groups = {}
         for a in allocations:
@@ -955,14 +983,21 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
                 "class_name": str(a["class_name"]), "stream": str(a["stream"] or ""),
                 "subjects": [], "total": 0, "configured": 0,
             })
-            req = requirements_by_allocation.get((cid, int(a["subject_id"]), int(a["teacher_id"])))
-            lessons = int(req["lessons_per_week"]) if req else 0
+            allocation_key = (cid, int(a["subject_id"]), int(a["teacher_id"]))
+            req = requirements_by_allocation.get(allocation_key)
+            is_linked_configured = allocation_key in linked_targets_by_allocation
+            lessons = (
+                int(req["lessons_per_week"]) if req
+                else int(linked_targets_by_allocation[allocation_key]) if is_linked_configured
+                else 0
+            )
+            is_configured = req is not None or is_linked_configured
             group["subjects"].append({
                 "subject": str(a["subject_name"]), "teacher": str(a["teacher_name"]),
-                "lessons": lessons, "configured": req is not None,
+                "lessons": lessons, "configured": is_configured,
             })
             group["total"] += lessons
-            group["configured"] += 1 if req is not None else 0
+            group["configured"] += 1 if is_configured else 0
         allocation_monitor_rows = []
         for cid, group in sorted(allocation_groups.items(), key=lambda item: (item[1]["class_name"].lower(), item[1]["stream"].lower())):
             limit = limits_by_class.get(cid)
