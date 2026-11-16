@@ -58,6 +58,40 @@ def build_export_grid(result, view_type):
                     continue
                 if view_type in ("teacher", "room"):
                     slot = [x for x in lessons if int(x["day_id"]) == int(day["id"]) and int(x["period_id"]) == pid]
+                    if view_type == "teacher" and slot:
+                        grouped, ungrouped = {}, []
+                        for lesson in slot:
+                            group = str(lesson.get("lesson_group") or "").strip()
+                            if group:
+                                grouped.setdefault(group, []).append(lesson)
+                            else:
+                                ungrouped.append(lesson)
+                        merged_slot = list(ungrouped)
+                        for group_lessons in grouped.values():
+                            if len(group_lessons) == 1:
+                                merged_slot.extend(group_lessons)
+                                continue
+                            lead = dict(group_lessons[0])
+                            class_labels = []
+                            class_names = []
+                            for linked in group_lessons:
+                                label = str(linked.get("class_initials") or "").strip().upper()
+                                if not label:
+                                    full = str(linked.get("class_name") or "").strip()
+                                    stream = str(linked.get("stream") or "").strip()
+                                    label = (full + ((" " + stream) if stream else "")).strip()
+                                if label and label not in class_labels:
+                                    class_labels.append(label)
+                                full_name = str(linked.get("class_name") or "").strip()
+                                stream = str(linked.get("stream") or "").strip()
+                                full_name = full_name + ((" " + stream) if stream else "")
+                                if full_name and full_name not in class_names:
+                                    class_names.append(full_name)
+                            lead["class_initials"] = "/".join(class_labels) or str(lead.get("class_initials") or "—")
+                            lead["class_name"] = "/".join(class_names) or str(lead.get("class_name") or "")
+                            lead["stream"] = ""
+                            merged_slot.append(lead)
+                        slot = merged_slot
                     continued = [x for x in lessons if int(x["day_id"]) == int(day["id"]) and (int(day["id"]),int(x["class_id"]),pid) in occupied and x in occupied[(int(day["id"]),int(x["class_id"]),pid)]]
                 else:
                     key=(int(day["id"]),int(class_row["class_id"]),pid)
