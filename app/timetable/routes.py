@@ -815,20 +815,26 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
                 linked_modal_id = f"tt-req-linked-{int(r['id'])}-{linked_id}"
                 linked_manage_button = f"""<button type="button" class="tt-req-manage-button" data-req-manage-open="{linked_modal_id}">Manage</button>"""
                 linked_session_rows = "".join(
-                    f"<label class='tt-linked-session-option'><input type='checkbox' name='linked_session_indices' value='{session_index}' checked><span>Session {session_index + 1} · {('Single' if duration == 1 else ('Double' if duration == 2 else ('Triple' if duration == 3 else str(duration) + ' periods')))} · {('Starts P' + str(period_no)) if period_no else 'Automatic start'} · Keep linked</span></label>"
+                    f"<div class='tt-session-row'><div class='tt-session-row-main'><span class='tt-session-number'>{session_index + 1}</span>"
+                    f"<label>Lesson type<input type='text' value='{('Single' if duration == 1 else ('Double' if duration == 2 else ('Triple' if duration == 3 else str(duration) + ' periods')))} · {duration} period(s)' readonly></label>"
+                    f"<label>Start period<input type='text' value='{('P' + str(period_no)) if period_no else 'Auto'}' readonly></label>"
+                    f"<label class='tt-check'><input type='checkbox' name='linked_session_indices' value='{session_index}' checked> Keep linked to this class</label></div></div>"
                     for session_index, duration, period_no in linked_sessions
                 )
                 requirement_manage_modals.append(
-                    f"""<div class="tt-modal tt-req-manage-modal" id="{linked_modal_id}" role="dialog" aria-modal="true" aria-labelledby="{linked_modal_id}-title">
-                    <div class="tt-modal-dialog tt-req-manage-dialog"><div class="tt-modal-head"><div><span class="tt-kicker">CLASS SUBJECT REQUIREMENT</span>
+                    f\"\"\"<div class="tt-modal tt-req-manage-modal" id="{linked_modal_id}" role="dialog" aria-modal="true" aria-labelledby="{linked_modal_id}-title">
+                    <div class="tt-modal-dialog tt-req-manage-dialog"><div class="tt-modal-head"><div><span class="tt-kicker">SUBJECT REQUIREMENT</span>
                     <h3 id="{linked_modal_id}-title">Manage {esc(r['subject_name'])}</h3><p>{esc(linked_label)} · {esc(r['teacher_name'])}</p></div>
                     <button type="button" class="tt-modal-close" data-req-manage-close aria-label="Close">&times;</button></div>
                     <div class="tt-req-manage-content"><form method="post" data-native-post="true" action="/app/timetable/setup/requirement-linked" class="tt-form compact">
                     {hidden}<input type="hidden" name="lead_requirement_id" value="{int(r['id'])}"><input type="hidden" name="linked_class_id" value="{linked_id}">
                     <label>Weekly period target<input type="number" min="1" max="30" name="lessons_per_week" value="{linked_target}" required></label>
                     <label>Max / day<input type="number" min="1" max="10" name="max_lessons_per_day" value="{esc(linked_max_day or '')}" placeholder="No daily limit"></label>
-                    <div class="wide tt-linked-session-list"><b>Shared sessions</b><small>Session duration and preferred start follow the lead class. Untick a session to unlink only this class from that occurrence.</small>{linked_session_rows}</div>
-                    <button class="tt-btn">Save class requirement</button></form></div></div></div>"""
+                    <div class="wide tt-session-guidance">Session duration and start period are controlled by the lead class. Uncheck a session to unlink this class from that occurrence only.</div>
+                    <div class="wide tt-session-editor"><div class="tt-session-editor-head"><b>Weekly session planner</b><span>Review each shared weekly occurrence</span></div>
+                    <div class="tt-session-list">{linked_session_rows}</div>
+                    <small>Changes to session duration and starting period must be made in the lead class requirement. You can independently choose which sessions this class shares.</small></div>
+                    <button class="tt-btn">Save changes</button></form></div></div></div>\"\"\"
                 )
                 linked_used = shared_periods
                 linked_remaining = max(0, linked_target - linked_used)
