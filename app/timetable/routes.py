@@ -484,6 +484,7 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
         selected_status = str(selected["status"] or "draft").strip().lower() if selected else ""
         has_draft_profile = any(str(p["status"] or "draft").strip().lower() == "draft" for p in profiles)
         days = periods = breaks = calendar_events = rooms = teachers = allocations = availability = requirements = class_limits = class_records = []
+        linked_requirement_settings_rows = []
         if selected:
             pid = int(selected["id"])
             days = cur.execute("SELECT * FROM ds_timetable_days WHERE school_id=? AND profile_id=? ORDER BY day_order,id", (school_id,pid)).fetchall()
@@ -543,6 +544,11 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
                    JOIN teachers t ON t.id=r.teacher_id AND t.school_id=r.school_id
                    WHERE r.school_id=? AND r.profile_id=? AND lower(trim(COALESCE(t.role, ''))) = 'teacher' ORDER BY c.name,c.stream,s.name""",
                 (school_id,pid),
+            ).fetchall()
+            linked_requirement_settings_rows = cur.execute(
+                """SELECT lead_requirement_id,linked_class_id,lessons_per_week,max_lessons_per_day
+                   FROM ds_timetable_linked_requirement_settings WHERE school_id=? AND profile_id=?""",
+                (school_id, pid),
             ).fetchall()
             class_limits = cur.execute(
                 """SELECT l.*,c.name class_name,c.stream,c.initials class_initials
@@ -738,15 +744,10 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
                     f"</span>" for index, item in enumerate(saved_pattern, 1)
                 ) or "<span class='tt-session-chip muted'>Not yet broken into sessions</span>"
             ) + f"<small class='tt-req-subline'>{used} of {int(req['lessons_per_week'])} periods configured · {max(0, int(req['lessons_per_week'])-used)} remaining</small>"
-        linked_requirement_settings = {}
-        if selected:
-            for setting in cur.execute(
-                """SELECT lead_requirement_id,linked_class_id,lessons_per_week,max_lessons_per_day
-                   FROM ds_timetable_linked_requirement_settings
-                   WHERE school_id=? AND profile_id=?""",
-                (school_id, pid),
-            ).fetchall():
-                linked_requirement_settings[(int(setting["lead_requirement_id"]), int(setting["linked_class_id"]))] = setting
+        linked_requirement_settings = {
+            (int(setting["lead_requirement_id"]), int(setting["linked_class_id"])): setting
+            for setting in linked_requirement_settings_rows
+        }
         requirement_cards_by_class = {}
         requirement_manage_modals = []
         for r in requirements:
