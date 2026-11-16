@@ -20426,7 +20426,7 @@ def _admission_ui_enhancements():
         };
         search.addEventListener('input',applyFilter);bar.querySelector('button').addEventListener('click',openFilter);applyFilter();
       }
-      page.querySelectorAll("form[method='post']").forEach(form=>{
+      page.querySelectorAll("form[method='post']:not([data-skip-submit-confirm])").forEach(form=>{
         form.addEventListener('submit',e=>{
           if(form.dataset.popupConfirmed==='1')return;
           e.preventDefault();mode='confirm';activeForm=form;activeSubmitter=e.submitter||null;
@@ -20535,7 +20535,7 @@ def admissions_register_page(request: Request):
     body = f"""<div class='page adm-page adm-register-page'>
       <div class='adm-heading'><div><h1>Applications Register</h1><p>Capture prospective learners and track each admission application.</p></div></div>
       <div class='adm-card adm-form-card'><h2>New Application</h2>
-      <form method='post' action='/app/admissions/add' class='adm-form' data-native-post='1'>
+      <form method='post' action='/app/admissions/add' class='adm-form' data-native-post='1' data-skip-submit-confirm='1'>
         <label>Applicant full name<input name='applicant_name' required maxlength='160'></label>
         <label>Gender<select name='gender'><option value=''>Select gender</option><option>Male</option><option>Female</option><option>Other</option></select></label>
         <label>Parent / Guardian name<input name='parent_name' maxlength='160'></label>
