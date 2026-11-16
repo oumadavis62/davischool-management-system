@@ -20389,7 +20389,7 @@ def _admission_ui_enhancements():
         apply.textContent='Apply filters';backdrop.classList.add('is-open');
       }
       apply.addEventListener('click',()=>{
-        if(mode==='confirm'&&activeForm){const f=activeForm,submitter=activeSubmitter;close();f.dataset.popupConfirmed='1';if(submitter&&f.requestSubmit)f.requestSubmit(submitter);else f.submit();return;}
+        if(mode==='confirm'&&activeForm){const f=activeForm,submitter=activeSubmitter;close();f.dataset.popupConfirmed='1';delete f.dataset.daviSubmitting;f.removeAttribute('aria-busy');f.querySelectorAll('button[aria-busy],button.ds-processing').forEach(button=>{button.removeAttribute('aria-busy');button.classList.remove('ds-processing');});if(submitter&&f.requestSubmit)f.requestSubmit(submitter);else f.submit();return;}
         if(mode==='report'){const f=fields.querySelector('form');if(f)f.submit();return;}
         if(mode==='print'){close();window.print();return;}
         filterState.status=fields.querySelector('#adm-popup-status')?.value||'';
