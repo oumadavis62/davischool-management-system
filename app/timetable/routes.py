@@ -815,7 +815,24 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
                 linked_modal_id = f"tt-req-linked-{int(r['id'])}-{linked_id}"
                 linked_manage_button = f"""<button type="button" class="tt-req-manage-button" data-req-manage-open="{linked_modal_id}">Manage</button>"""
                 linked_pattern_value = requirement_pattern_values.get(int(r["id"]), "")
-                linked_links_value = requirement_links_values.get(int(r["id"]), "[]")
+                # In this linked-class editor, the lead class is the visible
+                # sharing selector for this relationship. Translate the saved
+                # linked-class IDs to the lead-class ID for display; the POST
+                # handler maps that selection back to this linked class.
+                try:
+                    linked_editor_links = json.loads(requirement_links_values.get(int(r["id"]), "[]"))
+                except (TypeError, ValueError):
+                    linked_editor_links = []
+                for link_item in linked_editor_links:
+                    if not isinstance(link_item, dict):
+                        continue
+                    class_ids = [int(value) for value in link_item.get("classes", [])]
+                    if linked_id in class_ids:
+                        class_ids = [value for value in class_ids if value != linked_id]
+                        if cid not in class_ids:
+                            class_ids.append(cid)
+                    link_item["classes"] = class_ids
+                linked_links_value = json.dumps(linked_editor_links)
                 requirement_manage_modals.append(
                     f"""<div class="tt-modal tt-req-manage-modal" id="{linked_modal_id}" role="dialog" aria-modal="true" aria-labelledby="{linked_modal_id}-title">
                     <div class="tt-modal-dialog tt-req-manage-dialog"><div class="tt-modal-head"><div><span class="tt-kicker">SUBJECT REQUIREMENT</span>
@@ -2524,6 +2541,14 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
                         raise TimetableSetupError("Session duration must be between one and four periods.")
                     links = session_links[session_index] if session_index < len(session_links) and isinstance(session_links[session_index], dict) else {}
                     class_ids = [int(value) for value in links.get("classes", [])]
+                    # In the linked-class popup, selecting the lead class means
+                    # "share this occurrence with this linked class". Translate
+                    # that UI marker back to the actual linked class ID before
+                    # saving the shared lead session pattern.
+                    if int(lead["class_id"]) in class_ids:
+                        class_ids = [value for value in class_ids if value != int(lead["class_id"])]
+                        if int(linked_class_id) not in class_ids:
+                            class_ids.append(int(linked_class_id))
                     teacher_ids = [int(value) for value in links.get("teachers", [])]
                     sessions.append({
                         "duration_periods": duration,
