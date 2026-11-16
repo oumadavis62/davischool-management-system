@@ -87,6 +87,17 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
         school_id = int(school["id"])
         con = get_db()
         cur = con.cursor()
+        cur.execute("""CREATE TABLE IF NOT EXISTS ds_timetable_linked_requirement_settings (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            school_id INTEGER NOT NULL,
+            profile_id INTEGER NOT NULL,
+            lead_requirement_id INTEGER NOT NULL,
+            linked_class_id INTEGER NOT NULL,
+            lessons_per_week INTEGER NOT NULL DEFAULT 5,
+            max_lessons_per_day INTEGER,
+            UNIQUE(school_id, profile_id, lead_requirement_id, linked_class_id)
+        )""")
+        con.commit()
         profiles = cur.execute(
             "SELECT * FROM ds_timetable_profiles WHERE school_id=? AND status IN ('draft','pending_approval','published') ORDER BY academic_year DESC,term,id DESC",
             (school_id,),
@@ -716,6 +727,15 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
                     f"</span>" for index, item in enumerate(saved_pattern, 1)
                 ) or "<span class='tt-session-chip muted'>Not yet broken into sessions</span>"
             ) + f"<small class='tt-req-subline'>{used} of {int(req['lessons_per_week'])} periods configured · {max(0, int(req['lessons_per_week'])-used)} remaining</small>"
+        linked_requirement_settings = {}
+        if selected:
+            for setting in cur.execute(
+                """SELECT lead_requirement_id,linked_class_id,lessons_per_week,max_lessons_per_day
+                   FROM ds_timetable_linked_requirement_settings
+                   WHERE school_id=? AND profile_id=?""",
+                (school_id, pid),
+            ).fetchall():
+                linked_requirement_settings[(int(setting["lead_requirement_id"]), int(setting["linked_class_id"]))] = setting
         requirement_cards_by_class = {}
         requirement_manage_modals = []
         for r in requirements:
@@ -772,6 +792,29 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
                     f"{'Single' if duration == 1 else ('Double' if duration == 2 else ('Triple' if duration == 3 else str(duration) + ' periods'))}"
                     f"</span>" for index, duration in linked_sessions
                 )
+                linked_setting = linked_requirement_settings.get((int(r["id"]), linked_id))
+                linked_target = int(linked_setting["lessons_per_week"]) if linked_setting else max(5, shared_periods)
+                linked_max_day = linked_setting["max_lessons_per_day"] if linked_setting else None
+                linked_modal_id = f"tt-req-linked-{int(r['id'])}-{linked_id}"
+                linked_manage_button = f"""<button type="button" class="tt-req-manage-button" data-req-manage-open="{linked_modal_id}">Manage</button>"""
+                linked_session_rows = "".join(
+                    f"<label class='tt-linked-session-option'><input type='checkbox' name='linked_session_indices' value='{session_index}' checked><span>Session {session_index + 1} · {('Single' if duration == 1 else ('Double' if duration == 2 else ('Triple' if duration == 3 else str(duration) + ' periods')))} · Keep linked</span></label>"
+                    for session_index, duration in linked_sessions
+                )
+                requirement_manage_modals.append(
+                    f"""<div class="tt-modal tt-req-manage-modal" id="{linked_modal_id}" role="dialog" aria-modal="true" aria-labelledby="{linked_modal_id}-title">
+                    <div class="tt-modal-dialog tt-req-manage-dialog"><div class="tt-modal-head"><div><span class="tt-kicker">CLASS SUBJECT REQUIREMENT</span>
+                    <h3 id="{linked_modal_id}-title">Manage {esc(r['subject_name'])}</h3><p>{esc(linked_label)} · {esc(r['teacher_name'])}</p></div>
+                    <button type="button" class="tt-modal-close" data-req-manage-close aria-label="Close">&times;</button></div>
+                    <div class="tt-req-manage-content"><form method="post" data-native-post="true" action="/app/timetable/setup/requirement-linked" class="tt-form compact">
+                    {hidden}<input type="hidden" name="lead_requirement_id" value="{int(r['id'])}"><input type="hidden" name="linked_class_id" value="{linked_id}">
+                    <label>Weekly period target<input type="number" min="1" max="30" name="lessons_per_week" value="{linked_target}" required></label>
+                    <label>Max / day<input type="number" min="1" max="10" name="max_lessons_per_day" value="{esc(linked_max_day or '')}" placeholder="No daily limit"></label>
+                    <div class="wide tt-linked-session-list"><b>Shared sessions</b><small>Session duration and preferred start follow the lead class. Untick a session to unlink only this class from that occurrence.</small>{linked_session_rows}</div>
+                    <button class="tt-btn">Save class requirement</button></form></div></div></div>"""
+                )
+                linked_used = shared_periods
+                linked_remaining = max(0, linked_target - linked_used)
                 shared_card = (
                     f"<article class='tt-req-card' data-requirement-row data-class='{linked_id}' "
                     f"data-subject='{int(r['subject_id'])}' data-teacher='{int(r['teacher_id'])}' "
@@ -780,8 +823,9 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
                     f"<span class='tt-req-card-subject'>{esc(r['subject_name'])}</span>"
                     f"<span class='tt-req-card-teacher'>Lead teacher · {esc(r['teacher_name'])}</span></div>"
                     f"<div class='tt-req-card-load'><div class='tt-session-chip-list'>{shared_session_chips}</div>"
-                    f"<small class='tt-req-subline'>Weekly target · {shared_periods} periods</small></div>"
-                    f"<div class='tt-req-card-action'>{manage_button}</div></div></article>"
+                    f"<small class='tt-req-subline'>{linked_used} of {linked_target} periods configured · {linked_remaining} remaining</small>"
+                    f"<small class='tt-req-subline'>Maximum per day · {esc(linked_max_day if linked_max_day is not None else 'No limit')}</small></div>"
+                    f"<div class='tt-req-card-action'>{linked_manage_button}</div></div></article>"
                 )
                 requirement_cards_by_class.setdefault(linked_id, {"label": linked_label, "cards": []})["cards"].append((str(r["subject_name"]).casefold(), shared_card))
         requirement_rows = "".join(
@@ -1180,6 +1224,11 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
         .tt-req-card-action{{display:flex;justify-content:flex-end}}
         .tt-req-manage-button{{border:1px solid #d7e6da;background:#f8fcf8;color:#286443;border-radius:9px;padding:9px 13px;font-size:11px;font-weight:850;white-space:nowrap;cursor:pointer}}
         .tt-req-manage-button:hover{{background:#eaf5ec;border-color:#a9cbb0}}
+        .tt-linked-session-list{{grid-column:1/-1;padding:12px;border:1px solid #e1ebe2;border-radius:11px;background:#f8fbf8;display:grid;gap:8px}}
+        .tt-linked-session-list>b{{font-size:12px;color:#28543a}}
+        .tt-linked-session-list>small{{font-size:10px;color:#718477;line-height:1.5}}
+        .tt-linked-session-option{{display:flex!important;grid-template-columns:auto 1fr;align-items:center;gap:8px;padding:8px 9px;border:1px solid #e1ebe2;border-radius:8px;background:#fff;font-size:11px!important}}
+        .tt-linked-session-option input{{width:auto!important;margin:0}}
         .tt-req-manage-dialog{{width:min(820px,100%);}}
         .tt-req-manage-content{{max-height:calc(88vh - 115px);overflow:auto;padding-right:3px}}
         .tt-req-manage-content .tt-form{{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}}
@@ -2387,6 +2436,76 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
         except (TimetableSetupError, ValueError) as exc:
             con.rollback()
             return redirect_setup(profile_id, str(exc), True, request=request)
+        finally:
+            con.close()
+
+    @app.post("/app/timetable/setup/requirement-linked")
+    def save_linked_timetable_requirement(
+        request: Request, profile_id: int = Form(...),
+        lead_requirement_id: int = Form(...), linked_class_id: int = Form(...),
+        lessons_per_week: int = Form(...), max_lessons_per_day: str = Form(""),
+        linked_session_indices: list[int] = Form([]),
+    ):
+        school = school_for(request)
+        if not school:
+            return RedirectResponse("/", 303)
+        con = get_db()
+        try:
+            if not 1 <= int(lessons_per_week) <= 30:
+                raise TimetableSetupError("Weekly period target must be between 1 and 30.")
+            max_day = int(max_lessons_per_day) if max_lessons_per_day.strip() else None
+            if max_day is not None and not 1 <= max_day <= 10:
+                raise TimetableSetupError("Maximum lessons per day must be between 1 and 10.")
+            lead = con.execute(
+                """SELECT id FROM ds_timetable_class_requirements
+                   WHERE id=? AND school_id=? AND profile_id=?""",
+                (lead_requirement_id, int(school["id"]), profile_id),
+            ).fetchone()
+            if not lead:
+                raise TimetableSetupError("The lead subject requirement could not be found.")
+            patterns = con.execute(
+                """SELECT id,session_no,duration_periods,linked_class_ids_json
+                   FROM ds_timetable_requirement_patterns
+                   WHERE school_id=? AND profile_id=? AND requirement_id=? ORDER BY session_no""",
+                (int(school["id"]), profile_id, lead_requirement_id),
+            ).fetchall()
+            kept = {int(value) for value in linked_session_indices}
+            active_periods = 0
+            found = False
+            for pattern in patterns:
+                classes = json.loads(pattern["linked_class_ids_json"] or "[]")
+                if linked_class_id not in [int(value) for value in classes]:
+                    continue
+                found = True
+                session_index = int(pattern["session_no"]) - 1
+                if session_index in kept:
+                    active_periods += int(pattern["duration_periods"] or 1)
+                else:
+                    classes = [int(value) for value in classes if int(value) != linked_class_id]
+                    con.execute(
+                        "UPDATE ds_timetable_requirement_patterns SET linked_class_ids_json=? WHERE id=? AND school_id=?",
+                        (json.dumps(classes), int(pattern["id"]), int(school["id"])),
+                    )
+            if not found:
+                raise TimetableSetupError("This class is no longer linked to the selected lead requirement.")
+            if int(lessons_per_week) < active_periods:
+                raise TimetableSetupError(
+                    f"The weekly target cannot be less than the {active_periods} periods still linked to this class."
+                )
+            con.execute(
+                """INSERT INTO ds_timetable_linked_requirement_settings
+                   (school_id,profile_id,lead_requirement_id,linked_class_id,lessons_per_week,max_lessons_per_day)
+                   VALUES(?,?,?,?,?,?)
+                   ON CONFLICT(school_id,profile_id,lead_requirement_id,linked_class_id)
+                   DO UPDATE SET lessons_per_week=excluded.lessons_per_week,
+                                 max_lessons_per_day=excluded.max_lessons_per_day""",
+                (int(school["id"]), profile_id, lead_requirement_id, linked_class_id, int(lessons_per_week), max_day),
+            )
+            con.commit()
+            return redirect_setup(profile_id, "Linked class requirement saved. Shared sessions were updated independently.", request=request, tab="requirements", section="subject")
+        except (TimetableSetupError, ValueError, TypeError) as exc:
+            con.rollback()
+            return redirect_setup(profile_id, str(exc), True, request=request, tab="requirements", section="subject")
         finally:
             con.close()
 
