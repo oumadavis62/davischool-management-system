@@ -720,6 +720,7 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
             ).fetchall()
             requirement_links_values[int(req["id"])] = json.dumps([
                 {"duration": int(item["duration_periods"] or 1),
+                 "period": int(item["period_no"]) if item["period_no"] is not None else None,
                  "classes": json.loads(item["linked_class_ids_json"] or "[]"),
                  "teachers": json.loads(item["co_teacher_ids_json"] or "[]")}
                 for item in saved_pattern
@@ -789,7 +790,7 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
                         continue
                     if linked_id != cid:
                         linked_sessions_by_class.setdefault(linked_id, []).append(
-                            (session_index, max(1, int(session_link.get("duration", 1) or 1)))
+                            (session_index, max(1, int(session_link.get("duration", 1) or 1)), session_link.get("period"))
                         )
             for linked_id, linked_sessions in sorted(linked_sessions_by_class.items()):
                 linked_class = next((item for item in class_records if int(item["id"]) == linked_id), None)
@@ -798,11 +799,11 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
                 linked_label = str(linked_class["name"]) + (" " + str(linked_class["stream"] or "")).rstrip()
                 # A linked class gets one ordinary subject row, with the
                 # same session/load details as an independent requirement.
-                shared_periods = sum(duration for _, duration in linked_sessions)
+                shared_periods = sum(duration for _, duration, _ in linked_sessions)
                 shared_session_chips = "".join(
-                    f"<span class='tt-session-chip' title='Session {index + 1}: {duration} period(s)'>"
+                    f"<span class='tt-session-chip' title='Session {index + 1}: {duration} period(s) · {'Starts P' + str(period_no) if period_no else 'Automatic start'}'>"
                     f"{'Single' if duration == 1 else ('Double' if duration == 2 else ('Triple' if duration == 3 else str(duration) + ' periods'))}"
-                    f"</span>" for index, duration in linked_sessions
+                    f"</span>" for index, duration, period_no in linked_sessions
                 )
                 linked_setting = linked_requirement_settings.get((int(r["id"]), linked_id))
                 linked_target = int(linked_setting["lessons_per_week"]) if linked_setting else shared_periods
@@ -810,8 +811,8 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
                 linked_modal_id = f"tt-req-linked-{int(r['id'])}-{linked_id}"
                 linked_manage_button = f"""<button type="button" class="tt-req-manage-button" data-req-manage-open="{linked_modal_id}">Manage</button>"""
                 linked_session_rows = "".join(
-                    f"<label class='tt-linked-session-option'><input type='checkbox' name='linked_session_indices' value='{session_index}' checked><span>Session {session_index + 1} · {('Single' if duration == 1 else ('Double' if duration == 2 else ('Triple' if duration == 3 else str(duration) + ' periods')))} · Keep linked</span></label>"
-                    for session_index, duration in linked_sessions
+                    f"<label class='tt-linked-session-option'><input type='checkbox' name='linked_session_indices' value='{session_index}' checked><span>Session {session_index + 1} · {('Single' if duration == 1 else ('Double' if duration == 2 else ('Triple' if duration == 3 else str(duration) + ' periods')))} · {('Starts P' + str(period_no)) if period_no else 'Automatic start'} · Keep linked</span></label>"
+                    for session_index, duration, period_no in linked_sessions
                 )
                 requirement_manage_modals.append(
                     f"""<div class="tt-modal tt-req-manage-modal" id="{linked_modal_id}" role="dialog" aria-modal="true" aria-labelledby="{linked_modal_id}-title">
