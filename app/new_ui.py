@@ -1658,7 +1658,115 @@ document.addEventListener('submit',function(event){{
       menu.querySelectorAll(':scope > a.nav-sub').forEach(function(link){{warmManagerLink(link);}});
     }}
   }},true);
-}})();</script></main></div></body></html>"""
+}})();<script>(function(){{
+  if(window.__daviDashboardAjaxNav)return;
+  window.__daviDashboardAjaxNav=true;
+  var busy=false;
+  function isEligible(link){{
+    if(!link||!link.href||link.target==='_blank'||link.hasAttribute('download'))return false;
+    var raw=link.getAttribute('href')||'';
+    if(!raw||raw.charAt(0)==='#'||/^javascript:/i.test(raw))return false;
+    try{{
+      var url=new URL(link.href,location.href);
+      if(url.origin!==location.origin||!/^https?:$/.test(url.protocol))return false;
+      if(/\/(logout|login)(\/|$)/i.test(url.pathname))return false;
+      if(/\.(pdf|csv|xlsx?|zip)(?:$)/i.test(url.pathname))return false;
+      if(url.searchParams.has('download')||url.searchParams.has('export'))return false;
+      return true;
+    }}catch(error){{return false;}}
+  }}
+  function runPageScripts(main){{
+    var scripts=Array.prototype.slice.call(main.querySelectorAll('script'));
+    scripts.forEach(function(oldScript){{
+      var code=oldScript.textContent||'';
+      if(code.indexOf('Shared workspace performance helpers')>=0||
+         code.indexOf('Predictively warm manager submenu pages')>=0||
+         code.indexOf('__daviDashboardAjaxNav')>=0){{
+        oldScript.remove();
+        return;
+      }}
+      if(oldScript.src){{
+        var alreadyLoaded=Array.prototype.some.call(document.scripts,function(item){{
+          return item!==oldScript&&item.src===oldScript.src;
+        }});
+        if(alreadyLoaded){{oldScript.remove();return;}}
+      }}
+      var fresh=document.createElement('script');
+      Array.prototype.forEach.call(oldScript.attributes,function(attribute){{
+        fresh.setAttribute(attribute.name,attribute.value);
+      }});
+      fresh.textContent=code;
+      oldScript.replaceWith(fresh);
+    }});
+  }}
+  async function loadPage(destination,addHistory){{
+    if(busy)return;
+    busy=true;
+    document.body.setAttribute('aria-busy','true');
+    try{{
+      var response=await fetch(destination,{{
+        method:'GET',
+        credentials:'same-origin',
+        headers:{{
+          'X-Requested-With':'XMLHttpRequest',
+          'X-D-School-History':'replace',
+          'Accept':'text/html'
+        }}
+      }});
+      if(!response.ok)throw new Error('Dashboard page request failed');
+      var html=await response.text();
+      var parsed=new DOMParser().parseFromString(html,'text/html');
+      var incomingApp=parsed.querySelector('.app');
+      var incomingSide=parsed.querySelector('aside.side');
+      var incomingMain=parsed.querySelector('main.main');
+      var currentApp=document.querySelector('.app');
+      var currentSide=document.querySelector('aside.side');
+      var currentMain=document.querySelector('main.main');
+      if(!incomingApp||!incomingSide||!incomingMain||!currentApp||!currentSide||!currentMain){{
+        throw new Error('This destination does not use the shared dashboard shell');
+      }}
+      var nextSide=incomingSide.cloneNode(true);
+      var nextMain=incomingMain.cloneNode(true);
+      currentSide.replaceWith(nextSide);
+      currentMain.replaceWith(nextMain);
+      currentApp.className=incomingApp.className;
+      var wasSidebarHidden=document.body.classList.contains('sidebar-hidden');
+      var wasSidebarOpen=document.body.classList.contains('sidebar-open');
+      document.body.className=parsed.body.className||'';
+      if(wasSidebarHidden)document.body.classList.add('sidebar-hidden');
+      if(wasSidebarOpen)document.body.classList.add('sidebar-open');
+      if(parsed.title)document.title=parsed.title;
+      runPageScripts(nextMain);
+      if(addHistory)history.pushState({daviDashboardAjax:true},'',destination);
+      window.scrollTo({top:0,behavior:'instant'});
+      document.dispatchEvent(new CustomEvent('davi:page-loaded',{{detail:{{url:destination}}}}));
+    }}catch(error){{
+      location.assign(destination);
+    }}finally{{
+      busy=false;
+      document.body.removeAttribute('aria-busy');
+    }}
+  }}
+  document.addEventListener('click',function(event){{
+    if(event.defaultPrevented||event.button!==0||event.metaKey||event.ctrlKey||event.shiftKey||event.altKey)return;
+    var link=event.target&&event.target.closest?event.target.closest(
+      'aside.side a.nav, aside.side a.nav-sub, .main a[role="tab"], .main a.tab, .main a.tab-link, .main a.subtab, .main a.sub-tab'
+    ):null;
+    if(!link||!isEligible(link))return;
+    var target=new URL(link.href,location.href);
+    if(target.pathname===location.pathname&&target.search===location.search&&target.hash===location.hash)return;
+    event.preventDefault();
+    link.setAttribute('aria-busy','true');
+    loadPage(target.href,true);
+  }},true);
+  window.addEventListener('popstate',function(){{
+    if(/^\/(app|schools|account)(\/|$)/.test(location.pathname)){{
+      loadPage(location.href,false);
+    }}else{{
+      location.reload();
+    }}
+  }});
+}})();</script></script></main></div></body></html>"""
 @router.get("/app/session-keepalive")
 def session_keepalive(request: Request):
     """Refresh an active authenticated session when the user is interacting with the workspace."""
