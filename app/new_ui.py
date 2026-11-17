@@ -1785,21 +1785,30 @@ document.addEventListener('submit',function(event){{
       var incomingApp=parsed.querySelector('.app');
       var incomingSide=parsed.querySelector('aside.side');
       var incomingMain=parsed.querySelector('main.main');
-      // Page-specific styles are sometimes returned inside <main>. Move them
-      // into the live document head before swapping page content so the browser
-      // applies them consistently during AJAX navigation, just as it does on a
-      // full-page load. Remove the previous page's injected styles first.
+      // DOMParser relocates style elements from the response body into parsed.head.
+      // Collect page styles from both locations before swapping the main content.
+      // Keep the shell's shared stylesheet in place and replace only page-specific
+      // styles injected by earlier AJAX navigations.
       document.head.querySelectorAll('[data-davi-ajax-page-style="1"]').forEach(function(style){{
         style.remove();
       }});
-      if(incomingMain){{
-        Array.prototype.slice.call(incomingMain.querySelectorAll('style, link[rel~="stylesheet"]')).forEach(function(sourceStyle){{
-          var pageStyle=sourceStyle.cloneNode(true);
-          pageStyle.setAttribute('data-davi-ajax-page-style','1');
-          document.head.appendChild(pageStyle);
-          sourceStyle.remove();
-        }});
-      }}
+      var liveStyleSignatures=new Set(Array.prototype.map.call(
+        document.head.querySelectorAll('style, link[rel~="stylesheet"]'),
+        function(style){{return style.tagName==='STYLE' ? style.textContent : style.href;}}
+      ));
+      var responseStyles=Array.prototype.slice.call(parsed.head.querySelectorAll('style, link[rel~="stylesheet"]'));
+      if(incomingMain)responseStyles=responseStyles.concat(
+        Array.prototype.slice.call(incomingMain.querySelectorAll('style, link[rel~="stylesheet"]'))
+      );
+      responseStyles.forEach(function(sourceStyle){{
+        var signature=sourceStyle.tagName==='STYLE' ? sourceStyle.textContent : sourceStyle.href;
+        if(liveStyleSignatures.has(signature))return;
+        var pageStyle=sourceStyle.cloneNode(true);
+        pageStyle.setAttribute('data-davi-ajax-page-style','1');
+        document.head.appendChild(pageStyle);
+        liveStyleSignatures.add(signature);
+        sourceStyle.remove();
+      }});
       var currentApp=document.querySelector('.app');
       var currentSide=document.querySelector('aside.side');
       var currentMain=document.querySelector('main.main');
