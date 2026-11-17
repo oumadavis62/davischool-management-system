@@ -47,59 +47,7 @@ def timetable_workspace(request, body):
         "@media(max-width:600px){.tt-global-tabs{margin-left:-3px;margin-right:-3px}.tt-global-tabs a{min-height:38px;padding:8px 11px;font-size:10px}}"
         "</style>"
         + """
-        <script>
-        (function(){
-          if(window.__ttGlobalTabNavigation)return;
-          window.__ttGlobalTabNavigation=true;
-          let pending=false;
-          async function visit(url,addHistory){
-            if(pending)return;
-            pending=true;
-            document.querySelector('.tt-global-tabs')?.setAttribute('aria-busy','true');
-            try{
-              const response=await fetch(url,{method:'GET',credentials:'same-origin',headers:{'X-Requested-With':'XMLHttpRequest','Accept':'text/html'}});
-              if(!response.ok)throw new Error('Timetable page request failed');
-              const html=await response.text();
-              const parsed=new DOMParser().parseFromString(html,'text/html');
-              if(!parsed.body||!parsed.querySelector('.tt-global-tabs'))throw new Error('Incomplete timetable page');
-              const body=document.body;
-              for(const attribute of [...body.attributes])body.removeAttribute(attribute.name);
-              for(const attribute of [...parsed.body.attributes])body.setAttribute(attribute.name,attribute.value);
-              body.innerHTML=parsed.body.innerHTML;
-              if(parsed.title)document.title=parsed.title;
-              // Recreate inline scripts so each page's existing controls initialise.
-              for(const oldScript of [...body.querySelectorAll('script')]){
-                if(oldScript.src){
-                  const exists=[...document.scripts].some(item=>item!==oldScript&&item.src===oldScript.src);
-                  if(exists){oldScript.remove();continue;}
-                }
-                const fresh=document.createElement('script');
-                for(const attribute of [...oldScript.attributes])fresh.setAttribute(attribute.name,attribute.value);
-                fresh.textContent=oldScript.textContent;
-                oldScript.replaceWith(fresh);
-              }
-              if(addHistory)history.pushState({timetable:true},'',url);
-              window.scrollTo({top:0,behavior:'instant'});
-            }catch(error){
-              window.location.assign(url);
-            }finally{
-              pending=false;
-              document.querySelector('.tt-global-tabs')?.removeAttribute('aria-busy');
-            }
-          }
-          document.addEventListener('click',event=>{
-            const link=event.target.closest('.tt-global-tabs a');
-            if(!link||event.defaultPrevented||event.button!==0||event.metaKey||event.ctrlKey||event.shiftKey||event.altKey)return;
-            const target=new URL(link.href,location.href);
-            if(target.origin!==location.origin)return;
-            event.preventDefault();
-            visit(target.pathname+target.search+target.hash,true);
-          });
-          window.addEventListener('popstate',()=>{
-            if(location.pathname.startsWith('/app/timetable'))visit(location.pathname+location.search+location.hash,false);
-          });
-        })();
-        </script>
+
         """
     )
     if path != "/app/timetable/setup":
