@@ -1759,6 +1759,20 @@ document.addEventListener('submit',function(event){{
       oldScript.replaceWith(fresh);
     }});
   }}
+  function collapseDashboardSidebar(){{
+    document.body.classList.add('sidebar-hidden');
+    document.body.classList.remove('sidebar-open');
+    var toggle=document.getElementById('sidebarToggle');
+    if(toggle){{
+      toggle.setAttribute('aria-label','Show sidebar');
+      toggle.setAttribute('title','Show sidebar');
+      toggle.setAttribute('aria-expanded','false');
+    }}
+    try{{
+      localStorage.setItem('davischool_sidebar_hidden','1');
+      localStorage.setItem('davischool_teacher_sidebar_hidden','1');
+    }}catch(error){{}}
+  }}
   async function loadPage(destination,addHistory){{
     if(busy)return;
     busy=true;
@@ -1790,12 +1804,7 @@ document.addEventListener('submit',function(event){{
       currentApp.className=incomingApp.className;
       document.body.className=parsed.body.className||'';
       // Collapse the dashboard sidebar after every successful page change.
-      document.body.classList.add('sidebar-hidden');
-      document.body.classList.remove('sidebar-open');
-      try{{
-        localStorage.setItem('davischool_sidebar_hidden','1');
-        localStorage.setItem('davischool_teacher_sidebar_hidden','1');
-      }}catch(error){{}}
+      collapseDashboardSidebar();
       if(parsed.title)document.title=parsed.title;
       runPageScripts(nextMain);
       if(resolvedUrl.hash){{
@@ -1826,6 +1835,7 @@ document.addEventListener('submit',function(event){{
     if(target.pathname===location.pathname&&target.search===location.search&&target.hash===location.hash)return;
     event.preventDefault();
     link.setAttribute('aria-busy','true');
+    collapseDashboardSidebar();
     loadPage(target.href,true);
   }},true);
   document.addEventListener('pointerover',function(event){{
