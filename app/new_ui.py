@@ -1730,6 +1730,8 @@ document.addEventListener('submit',function(event){{
       if(!incomingApp||!incomingSide||!incomingMain||!currentApp||!currentSide||!currentMain){{
         throw new Error('This destination does not use the shared dashboard shell');
       }}
+      var finalUrl=response.url||destination;
+      if(addHistory)history.pushState(Object.assign({{}},history.state||{{}},{{daviDashboardAjax:true}}),'',finalUrl);
       var nextSide=incomingSide.cloneNode(true);
       var nextMain=incomingMain.cloneNode(true);
       currentSide.replaceWith(nextSide);
@@ -1742,9 +1744,8 @@ document.addEventListener('submit',function(event){{
       if(wasSidebarOpen)document.body.classList.add('sidebar-open');
       if(parsed.title)document.title=parsed.title;
       runPageScripts(nextMain);
-      if(addHistory)history.pushState(Object.assign({{}},history.state||{{}},{{daviDashboardAjax:true}}),'',destination);
       window.scrollTo({top:0,behavior:'instant'});
-      document.dispatchEvent(new CustomEvent('davi:page-loaded',{{detail:{{url:destination}}}}));
+      document.dispatchEvent(new CustomEvent('davi:page-loaded',{{detail:{{url:finalUrl}}}}));
     }}catch(error){{
       location.assign(destination);
     }}finally{{
