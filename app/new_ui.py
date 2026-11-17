@@ -1803,8 +1803,6 @@ document.addEventListener('submit',function(event){{
       currentMain.replaceWith(nextMain);
       currentApp.className=incomingApp.className;
       document.body.className=parsed.body.className||'';
-      // Collapse the dashboard sidebar after every successful page change.
-      collapseDashboardSidebar();
       if(parsed.title)document.title=parsed.title;
       runPageScripts(nextMain);
       if(resolvedUrl.hash){{
@@ -1817,6 +1815,8 @@ document.addEventListener('submit',function(event){{
         window.scrollTo({{top:0,behavior:'instant'}});
       }}
       document.dispatchEvent(new CustomEvent('davi:page-loaded',{{detail:{{url:finalUrl}}}}));
+      // Hide the sidebar only after the new page and its scripts have finished loading.
+      collapseDashboardSidebar();
       scheduleWarm();
     }}catch(error){{
       location.assign(destination);
@@ -1835,7 +1835,6 @@ document.addEventListener('submit',function(event){{
     if(target.pathname===location.pathname&&target.search===location.search&&target.hash===location.hash)return;
     event.preventDefault();
     link.setAttribute('aria-busy','true');
-    collapseDashboardSidebar();
     loadPage(target.href,true);
   }},true);
   document.addEventListener('pointerover',function(event){{
