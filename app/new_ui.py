@@ -1374,7 +1374,7 @@ function isSystemPath(path){{
       var currentRoot=workspace(window.location.pathname),targetRoot=workspace(target.pathname);
       if(currentRoot==='/' || targetRoot==='/' || currentRoot!==targetRoot)return;
       var currentPath=cleanPath(window.location.pathname),targetPath=cleanPath(target.pathname);
-      var ajaxNavLink=link.matches('aside.side a.nav, aside.side a.nav-sub, .main a[role="tab"], .main a.tab, .main a.tab-link, .main a.subtab, .main a.sub-tab');if(!ajaxNavLink && currentPath!==currentRoot && cleanPath(target.pathname)!==targetRoot){{event.preventDefault();window.location.replace(target.toString());}}
+      var ajaxNavLink=link.matches('aside.side a.nav, aside.side a.nav-sub, .tt-global-tabs a, .main nav a[href], .main a[role="tab"][href], .main a.tab, .main a.tab-link, .main a.subtab, .main a.sub-tab, .main a[class*="tab"][href]');if(!ajaxNavLink && currentPath!==currentRoot && cleanPath(target.pathname)!==targetRoot){{event.preventDefault();window.location.replace(target.toString());}}
     }},true);
   }}catch(e){{console.warn('Mabale_ICT navigation handler:',e);}}
 }})();
@@ -1647,6 +1647,9 @@ document.addEventListener('submit',function(event){{
   // Opening a manager menu gives the next tap a head start: warm only its
   // immediate destinations (nested sections warm their own links when opened).
   document.addEventListener('toggle',function(event){{
+    if(event.target&&event.target.tagName==='DETAILS'&&event.target.classList.contains('nav-group')&&event.target.open)scheduleWarm();
+  }},true);
+  document.addEventListener('toggle',function(event){{
     var group=event.target;
     if(!group||group.tagName!=='DETAILS'||!group.classList.contains('nav-group')||!group.open)return;
     var menu=group.querySelector(':scope > .nav-submenu');
@@ -1692,7 +1695,7 @@ document.addEventListener('submit',function(event){{
       if(pagePending.has(key))return pagePending.get(key);
       var job=fetch(key,{{
         method:'GET',credentials:'same-origin',cache:'force-cache',
-        headers:{{'X-Requested-With':'XMLHttpRequest','X-D-School-Prefetch':'1','Accept':'text/html'}}
+        headers:{{'X-Requested-With':'XMLHttpRequest','X-D-School-Prefetch':'1','X-D-School-History':'replace','Accept':'text/html'}}
       }}).then(function(response){{
         if(!response.ok||/\/(login|logout)(\/|$)/i.test(new URL(response.url||key,location.href).pathname))throw new Error('Prefetch unavailable');
         return response.text();
