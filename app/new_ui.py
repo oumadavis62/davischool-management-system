@@ -1731,6 +1731,10 @@ document.addEventListener('submit',function(event){{
         throw new Error('This destination does not use the shared dashboard shell');
       }}
       var finalUrl=response.url||destination;
+      var requestedUrl=new URL(destination,location.href);
+      var resolvedUrl=new URL(finalUrl,location.href);
+      if(requestedUrl.hash)resolvedUrl.hash=requestedUrl.hash;
+      finalUrl=resolvedUrl.href;
       if(addHistory)history.pushState(Object.assign({{}},history.state||{{}},{{daviDashboardAjax:true}}),'',finalUrl);
       var nextSide=incomingSide.cloneNode(true);
       var nextMain=incomingMain.cloneNode(true);
@@ -1744,7 +1748,15 @@ document.addEventListener('submit',function(event){{
       if(wasSidebarOpen)document.body.classList.add('sidebar-open');
       if(parsed.title)document.title=parsed.title;
       runPageScripts(nextMain);
-      window.scrollTo({top:0,behavior:'instant'});
+      if(resolvedUrl.hash){{
+        var hashId='';
+        try{{hashId=decodeURIComponent(resolvedUrl.hash.slice(1));}}catch(error){{hashId=resolvedUrl.hash.slice(1);}}
+        var hashTarget=document.getElementById(hashId);
+        if(hashTarget)hashTarget.scrollIntoView({{behavior:'instant',block:'start'}});
+        else window.scrollTo({{top:0,behavior:'instant'}});
+      }}else{{
+        window.scrollTo({{top:0,behavior:'instant'}});
+      }}
       document.dispatchEvent(new CustomEvent('davi:page-loaded',{{detail:{{url:finalUrl}}}}));
     }}catch(error){{
       location.assign(destination);
