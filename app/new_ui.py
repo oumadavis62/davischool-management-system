@@ -1374,7 +1374,7 @@ function isSystemPath(path){{
       var currentRoot=workspace(window.location.pathname),targetRoot=workspace(target.pathname);
       if(currentRoot==='/' || targetRoot==='/' || currentRoot!==targetRoot)return;
       var currentPath=cleanPath(window.location.pathname),targetPath=cleanPath(target.pathname);
-      if(currentPath!==currentRoot && cleanPath(target.pathname)!==targetRoot){{event.preventDefault();window.location.replace(target.toString());}}
+      var ajaxNavLink=link.matches('aside.side a.nav, aside.side a.nav-sub, .main a[role="tab"], .main a.tab, .main a.tab-link, .main a.subtab, .main a.sub-tab');if(!ajaxNavLink && currentPath!==currentRoot && cleanPath(target.pathname)!==targetRoot){{event.preventDefault();window.location.replace(target.toString());}}
     }},true);
   }}catch(e){{console.warn('Mabale_ICT navigation handler:',e);}}
 }})();
@@ -1680,6 +1680,11 @@ document.addEventListener('submit',function(event){{
     scripts.forEach(function(oldScript){{
       var code=oldScript.textContent||'';
       if(code.indexOf('Shared workspace performance helpers')>=0||
+         code.indexOf('function applySidebarState(hidden)')>=0||
+         code.indexOf('function toggleTeacherProfileMenu(event)')>=0||
+         code.indexOf('Warm the exact browser Back destinations')>=0||
+         code.indexOf('PING_EVERY=60000')>=0||
+         code.indexOf('Shared route classifier used by every filter-history handler')>=0||
          code.indexOf('Predictively warm manager submenu pages')>=0||
          code.indexOf('__daviDashboardAjaxNav')>=0){{
         oldScript.remove();
@@ -1737,7 +1742,7 @@ document.addEventListener('submit',function(event){{
       if(wasSidebarOpen)document.body.classList.add('sidebar-open');
       if(parsed.title)document.title=parsed.title;
       runPageScripts(nextMain);
-      if(addHistory)history.pushState({daviDashboardAjax:true},'',destination);
+      if(addHistory)history.pushState(Object.assign({{}},history.state||{{}},{{daviDashboardAjax:true}}),'',destination);
       window.scrollTo({top:0,behavior:'instant'});
       document.dispatchEvent(new CustomEvent('davi:page-loaded',{{detail:{{url:destination}}}}));
     }}catch(error){{
