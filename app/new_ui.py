@@ -1662,6 +1662,14 @@ document.addEventListener('submit',function(event){{
   if(window.__daviDashboardAjaxNav)return;
   window.__daviDashboardAjaxNav=true;
   var busy=false;
+  var pageCache=new Map();
+  var pagePending=new Map();
+  var maxCachedPages=14;
+  function cachePage(url,html){{
+    if(pageCache.has(url))pageCache.delete(url);
+    pageCache.set(url,html);
+    while(pageCache.size>maxCachedPages)pageCache.delete(pageCache.keys().next().value);
+  }}
   function isEligible(link){{
     if(!link||!link.href||link.target==='_blank'||link.hasAttribute('download'))return false;
     var raw=link.getAttribute('href')||'';
@@ -1674,6 +1682,50 @@ document.addEventListener('submit',function(event){{
       if(url.searchParams.has('download')||url.searchParams.has('export'))return false;
       return true;
     }}catch(error){{return false;}}
+  }}
+  function warmPage(url){{
+    try{{
+      var target=new URL(url,location.href);
+      if(target.origin!==location.origin||!isEligible({{href:target.href,getAttribute:function(){{return target.pathname+target.search;}},hasAttribute:function(){{return false;}}}}))return Promise.resolve(null);
+      var key=target.href;
+      if(pageCache.has(key))return Promise.resolve(pageCache.get(key));
+      if(pagePending.has(key))return pagePending.get(key);
+      var job=fetch(key,{{
+        method:'GET',credentials:'same-origin',cache:'force-cache',
+        headers:{{'X-Requested-With':'XMLHttpRequest','X-D-School-Prefetch':'1','Accept':'text/html'}}
+      }}).then(function(response){{
+        if(!response.ok||/\/(login|logout)(\/|$)/i.test(new URL(response.url||key,location.href).pathname))throw new Error('Prefetch unavailable');
+        return response.text();
+      }}).then(function(html){{
+        if(!html||html.indexOf('<main')<0)throw new Error('Incomplete prefetched page');
+        cachePage(key,html);
+        return html;
+      }}).catch(function(){{return null;}}).finally(function(){{pagePending.delete(key);}});
+      pagePending.set(key,job);
+      return job;
+    }}catch(error){{return Promise.resolve(null);}}
+  }}
+  function scheduleWarm(){{
+    var links=[];
+    function add(link){{
+      if(!link||!isEligible(link))return;
+      var url=new URL(link.href,location.href).href;
+      if(url===location.href||links.some(function(item){{return item.href===url;}}))return;
+      links.push({{href:url,priority:link.closest('.tt-global-tabs, .main nav, .nav-submenu[open]')?0:1}});
+    }}
+    document.querySelectorAll('.tt-global-tabs a, .main nav a[href], .main a[role="tab"][href], .main a[class*="tab"][href]').forEach(add);
+    document.querySelectorAll('aside.side details.nav-group[open] a.nav-sub, aside.side a.nav').forEach(add);
+    links.sort(function(a,b){{return a.priority-b.priority;}});
+    var queue=links.slice(0,10),index=0,active=0;
+    function pump(){{
+      while(active<2&&index<queue.length){{
+        var item=queue[index++];active++;
+        warmPage(item.href).finally(function(){{active--;pump();}});
+      }}
+    }}
+    var run=function(){{pump();}};
+    if(window.requestIdleCallback)window.requestIdleCallback(run,{{timeout:900}});
+    else window.setTimeout(run,180);
   }}
   function runPageScripts(main){{
     var scripts=Array.prototype.slice.call(main.querySelectorAll('script'));
@@ -1719,7 +1771,9 @@ document.addEventListener('submit',function(event){{
         }}
       }});
       if(!response.ok)throw new Error('Dashboard page request failed');
-      var html=await response.text();
+      var html=pageCache.get(new URL(destination,location.href).href);
+      if(!html)html=await warmPage(destination);
+      if(!html)throw new Error('Dashboard page could not be loaded');
       var parsed=new DOMParser().parseFromString(html,'text/html');
       var incomingApp=parsed.querySelector('.app');
       var incomingSide=parsed.querySelector('aside.side');
@@ -1741,11 +1795,14 @@ document.addEventListener('submit',function(event){{
       currentSide.replaceWith(nextSide);
       currentMain.replaceWith(nextMain);
       currentApp.className=incomingApp.className;
-      var wasSidebarHidden=document.body.classList.contains('sidebar-hidden');
-      var wasSidebarOpen=document.body.classList.contains('sidebar-open');
       document.body.className=parsed.body.className||'';
-      if(wasSidebarHidden)document.body.classList.add('sidebar-hidden');
-      if(wasSidebarOpen)document.body.classList.add('sidebar-open');
+      // Collapse the dashboard sidebar after every successful page change.
+      document.body.classList.add('sidebar-hidden');
+      document.body.classList.remove('sidebar-open');
+      try{{
+        localStorage.setItem('davischool_sidebar_hidden','1');
+        localStorage.setItem('davischool_teacher_sidebar_hidden','1');
+      }}catch(error){{}}
       if(parsed.title)document.title=parsed.title;
       runPageScripts(nextMain);
       if(resolvedUrl.hash){{
@@ -1758,6 +1815,7 @@ document.addEventListener('submit',function(event){{
         window.scrollTo({{top:0,behavior:'instant'}});
       }}
       document.dispatchEvent(new CustomEvent('davi:page-loaded',{{detail:{{url:finalUrl}}}}));
+      scheduleWarm();
     }}catch(error){{
       location.assign(destination);
     }}finally{{
@@ -1768,7 +1826,7 @@ document.addEventListener('submit',function(event){{
   document.addEventListener('click',function(event){{
     if(event.defaultPrevented||event.button!==0||event.metaKey||event.ctrlKey||event.shiftKey||event.altKey)return;
     var link=event.target&&event.target.closest?event.target.closest(
-      'aside.side a.nav, aside.side a.nav-sub, .main a[role="tab"], .main a.tab, .main a.tab-link, .main a.subtab, .main a.sub-tab'
+      'aside.side a.nav, aside.side a.nav-sub, .tt-global-tabs a, .main nav a[href], .main a[role="tab"][href], .main a.tab, .main a.tab-link, .main a.subtab, .main a.sub-tab, .main a[class*="tab"][href]'
     ):null;
     if(!link||!isEligible(link))return;
     var target=new URL(link.href,location.href);
@@ -1777,6 +1835,19 @@ document.addEventListener('submit',function(event){{
     link.setAttribute('aria-busy','true');
     loadPage(target.href,true);
   }},true);
+  document.addEventListener('pointerover',function(event){{
+    var link=event.target&&event.target.closest?event.target.closest('aside.side a.nav, aside.side a.nav-sub, .tt-global-tabs a, .main nav a[href], .main a[role="tab"][href], .main a[class*="tab"][href]'):null;
+    if(link&&isEligible(link))warmPage(link.href);
+  }},{{capture:true,passive:true}});
+  document.addEventListener('focusin',function(event){{
+    var link=event.target&&event.target.closest?event.target.closest('aside.side a.nav, aside.side a.nav-sub, .tt-global-tabs a, .main nav a[href], .main a[role="tab"][href], .main a[class*="tab"][href]'):null;
+    if(link&&isEligible(link))warmPage(link.href);
+  }},true);
+  document.addEventListener('touchstart',function(event){{
+    var link=event.target&&event.target.closest?event.target.closest('aside.side a.nav, aside.side a.nav-sub, .tt-global-tabs a, .main nav a[href], .main a[role="tab"][href], .main a[class*="tab"][href]'):null;
+    if(link&&isEligible(link))warmPage(link.href);
+  }},{{capture:true,passive:true}});
+  scheduleWarm();
   window.addEventListener('popstate',function(){{
     if(/^\/(app|schools|account)(\/|$)/.test(location.pathname)){{
       loadPage(location.href,false);
