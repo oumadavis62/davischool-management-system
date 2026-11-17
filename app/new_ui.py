@@ -1785,6 +1785,21 @@ document.addEventListener('submit',function(event){{
       var incomingApp=parsed.querySelector('.app');
       var incomingSide=parsed.querySelector('aside.side');
       var incomingMain=parsed.querySelector('main.main');
+      // Page-specific styles are sometimes returned inside <main>. Move them
+      // into the live document head before swapping page content so the browser
+      // applies them consistently during AJAX navigation, just as it does on a
+      // full-page load. Remove the previous page's injected styles first.
+      document.head.querySelectorAll('[data-davi-ajax-page-style="1"]').forEach(function(style){{
+        style.remove();
+      }});
+      if(incomingMain){{
+        Array.prototype.slice.call(incomingMain.querySelectorAll('style, link[rel~="stylesheet"]')).forEach(function(sourceStyle){{
+          var pageStyle=sourceStyle.cloneNode(true);
+          pageStyle.setAttribute('data-davi-ajax-page-style','1');
+          document.head.appendChild(pageStyle);
+          sourceStyle.remove();
+        }});
+      }}
       var currentApp=document.querySelector('.app');
       var currentSide=document.querySelector('aside.side');
       var currentMain=document.querySelector('main.main');
