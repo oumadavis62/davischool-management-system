@@ -1761,16 +1761,6 @@ document.addEventListener('submit',function(event){{
     busy=true;
     document.body.setAttribute('aria-busy','true');
     try{{
-      var response=await fetch(destination,{{
-        method:'GET',
-        credentials:'same-origin',
-        headers:{{
-          'X-Requested-With':'XMLHttpRequest',
-          'X-D-School-History':'replace',
-          'Accept':'text/html'
-        }}
-      }});
-      if(!response.ok)throw new Error('Dashboard page request failed');
       var html=pageCache.get(new URL(destination,location.href).href);
       if(!html)html=await warmPage(destination);
       if(!html)throw new Error('Dashboard page could not be loaded');
@@ -1784,7 +1774,7 @@ document.addEventListener('submit',function(event){{
       if(!incomingApp||!incomingSide||!incomingMain||!currentApp||!currentSide||!currentMain){{
         throw new Error('This destination does not use the shared dashboard shell');
       }}
-      var finalUrl=response.url||destination;
+      var finalUrl=destination;
       var requestedUrl=new URL(destination,location.href);
       var resolvedUrl=new URL(finalUrl,location.href);
       if(requestedUrl.hash)resolvedUrl.hash=requestedUrl.hash;
