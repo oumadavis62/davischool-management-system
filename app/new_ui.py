@@ -1658,7 +1658,7 @@ document.addEventListener('submit',function(event){{
       menu.querySelectorAll(':scope > a.nav-sub').forEach(function(link){{warmManagerLink(link);}});
     }}
   }},true);
-}})();<script>(function(){{
+}})();</script><script>(function(){{
   if(window.__daviDashboardAjaxNav)return;
   window.__daviDashboardAjaxNav=true;
   var busy=false;
@@ -1766,7 +1766,7 @@ document.addEventListener('submit',function(event){{
       location.reload();
     }}
   }});
-}})();</script></script></main></div></body></html>"""
+}})();</script></main></div></body></html>"""
 @router.get("/app/session-keepalive")
 def session_keepalive(request: Request):
     """Refresh an active authenticated session when the user is interacting with the workspace."""
