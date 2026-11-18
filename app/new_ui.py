@@ -7076,23 +7076,8 @@ function toggleOverviewHealth(card){{
   card.classList.toggle('expanded',open);
   card.setAttribute('aria-expanded',open?'true':'false');
   document.body.style.overflow=open?'hidden':'';
-  try{{
-    if(open){{
-      var state=(history.state&&typeof history.state==='object')?history.state:{{}};
-      history.pushState(Object.assign({{}},state,{{daviHealthExpanded:true}}),'',window.location.href);
-    }}else if(history.state&&history.state.daviHealthExpanded){{
-      history.back();
-    }}
-  }}catch(e){{}}
+  // Expanding this overview card is local display state, not a browser-history step.
 }}
-window.addEventListener('popstate',function(event){{
-  var card=document.querySelector('.overview-health-card.expanded');
-  if(card&&!(event.state&&event.state.daviHealthExpanded)){{
-    card.classList.remove('expanded');
-    card.setAttribute('aria-expanded','false');
-    document.body.style.overflow='';
-  }}
-}});
 </script>"""
 
 
