@@ -1658,13 +1658,13 @@ document.addEventListener('submit',function(event){{
     if(link&&isEligible(link))warmPage(link.href);
   }},{{capture:true,passive:true}});
   scheduleWarm();
-  window.addEventListener('popstate',function(){{
-    if(/^\/(app|schools|account)(\/|$)/.test(location.pathname)){{
+  window.__daviAjaxPopstateHandler=function(){{
+    if(/^\\/(app|schools|account)(\\/|$)/.test(location.pathname)){{
       loadPage(location.href,false);
     }}else{{
       location.reload();
     }}
-  }});
+  }};
 }})();</script></main></div></body></html>"""
 @router.get("/app/session-keepalive")
 def session_keepalive(request: Request):
