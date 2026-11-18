@@ -545,6 +545,15 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
                    WHERE r.school_id=? AND r.profile_id=? AND lower(trim(COALESCE(t.role, ''))) = 'teacher' ORDER BY c.name,c.stream,s.name""",
                 (school_id,pid),
             ).fetchall()
+            requirement_pattern_rows = {}
+            for requirement_row in requirements:
+                requirement_pattern_rows[int(requirement_row["id"])] = cur.execute(
+                    """SELECT duration_periods,co_teacher_ids_json
+                       FROM ds_timetable_requirement_patterns
+                       WHERE school_id=? AND profile_id=? AND requirement_id=?
+                       ORDER BY session_no""",
+                    (school_id, pid, int(requirement_row["id"])),
+                ).fetchall()
             linked_requirement_settings_rows = cur.execute(
                 """SELECT lead_requirement_id,linked_class_id,lessons_per_week,max_lessons_per_day
                    FROM ds_timetable_linked_requirement_settings WHERE school_id=? AND profile_id=?""",
@@ -933,40 +942,34 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
         for req in requirements:
             lead_teacher_id = int(req["teacher_id"])
             subject_label = str(req["subject_name"])
-            patterns = cur.execute(
-                """SELECT duration_periods,co_teacher_ids_json
-                   FROM ds_timetable_requirement_patterns
-                   WHERE school_id=? AND profile_id=? AND requirement_id=?
-                   ORDER BY session_no""",
-                (school_id, pid, int(req["id"])),
-            ).fetchall()
-            if patterns:
-                session_loads = []
-                for pattern in patterns:
-                    duration = max(1, int(pattern["duration_periods"] or 1))
+            patterns = requirement_pattern_rows.get(int(req["id"]), [])
+            expected_lead_load = max(0, int(req["lessons_per_week"] or 0)) * max(1, int(req["duration_periods"] or 1))
+            configured_pattern_load = 0
+            for pattern in patterns:
+                duration = max(1, int(pattern["duration_periods"] or 1))
+                configured_pattern_load += duration
+                try:
+                    co_ids = json.loads(pattern["co_teacher_ids_json"] or "[]")
+                except (TypeError, ValueError):
+                    co_ids = []
+                for value in co_ids:
                     try:
-                        co_ids = json.loads(pattern["co_teacher_ids_json"] or "[]")
+                        co_teacher_id = int(value)
                     except (TypeError, ValueError):
-                        co_ids = []
-                    participants = [lead_teacher_id]
-                    for value in co_ids:
-                        try:
-                            teacher_id = int(value)
-                        except (TypeError, ValueError):
-                            continue
-                        if teacher_id > 0 and teacher_id not in participants:
-                            participants.append(teacher_id)
-                    session_loads.append((duration, participants))
-            else:
-                # Older requirements without a session planner still carry
-                # their full weekly allocation in lessons_per_week.
-                duration = max(0, int(req["lessons_per_week"] or 0)) * max(1, int(req["duration_periods"] or 1))
-                session_loads = [(duration, [lead_teacher_id])] if duration else []
-            for duration, participants in session_loads:
-                for teacher_id in participants:
-                    item = teacher_workloads.setdefault(teacher_id, {"total": 0, "subjects": {}})
+                        continue
+                    if co_teacher_id <= 0 or co_teacher_id == lead_teacher_id:
+                        continue
+                    item = teacher_workloads.setdefault(co_teacher_id, {"total": 0, "subjects": {}})
                     item["total"] += duration
                     item["subjects"][subject_label] = item["subjects"].get(subject_label, 0) + duration
+
+            # Keep the lead teacher's full configured target visible even while
+            # the optional single/double session breakdown is only partly saved.
+            lead_load = max(expected_lead_load, configured_pattern_load)
+            if lead_load:
+                item = teacher_workloads.setdefault(lead_teacher_id, {"total": 0, "subjects": {}})
+                item["total"] += lead_load
+                item["subjects"][subject_label] = item["subjects"].get(subject_label, 0) + lead_load
 
         teacher_color_cards = "".join(
             f"<article class='tt-teacher-label-card' data-teacher-label-card data-search-name='{esc(t['name']).lower()}'><div class='tt-teacher-label-person'><span class='tt-teacher-avatar' style='--teacher-label-color:{esc(t['teacher_color'] or '#2563EB')}'>{esc((t['teacher_initials'] or (str(t['name']).strip()[:1])).upper())}</span><div><b>{esc(t['name'])}</b><small>Timetable appearance</small></div></div><div class='tt-teacher-workload'><strong>{teacher_workloads.get(int(t['id']), {}).get('total', 0)} <span>periods / week</span></strong><small>{' · '.join(esc(subject + ' ' + str(load)) for subject, load in sorted(teacher_workloads.get(int(t['id']), {}).get('subjects', {}).items(), key=lambda item: item[0].casefold())) or 'No subject requirements configured'}</small></div><form method='post' data-native-post='true' action='/app/timetable/setup/teacher-color' class='tt-teacher-color-form'>{hidden}{teacher_color_tab_field}<input type='hidden' name='teacher_id' value='{int(t['id'])}'><label class='tt-teacher-initials-field'>Label initials<input name='teacher_initials' value='{esc(t['teacher_initials'] or '')}' maxlength='4' pattern='[A-Za-z]{1,4}' placeholder='e.g. JM' required></label><label class='tt-teacher-colour-field'>Colour<input aria-label='Colour for {esc(t['name'])}' type='color' name='teacher_color' value='{esc(t['teacher_color'] or '#2563EB')}' required></label><span class='tt-teacher-color-code'>{esc(t['teacher_color'] or '#2563EB')}</span><button class='tt-btn'>Save</button></form></article>"
