@@ -6290,6 +6290,16 @@ function printDocument(){
         "@media print{@page{size:A4 landscape;margin:10mm 10mm 16mm;@bottom-center{content:'Page ' counter(page) ' of ' counter(pages);font-family:Arial,sans-serif;font-size:9px;color:#28563a}} body{background:#fff}.marksheet-pagination{display:none!important}.marksheet tbody tr{display:table-row!important}.side,.top,.no-print,.page>h1,.page>.muted{display:none!important}.main{margin-left:0!important;padding:0!important}.page{padding:0!important;margin:0!important;max-width:none!important}.marksheet-card{display:block!important;border:0!important;box-shadow:none!important;margin:0!important;padding:0!important;width:100%!important}.marksheet-card .doc-header{margin-top:0}.marksheet-title{font-size:20px}.marksheet-school{font-size:20px}.marksheet th,.marksheet td{padding:4px 5px;font-size:10px}}"
         "</style></div>"
     )
+    # Emit this page's stylesheet before its markup. Keeping the large MarkSheet
+    # stylesheet at the end of the response causes a flash of unstyled, distorted
+    # content on refresh while the browser parses the table and toolbar first.
+    _marksheet_style_start = body.rfind("<style>")
+    _marksheet_style_end = body.rfind("</style>")
+    if _marksheet_style_start >= 0 and _marksheet_style_end > _marksheet_style_start:
+        _marksheet_style_end += len("</style>")
+        _marksheet_page_style = body[_marksheet_style_start:_marksheet_style_end]
+        body = _marksheet_page_style + body[:_marksheet_style_start] + body[_marksheet_style_end:]
+
     con.close()
     return _school_page(request, "Class Marksheets", body)
 
