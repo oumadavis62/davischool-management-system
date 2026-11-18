@@ -20883,7 +20883,8 @@ def _ensure_admissions_schema(cur):
         created_at TEXT,
         updated_at TEXT,
         enrolled_student_id INTEGER,
-        admission_no TEXT
+        admission_no TEXT,
+        application_ref TEXT
     )""")
     # Older installations may already have admission_applications from an
     # earlier module version. CREATE TABLE IF NOT EXISTS does not add newer
@@ -20902,6 +20903,7 @@ def _ensure_admissions_schema(cur):
         "updated_at": "TEXT",
         "enrolled_student_id": "INTEGER",
         "admission_no": "TEXT",
+        "application_ref": "TEXT",
     }
     existing_admission_columns = {
         str(row["name"]) for row in cur.execute("PRAGMA table_info(admission_applications)").fetchall()
@@ -20909,6 +20911,18 @@ def _ensure_admissions_schema(cur):
     for column_name, column_type in admission_columns.items():
         if column_name not in existing_admission_columns:
             cur.execute(f"ALTER TABLE admission_applications ADD COLUMN {column_name} {column_type}")
+    # Stable, human-readable application references are derived from the immutable
+    # application ID, so they remain unchanged when a record is edited.
+    legacy_refs = cur.execute("""SELECT id,application_date,created_at FROM admission_applications
+        WHERE application_ref IS NULL OR trim(application_ref)=''""").fetchall()
+    for legacy in legacy_refs:
+        date_text = str(legacy["application_date"] or legacy["created_at"] or "").strip()
+        year_match = re.match(r"^(\\d{4})", date_text)
+        ref_year = year_match.group(1) if year_match else str(datetime.now(ZoneInfo("Africa/Nairobi")).year)
+        cur.execute("UPDATE admission_applications SET application_ref=? WHERE id=? AND (application_ref IS NULL OR trim(application_ref)='')",
+            (f"APP-{ref_year}-{int(legacy['id']):06d}", int(legacy["id"])))
+    cur.execute("""CREATE UNIQUE INDEX IF NOT EXISTS idx_admission_applications_school_ref
+        ON admission_applications(school_id,application_ref)""")
     cur.execute("""CREATE INDEX IF NOT EXISTS idx_admission_applications_school_status
         ON admission_applications(school_id,status,id)""")
     cur.execute("""CREATE TABLE IF NOT EXISTS admission_number_settings(
@@ -21101,6 +21115,7 @@ def _admission_table_html(rows, show_action=True, allow_edit_delete=True, show_d
         class_name = str(row["class_name"] or "") if "class_name" in row.keys() else ""
         class_stream = str(row["class_stream"] or "") if "class_stream" in row.keys() else ""
         admission_no = str(row["admission_no"] or "") if "admission_no" in row.keys() else ""
+        application_ref = str(row["application_ref"] or "") if "application_ref" in row.keys() else f"APP-{applicant_id:06d}"
         enrolled = bool(row["enrolled_student_id"]) if "enrolled_student_id" in row.keys() else False
         action = ""
         if show_action and show_decision_actions and status == "pending":
@@ -21127,7 +21142,7 @@ def _admission_table_html(rows, show_action=True, allow_edit_delete=True, show_d
             )
         out.append(
             "<tr>"
-            f"<td>{applicant_id}</td><td>{escape(str(row['applicant_name'] or ''))}</td>"
+            f"<td>{escape(application_ref)}</td><td>{escape(str(row['applicant_name'] or ''))}</td>"
             f"<td>{escape(str(row['parent_name'] or ''))}</td>"
             f"<td>{escape(str(row['parent_phone'] or ''))}</td>"
             f"<td>{escape(class_name)}</td><td>{escape(class_stream)}</td><td><span class='status-pill status-{escape(status)}'>{escape(status.title())}</span></td>"
@@ -21243,7 +21258,13 @@ def admissions_add_application(request: Request, applicant_name: str = Form(...)
             VALUES(?,?,?,?,?,?,?,?,?,'pending',?,?,?)""",
             (sid,name,gender.strip(),parent_name.strip(),parent_phone.strip(),parent_email.strip(),
              previous_school.strip(),cid,application_date.strip(),notes.strip(),now,now))
-        _audit(cur,sid,request,"ADMISSION_APPLICATION_CREATE",f"Created admission application for {name}")
+        application_id = int(cur.lastrowid)
+        application_year_match = re.match(r"^([0-9]{4})", application_date.strip())
+        application_year = application_year_match.group(1) if application_year_match else str(datetime.now(ZoneInfo("Africa/Nairobi")).year)
+        application_ref = f"APP-{application_year}-{application_id:06d}"
+        cur.execute("UPDATE admission_applications SET application_ref=? WHERE id=? AND school_id=?",
+            (application_ref,application_id,sid))
+        _audit(cur,sid,request,"ADMISSION_APPLICATION_CREATE",f"Created admission application {application_ref} for {name}")
         con.commit()
     except Exception:
         con.rollback()
@@ -21510,18 +21531,31 @@ def enrolment_complete(request: Request, application_id: int, class_id: str = Fo
             return HTMLResponse("This applicant has already been enrolled or is not accepted.",409)
         class_row = cur.execute("SELECT id,name,stream FROM classes WHERE id=? AND school_id=?",(cid,sid)).fetchone()
         if not class_row: return HTMLResponse("Select a valid class belonging to this school.",400)
+        # Normalize the values entered on the enrolment form before duplicate
+        # detection. This ensures edits made during enrolment are respected.
+        learner_name = str(learner_name or app_row["applicant_name"] or "").strip()
+        learner_gender = str(gender or app_row["gender"] or "").strip()
+        learner_parent_name = str(parent_name or app_row["parent_name"] or "").strip()
+        learner_parent_phone = str(parent_phone or app_row["parent_phone"] or "").strip()
+        learner_category = str(category or "Day").strip().title()
+        if not learner_name:
+            return HTMLResponse("Learner name is required.",400)
+        if learner_gender not in ("Male","Female","Other"):
+            return HTMLResponse("Select a valid learner gender.",400)
+        if learner_category not in ("Day","Boarding"):
+            return HTMLResponse("Select Day or Boarding as the learning category.",400)
         # If the same learner is already in this school's register, link the
         # application to that record instead of creating a second student.
         existing_student = None
-        applicant_parent_phone = str(app_row["parent_phone"] or "").strip()
-        applicant_parent_name = str(app_row["parent_name"] or "").strip()
+        applicant_parent_phone = learner_parent_phone
+        applicant_parent_name = learner_parent_name
         if applicant_parent_phone or applicant_parent_name:
             existing_student = cur.execute("""SELECT id,admission_no,parent_name,parent_phone FROM students
                 WHERE school_id=? AND lower(trim(coalesce(name,'')))=lower(trim(?))
                   AND ((?<>'' AND lower(trim(coalesce(parent_phone,'')))=lower(trim(?)))
                     OR (?<>'' AND lower(trim(coalesce(parent_name,'')))=lower(trim(?))))
                 ORDER BY id LIMIT 1""",
-                (sid,str(app_row["applicant_name"] or ""),applicant_parent_phone,applicant_parent_phone,
+                (sid,learner_name,applicant_parent_phone,applicant_parent_phone,
                  applicant_parent_name,applicant_parent_name)).fetchone()
         if existing_student:
             existing_no = str(existing_student["admission_no"] or "").strip()
@@ -21553,9 +21587,11 @@ def enrolment_complete(request: Request, application_id: int, class_id: str = Fo
                     else:
                         cur.execute("RELEASE SAVEPOINT parent_access_sync")
             now = datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y-%m-%d %H:%M:%S")
-            cur.execute("""UPDATE admission_applications SET status='enrolled',enrolled_student_id=?,admission_no=?,updated_at=?
+            cur.execute("""UPDATE admission_applications SET applicant_name=?,gender=?,parent_name=?,parent_phone=?,
+                applying_class_id=?,status='enrolled',enrolled_student_id=?,admission_no=?,updated_at=?
                 WHERE id=? AND school_id=? AND enrolled_student_id IS NULL""",
-                (int(existing_student["id"]),existing_no,now,application_id,sid))
+                (learner_name,learner_gender,learner_parent_name,learner_parent_phone,cid,
+                 int(existing_student["id"]),existing_no,now,application_id,sid))
             if cur.rowcount != 1:
                 raise RuntimeError("The application enrolment state changed. No duplicate learner was created.")
             _audit(cur,sid,request,"ADMISSION_LINK_EXISTING_STUDENT",
@@ -21570,17 +21606,6 @@ def enrolment_complete(request: Request, application_id: int, class_id: str = Fo
             admission_no = _next_admission_number(cur,sid,year)
         else:
             return HTMLResponse("Could not issue a unique admission number. Review the school's numbering settings.",500)
-        learner_name = str(learner_name or app_row["applicant_name"] or "").strip()
-        learner_gender = str(gender or app_row["gender"] or "").strip()
-        learner_parent_name = str(parent_name or app_row["parent_name"] or "").strip()
-        learner_parent_phone = str(parent_phone or app_row["parent_phone"] or "").strip()
-        learner_category = str(category or "Day").strip().title()
-        if not learner_name:
-            return HTMLResponse("Learner name is required.",400)
-        if learner_gender not in ("Male","Female","Other"):
-            return HTMLResponse("Select a valid learner gender.",400)
-        if learner_category not in ("Day","Boarding"):
-            return HTMLResponse("Select Day or Boarding as the learning category.",400)
         assessment_value = str(assessment_no or "").strip()
         if assessment_value and cur.execute("SELECT id FROM students WHERE school_id=? AND upper(trim(coalesce(assessment_no,'')))=upper(?)",(sid,assessment_value)).fetchone():
             return HTMLResponse("That assessment number is already assigned to another learner in this school.",409)
