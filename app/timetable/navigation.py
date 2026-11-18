@@ -68,6 +68,8 @@ def timetable_workspace(request, body):
         .tt-workflow-intro span{font-size:9px;letter-spacing:.13em;font-weight:850;color:#398052}
         .tt-workflow-intro h1{margin:0;color:#204a34;font-size:clamp(21px,2.5vw,28px);letter-spacing:-.55px}
         .tt-workflow-intro p{margin:0;color:#718276;font-size:11px;line-height:1.5}
+        /* Keep the raw stacked sections out of view until the horizontal tab controller is ready. */
+        .tt-wrap:not(.tt-tabs-ready) .tt-section{display:none!important}
         .tt-wrap .tt-section[hidden]{display:none!important}
         .tt-setup-tabs{display:flex;gap:7px;overflow-x:auto;overscroll-behavior-x:contain;padding:7px;margin:0 0 16px;border:1px solid #d9e8dc;border-radius:15px;background:#f8fcf8;scrollbar-width:thin}
         .tt-setup-tabs button{flex:0 0 auto;min-height:42px;padding:10px 15px;border:1px solid transparent;border-radius:10px;background:transparent;color:#52705b;font-size:12px;font-weight:800;white-space:nowrap;cursor:pointer;transition:background .15s,color .15s,box-shadow .15s}
@@ -81,6 +83,10 @@ def timetable_workspace(request, body):
       function initTimetableSetupTabs(){
         const root=document.querySelector('.tt-wrap');
         if(!root)return;
+        // Hide the workspace while rebuilding, and remove any tab strip left by
+        // an earlier initialization. This makes the controller safe to rerun.
+        root.classList.remove('tt-tabs-ready');
+        root.querySelectorAll(':scope > .tt-setup-tabs').forEach(existing=>existing.remove());
         const sections=[...root.querySelectorAll('.tt-section')];
         if(!sections.length)return;
         const state=document.querySelector('.tt-workspace-state');
@@ -188,7 +194,9 @@ def timetable_workspace(request, body):
         alerts.forEach(alert=>{anchor.insertAdjacentElement('afterend',alert);anchor=alert;});
         activate(initial,false);
         // Keep the selected Configure section when any setup form posts.
-        root.addEventListener('submit',event=>{
+        if(!root.dataset.ttSetupTabsSubmitBound){
+          root.dataset.ttSetupTabsSubmitBound='1';
+          root.addEventListener('submit',event=>{
           const form=event.target;
           if(!(form instanceof HTMLFormElement))return;
           const activeIndex=sectionsForTabs.findIndex(section=>section.classList.contains('tt-tab-active'));
@@ -199,7 +207,10 @@ def timetable_workspace(request, body):
             url.searchParams.set('section',sectionKey(activeLabel));
             form.action=url.pathname+url.search+url.hash;
           }
-        },true);
+          },true);
+        }
+        // Reveal only after the requested section and its matching tab are ready.
+        root.classList.add('tt-tabs-ready');
       }
       // Expose the initializer so the AJAX save/delete refresh can rebuild
       // the in-page tabs after replacing the timetable content.
