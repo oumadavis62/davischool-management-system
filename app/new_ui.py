@@ -1460,7 +1460,7 @@ document.addEventListener('submit',function(event){{
     try{{
       var url=new URL(link.href,location.href);
       if(url.origin!==location.origin||!/^https?:$/.test(url.protocol))return false;
-      if(/\/(logout|login)(\/|$)/i.test(url.pathname))return false;
+      if(/\\/(logout|login)(\\/|$)/i.test(url.pathname))return false;
       // User Management contains page-local styles and interactive setup scripts.
       // Keep it on a full document navigation until its AJAX lifecycle is verified,
       // matching the known-good rendering produced by a manual refresh.
@@ -1481,7 +1481,7 @@ document.addEventListener('submit',function(event){{
         method:'GET',credentials:'same-origin',cache:'force-cache',
         headers:{{'X-Requested-With':'XMLHttpRequest','X-D-School-Prefetch':'1','X-D-School-History':'replace','Accept':'text/html'}}
       }}).then(function(response){{
-        if(!response.ok||/\/(login|logout)(\/|$)/i.test(new URL(response.url||key,location.href).pathname))throw new Error('Prefetch unavailable');
+        if(!response.ok||/\\/(login|logout)(\\/|$)/i.test(new URL(response.url||key,location.href).pathname))throw new Error('Prefetch unavailable');
         return response.text();
       }}).then(function(html){{
         if(!html||html.indexOf('<main')<0)throw new Error('Incomplete prefetched page');
