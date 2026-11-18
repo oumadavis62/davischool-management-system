@@ -2090,7 +2090,22 @@ def _teacher_class_authorized(cur, request, school_id, class_id, subject_id=None
 def _school_page(request, title, body):
     sid=_school_session(request)
     if not sid: return RedirectResponse("/")
-    return HTMLResponse(_shell(title,request.session.get("name","Mabale_ICT"),request.session.get("role",""),body,sid,request=request))
+    page_html = _shell(title,request.session.get("name","Mabale_ICT"),request.session.get("role",""),body,sid,request=request)
+    # The Student List has a substantial page-specific stylesheet. Keeping it
+    # at the end of the body lets the browser briefly paint the register before
+    # its layout rules arrive, causing the visible distorted-to-normal flash.
+    # Promote those styles into <head> so both direct loads and dashboard AJAX
+    # navigation have the page layout rules before the content is painted.
+    if title == "Students List":
+        page_styles = re.findall(r"<style(?:\\s[^>]*)?>.*?</style>", body, flags=re.IGNORECASE | re.DOTALL)
+        if page_styles:
+            for page_style in page_styles:
+                body = body.replace(page_style, "", 1)
+            page_html = _shell(title,request.session.get("name","Mabale_ICT"),request.session.get("role",""),body,sid,request=request)
+            head_close = page_html.lower().find("</head>")
+            if head_close >= 0:
+                page_html = page_html[:head_close] + "".join(page_styles) + page_html[head_close:]
+    return HTMLResponse(page_html)
 
 def _teacher_exam_cohort(cur, school_id, current_class_id, exam_year):
     """Resolve current learners to the class they belonged to in a selected exam year."""
