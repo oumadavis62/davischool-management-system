@@ -986,7 +986,7 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
         def teacher_color_swatches(current):
             current = str(current or "#2563EB").upper()
             return "".join(
-                f"<button type='button' class='tt-colour-swatch{' is-selected' if colour == current else ''}' style='--swatch:{colour}' title='{colour}' aria-label='Select {colour}' aria-pressed='{'true' if colour == current else 'false'}' onclick='const p=this.closest(".tt-teacher-color-form").querySelector("input[type=color]");p.value="{colour}";p.dispatchEvent(new Event("input",{{bubbles:true}}));p.dispatchEvent(new Event("change",{{bubbles:true}}));this.parentElement.querySelectorAll(".tt-colour-swatch").forEach(s=>{{s.classList.remove("is-selected");s.setAttribute("aria-pressed","false")}});this.classList.add("is-selected");this.setAttribute("aria-pressed","true")'></button>"
+                f"<button type='button' class='tt-colour-swatch{' is-selected' if colour == current else ''}' style='--swatch:{colour}' title='{colour}' aria-label='Select {colour}' aria-pressed='{'true' if colour == current else 'false'}' onclick='const p=this.closest(\".tt-teacher-color-form\").querySelector(\"input[type=color]\");p.value=\"{colour}\";p.dispatchEvent(new Event(\"input\",{{bubbles:true}}));p.dispatchEvent(new Event(\"change\",{{bubbles:true}}));this.parentElement.querySelectorAll(\".tt-colour-swatch\").forEach(s=>{{s.classList.remove(\"is-selected\");s.setAttribute(\"aria-pressed\",\"false\")}});this.classList.add(\"is-selected\");this.setAttribute(\"aria-pressed\",\"true\")'></button>"
                 for colour in teacher_palette
             )
         teacher_color_cards = "".join(
