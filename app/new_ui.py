@@ -8225,9 +8225,9 @@ def app_home(request: Request):
 .admin-registrar-overview .dashboard-kpi:hover{{transform:translateY(-2px);box-shadow:0 7px 16px #294b3514}}
 .admin-registrar-overview .dashboard-showcase-grid{{grid-template-columns:minmax(0,1.08fr) minmax(280px,.92fr);gap:14px}}
 .admin-registrar-overview .dashboard-showcase-grid{{grid-template-columns:minmax(0,1fr)}}
-.admin-registrar-overview .dashboard-showcase-main{{grid-template-columns:repeat(2,minmax(0,1fr));align-items:stretch}}
-.admin-registrar-overview .attendance-widget,.admin-registrar-overview .calendar-widget,.admin-registrar-overview .finance-widget{{grid-column:1/-1}}
-.admin-registrar-overview .performance-mini,.admin-registrar-overview .notice-widget{{grid-column:auto;min-width:0}}
+.admin-registrar-overview .dashboard-showcase-main{{grid-template-columns:repeat(3,minmax(0,1fr));align-items:stretch}}
+.admin-registrar-overview .attendance-widget,.admin-registrar-overview .calendar-widget{{grid-column:1/-1}}
+.admin-registrar-overview .finance-widget,.admin-registrar-overview .performance-mini,.admin-registrar-overview .notice-widget{{grid-column:auto;min-width:0}}
 @media(max-width:850px){{
  .admin-registrar-overview .dashboard-showcase-main{{grid-template-columns:minmax(0,1fr)}}
  .admin-registrar-overview .attendance-widget,.admin-registrar-overview .calendar-widget,.admin-registrar-overview .finance-widget,.admin-registrar-overview .performance-mini,.admin-registrar-overview .notice-widget{{grid-column:1/-1}}
