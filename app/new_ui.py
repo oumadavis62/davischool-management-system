@@ -3259,11 +3259,21 @@ def student_delete(request: Request, student_id: int):
             ("receipts", "SELECT 1 FROM receipts WHERE school_id=? AND student_id=? LIMIT 1"),
             ("fees", "SELECT 1 FROM fees WHERE school_id=? AND student_id=? AND (COALESCE(CAST(amount AS REAL),0)>0 OR COALESCE(CAST(paid AS REAL),0)>0) LIMIT 1"),
         )
-        existing_tables = {
-            str(row["name"]) for row in cur.execute(
-                "SELECT name FROM sqlite_master WHERE type='table'"
-            ).fetchall()
-        }
+        # Production uses PostgreSQL; local development may use SQLite.
+        # Discover tables using the active database dialect instead of assuming
+        # sqlite_master exists on every deployment.
+        try:
+            existing_tables = {
+                str(row["table_name"]) for row in cur.execute(
+                    "SELECT table_name FROM information_schema.tables WHERE table_schema='public'"
+                ).fetchall()
+            }
+        except Exception:
+            existing_tables = {
+                str(row["name"]) for row in cur.execute(
+                    "SELECT name FROM sqlite_master WHERE type='table'"
+                ).fetchall()
+            }
         for table, query in protected_checks:
             if table not in existing_tables:
                 continue
@@ -3335,11 +3345,13 @@ def student_delete(request: Request, student_id: int):
                 for parent_user_id in affected_user_ids:
                     remaining = None
                     if "parent_student_links" in existing_tables:
+                        link_cols = {str(row["name"]).lower() for row in cur.execute("PRAGMA table_info(parent_student_links)").fetchall()}
+                        order_by = "l.created_at, s.id" if "created_at" in link_cols else "s.id"
                         remaining = cur.execute(
                             """SELECT s.id FROM parent_student_links l
                                JOIN students s ON s.id=l.student_id AND s.school_id=l.school_id
                                WHERE l.school_id=? AND l.user_id=?
-                               ORDER BY l.created_at, s.id LIMIT 1""",
+                               ORDER BY """ + order_by + " LIMIT 1",
                             (sid, parent_user_id)
                         ).fetchone()
                     cur.execute(
