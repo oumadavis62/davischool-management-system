@@ -21480,11 +21480,12 @@ def enrolment_form_page(request: Request, application_id: int):
     body = f"""<div class='page adm-page'><div class='adm-card'><h1>Complete Learner Enrolment</h1>
       <p>Confirm the accepted applicant's details. Mabale_ICT will issue the admission number when you complete enrolment.</p>
       <form method='post' action='/app/enrolment/{application_id}' class='adm-form' data-native-post='1'>
-      <label>Learner name<input value='{escape(str(app_row['applicant_name'] or ''),quote=True)}' disabled></label>
-      <label>Gender<input value='{escape(str(app_row['gender'] or ''),quote=True)}' disabled></label>
-      <label>Parent / Guardian<input value='{escape(str(app_row['parent_name'] or ''),quote=True)}' disabled></label>
-      <label>Parent phone<input value='{escape(str(app_row['parent_phone'] or ''),quote=True)}' disabled></label>
+      <label>Learner full name<input name='learner_name' value='{escape(str(app_row['applicant_name'] or ''),quote=True)}' required maxlength='160'></label>
+      <label>Gender<select name='gender' required><option value=''>Select gender</option><option value='Male' {'selected' if str(app_row['gender'] or '')=='Male' else ''}>Male</option><option value='Female' {'selected' if str(app_row['gender'] or '')=='Female' else ''}>Female</option><option value='Other' {'selected' if str(app_row['gender'] or '')=='Other' else ''}>Other</option></select></label>
+      <label>Parent / Guardian name<input name='parent_name' value='{escape(str(app_row['parent_name'] or ''),quote=True)}' maxlength='160'></label>
+      <label>Parent / Guardian phone<input name='parent_phone' value='{escape(str(app_row['parent_phone'] or ''),quote=True)}' maxlength='40'></label>
       <label>Class / Stream<select name='class_id' required>{options}</select></label>
+      <label>Learning category<select name='category'><option value='Day'>Day</option><option value='Boarding'>Boarding</option></select></label>
       <label>Assessment number (optional)<input name='assessment_no' maxlength='80'></label>
       <div class='wide'><button type='submit' class='adm-submit'>Complete Enrolment &amp; Issue Admission Number</button></div>
       </form></div></div>
@@ -21494,7 +21495,7 @@ def enrolment_form_page(request: Request, application_id: int):
 
 
 @router.post("/app/enrolment/{application_id}")
-def enrolment_complete(request: Request, application_id: int, class_id: str = Form(...), assessment_no: str = Form("")):
+def enrolment_complete(request: Request, application_id: int, class_id: str = Form(...), assessment_no: str = Form(""), learner_name: str = Form(""), gender: str = Form(""), parent_name: str = Form(""), parent_phone: str = Form(""), category: str = Form("Day")):
     sid, denied = _admission_guard(request, "students.create")
     if denied: return denied
     cid = int(class_id) if str(class_id).isdigit() else 0
@@ -21569,13 +21570,31 @@ def enrolment_complete(request: Request, application_id: int, class_id: str = Fo
             admission_no = _next_admission_number(cur,sid,year)
         else:
             return HTMLResponse("Could not issue a unique admission number. Review the school's numbering settings.",500)
-        learner_name = str(app_row["applicant_name"] or "").strip()
-        parent_name = str(app_row["parent_name"] or "").strip()
+        learner_name = str(learner_name or app_row["applicant_name"] or "").strip()
+        learner_gender = str(gender or app_row["gender"] or "").strip()
+        learner_parent_name = str(parent_name or app_row["parent_name"] or "").strip()
+        learner_parent_phone = str(parent_phone or app_row["parent_phone"] or "").strip()
+        learner_category = str(category or "Day").strip().title()
+        if not learner_name:
+            return HTMLResponse("Learner name is required.",400)
+        if learner_gender not in ("Male","Female","Other"):
+            return HTMLResponse("Select a valid learner gender.",400)
+        if learner_category not in ("Day","Boarding"):
+            return HTMLResponse("Select Day or Boarding as the learning category.",400)
+        assessment_value = str(assessment_no or "").strip()
+        if assessment_value and cur.execute("SELECT id FROM students WHERE school_id=? AND upper(trim(coalesce(assessment_no,'')))=upper(?)",(sid,assessment_value)).fetchone():
+            return HTMLResponse("That assessment number is already assigned to another learner in this school.",409)
         now = datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y-%m-%d %H:%M:%S")
-        cur.execute("""INSERT INTO students(school_id,admission_no,assessment_no,name,class_id,gender,parent_name,parent_phone,stream,status)
-            VALUES(?,?,?,?,?,?,?,?,?,'active')""",
-            (sid,admission_no,assessment_no.strip(),learner_name,cid,str(app_row["gender"] or ""),
-             parent_name,str(app_row["parent_phone"] or ""),str(class_row["stream"] or "").strip()))
+        cur.execute("""INSERT INTO students(school_id,admission_no,assessment_no,name,class_id,gender,parent_name,parent_phone,stream,status,category,guardian_name)
+            VALUES(?,?,?,?,?,?,?,?,?,'active',?,?)""",
+            (sid,admission_no,assessment_value,learner_name,cid,learner_gender,
+             learner_parent_name,learner_parent_phone,str(class_row["stream"] or "").strip(),
+             learner_category,learner_parent_name))
+        cur.execute("""UPDATE admission_applications SET applicant_name=?,gender=?,parent_name=?,parent_phone=?,
+            applying_class_id=?,status='enrolled',enrolled_student_id=?,admission_no=?,updated_at=?
+            WHERE id=? AND school_id=? AND enrolled_student_id IS NULL""",
+            (learner_name,learner_gender,learner_parent_name,learner_parent_phone,cid,
+             student_id,admission_no,now,application_id,sid))
         student = cur.execute("SELECT id FROM students WHERE school_id=? AND lower(admission_no)=lower(?) ORDER BY id DESC LIMIT 1",(sid,admission_no)).fetchone()
         if not student: raise RuntimeError("Student record was not created.")
         student_id = int(student["id"])
