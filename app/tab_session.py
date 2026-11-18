@@ -278,8 +278,8 @@ class DaviSchoolTabSessionMiddleware:
         "/super/global-control/dashboard", "/account/change-password",
         "/portal", "/teacher", "/student", "/parent", "/dashboard"
       ];
-      var excluded = /^(ds_tab|tab|view|section|profile|mode|layout|panel|return_to|next|redirect|ticket|preview|print|download|export|page_size|per_page)$/i;
-      var filterNames = /^(q|search|query|keyword|status|gender|class|class_id|stream|stream_id|subject|subject_id|teacher|teacher_id|student|student_id|exam|exam_id|term|year|academic_year|from|to|from_date|to_date|start_date|end_date|date|category|type|grade|allocation_id|sort|sort_by|direction)$/i;
+      var excluded = /^(ds_tab|tab|view|view_type|section|profile|mode|layout|panel|return_to|next|redirect|ticket|preview|print|download|export|page|page_size|per_page)$/i;
+      var filterNames = /^(q|search|search_text|search_term|query|keyword|status|gender|class|class_id|class_name|stream|stream_id|stream_name|subject|subject_id|subject_name|teacher|teacher_id|teacher_name|student|student_id|student_name|admission_no|admission_number|exam|exam_id|exam_type|term|term_id|year|year_id|academic_year|academic_year_id|from|to|from_date|to_date|start_date|end_date|date|month|from_month|to_month|category|type|grade|grade_id|level|department|designation|role|allocation|allocation_id|route_id|house|boarding_status|payment_status|fee_type|invoice_status|sort|sort_by|direction)$/i;
       function cleanPath(path) {
         return String(path || "/").replace(/\/+$/, "") || "/";
       }
@@ -309,7 +309,7 @@ class DaviSchoolTabSessionMiddleware:
       function defaultUrl(url) {
         var copy = new URL(url.href);
         Array.from(copy.searchParams.keys()).forEach(function (key) {
-          if (!excluded.test(key) && filterNames.test(key)) copy.searchParams.delete(key);
+          if ((!excluded.test(key) && filterNames.test(key)) || key.toLowerCase() === "page") copy.searchParams.delete(key);
         });
         return copy;
       }
@@ -415,6 +415,12 @@ class DaviSchoolTabSessionMiddleware:
           var url = new URL(link.href, location.href);
           if (url.pathname === location.pathname && url.search &&
               navigateFilter(url)) event.preventDefault();
+          else if (url.origin === location.origin && url.pathname === location.pathname &&
+                   url.searchParams.has("page") && isManagedPage(url.pathname)) {
+            event.preventDefault();
+            history.replaceState(stateFor(url, "workspace"), "", url.href);
+            location.assign(url.href);
+          }
           else if (link.matches("a.marksheet-page-nav") &&
                    url.origin === location.origin && isManagedPage(url.pathname)) {
             event.preventDefault();
