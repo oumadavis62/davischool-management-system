@@ -285,6 +285,17 @@ class DaviSchoolTabSessionMiddleware:
       }
       function workspace(path) {
         path = cleanPath(path);
+        var aliases = [
+          ["/app/admission-number-settings", "/app/admissions"],
+          ["/app/admission-letters", "/app/admissions"],
+          ["/app/admission-reports", "/app/admissions"],
+          ["/app/parent-links", "/app/parent-services"],
+          ["/app/parent-messages", "/app/parent-services"],
+          ["/app/student-attendance-report", "/app/attendance"]
+        ];
+        for (var i = 0; i < aliases.length; i++) {
+          if (path === aliases[i][0] || path.indexOf(aliases[i][0] + "/") === 0) return aliases[i][1];
+        }
         var best = "/";
         roots.forEach(function (root) {
           if (path === root || path.indexOf(root + "/") === 0) {
