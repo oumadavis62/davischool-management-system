@@ -3519,7 +3519,15 @@ def staff_page(request: Request, staff: str="", department: str="", role: str=""
     active_count=sum(1 for person in staff_rows if val(person,"status","active").strip().lower()=="active")
     teaching_count=sum(1 for person in staff_rows if "teacher" in val(person,"role").lower())
     support_count=max(0,len(staff_rows)-teaching_count)
-    role_cards="".join(f"<div class='staff-kpi'><span>{escape(label)}</span><strong>{count}</strong><small>In current results</small></div>" for label,count in sorted(role_counts.items(),key=lambda item:(-item[1],item[0].lower())) if label.strip().lower() not in ("teacher","teachers"))[:3]
+    role_card_items = [
+        (label, count)
+        for label, count in sorted(role_counts.items(), key=lambda item: (-item[1], item[0].lower()))
+        if label.strip().lower() not in ("teacher", "teachers")
+    ][:3]
+    role_cards = "".join(
+        f"<div class='staff-kpi'><span>{escape(label)}</span><strong>{count}</strong><small>In current results</small></div>"
+        for label, count in role_card_items
+    )
     dept_opts="<option value=''>All departments</option>"+"".join(f"<option value='{escape(str(d['department']),quote=True)}' {'selected' if str(d['department'])==dept else ''}>{escape(str(d['department']))}</option>" for d in departments)
     roles=list(STAFF_DESIGNATION_OPTIONS)
     role_opts="<option value=''>All designations</option>"+"".join(f"<option {'selected' if x==desig else ''}>{x}</option>" for x in roles)
