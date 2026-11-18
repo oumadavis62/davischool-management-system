@@ -3810,6 +3810,7 @@ def staff_edit_page(request: Request,teacher_id:int,modal:int=0):
 <label>Status<select name='status' class='field'><option value='active' {'selected' if status=='active' else ''}>Active</option><option value='inactive' {'selected' if status=='inactive' else ''}>Inactive</option><option value='on_leave' {'selected' if status=='on_leave' else ''}>On Leave</option><option value='left' {'selected' if status=='left' else ''}>Left School</option></select></label>
 <label>Department<select name='department' id='staffEditDepartment' class='field'><option value=''>Select department</option></select></label>
 <div class='staff-dialog-actions'><button type='button' class='btn btn-light' onclick="document.getElementById('edit-staff-dialog').close()">Cancel</button><button class='btn'>Save Changes</button></div></form>
+<form method='post' action='/app/staff/delete/{teacher_id}' onsubmit="return confirm('Delete this staff record permanently? This action cannot be undone.')"><input type='hidden' name='modal' value='1'><div class='staff-dialog-actions' style='justify-content:flex-start;padding:0 20px 18px'><button type='submit' class='btn' style='background:#b42318;color:#fff'>Delete Staff Member</button></div></form>
 <style>.staff-edit-content .staff-add-form{{padding:0 20px 20px}}.staff-edit-content .staff-dialog-actions{{grid-column:1/-1;display:flex;justify-content:flex-end;gap:9px;margin-top:7px}}</style><script>filterStaffDepartment('staffEditRole','staffEditDepartment',{json.dumps(val("department"))});</script>"""
     else:
         body=f"""<div class='page'><h1>Edit Staff / Teacher</h1><div class='card section'><form method='post' action='{edit_action}' style='display:grid;grid-template-columns:repeat(2,1fr);gap:10px'>
@@ -3856,6 +3857,34 @@ def staff_edit(request: Request,teacher_id:int,name:str=Form(...),email:str=Form
     con.commit();con.close()
     if modal:return HTMLResponse("<!doctype html><script>window.parent.location.reload()</script>")
     return RedirectResponse("/app/staff",303)
+
+
+@router.post("/app/staff/delete/{teacher_id}")
+def staff_delete(request: Request, teacher_id: int, modal: int = Form(0)):
+    sid = _school_session(request)
+    if not sid:
+        return RedirectResponse("/", 303)
+    if not _require_permission(request, sid, "staff.edit"):
+        return HTMLResponse("You do not have permission to delete staff records.", 403)
+    con = _db()
+    cur = con.cursor()
+    staff = cur.execute("SELECT name FROM teachers WHERE id=? AND school_id=?", (teacher_id, sid)).fetchone()
+    if not staff:
+        con.close()
+        return HTMLResponse("Staff member not found.", 404)
+    staff_name = str(staff["name"] or "Unnamed staff member")
+    try:
+        cur.execute("DELETE FROM teachers WHERE id=? AND school_id=?", (teacher_id, sid))
+        _audit(cur, sid, request, "STAFF_DELETE", f"Deleted staff member {staff_name} ({teacher_id})")
+        con.commit()
+    except Exception:
+        con.rollback()
+        con.close()
+        return HTMLResponse("This staff record cannot be deleted because it is linked to existing school records. Mark the staff member as Left School instead to preserve history.", 409)
+    con.close()
+    if modal:
+        return HTMLResponse("<!doctype html><script>window.parent.location.reload()</script>")
+    return RedirectResponse("/app/staff", 303)
 
 
 @router.get("/app/academics/subject-allocation", response_class=HTMLResponse)
