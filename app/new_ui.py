@@ -3522,7 +3522,7 @@ def staff_page(request: Request, staff: str="", department: str="", role: str=""
     role_card_items = [
         (label, count)
         for label, count in sorted(role_counts.items(), key=lambda item: (-item[1], item[0].lower()))
-        if label.strip().lower() not in ("teacher", "teachers")
+        if label.strip().lower() not in ("teacher", "teachers", "bursar", "accountant", "accountant / bursar")
     ][:3]
     role_cards = "".join(
         f"<div class='staff-kpi'><span>{escape(label)}</span><strong>{count}</strong><small>In current results</small></div>"
