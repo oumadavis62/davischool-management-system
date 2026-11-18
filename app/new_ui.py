@@ -3433,6 +3433,43 @@ def _staff_manager_styles():
     margin-left:0!important;min-width:0!important;box-sizing:border-box!important;
   }
 }
+
+/* Final Staff Register sizing: break the card out of any narrow inherited
+   content track and size it to the actual desktop viewport/workspace. */
+.main.staff-workspace{
+  display:block!important;
+  flex:0 0 auto!important;
+  width:calc(100vw - 250px)!important;
+  max-width:calc(100vw - 250px)!important;
+  min-width:0!important;
+  margin-left:250px!important;
+  padding:0!important;
+  box-sizing:border-box!important;
+}
+.main.staff-workspace>.top{width:100%!important;box-sizing:border-box!important}
+.main.staff-workspace>.page.staff-manager-page{
+  display:block!important;position:relative!important;
+  width:100%!important;max-width:none!important;min-width:0!important;
+  margin:0!important;padding:24px 28px 40px!important;
+  box-sizing:border-box!important;
+}
+.main.staff-workspace .staff-register-card{
+  display:block!important;position:relative!important;
+  width:100%!important;max-width:none!important;min-width:0!important;
+  margin:14px 0!important;box-sizing:border-box!important;
+}
+.main.staff-workspace .staff-table-scroll{width:100%!important;max-width:none!important}
+body.sidebar-hidden .main.staff-workspace{
+  width:100vw!important;max-width:100vw!important;margin-left:0!important;
+}
+@media(min-width:601px) and (max-width:900px){
+ .main.staff-workspace{width:calc(100vw - 72px)!important;max-width:calc(100vw - 72px)!important;margin-left:72px!important}
+ body.sidebar-hidden .main.staff-workspace{width:100vw!important;max-width:100vw!important;margin-left:0!important}
+}
+@media(max-width:600px){
+ .main.staff-workspace{width:100vw!important;max-width:100vw!important;margin-left:0!important}
+ .main.staff-workspace>.page.staff-manager-page{padding:16px 14px 30px!important}
+}
 </style>"""
 
 @router.get("/app/staff", response_class=HTMLResponse)
