@@ -7446,9 +7446,11 @@ def app_home(request: Request):
   </div>
   <div class='dashboard-showcase-grid'>
     <div class='dashboard-showcase-main'>
-      <section class='dashboard-widget'><div class='dashboard-widget-heading'><div><h2>Attendance</h2><p>Recent recorded attendance</p></div><span class='dashboard-widget-tag'>{attendance_rate}% present</span></div><div class='dashboard-legend'><span><i></i> Present</span><span><i></i> Recorded learners</span></div><div class='pulse-chart'>{attendance_bars}</div></section>
-      <section class='dashboard-widget finance-widget'><div class='dashboard-widget-heading'><div><h2>Fee Collections</h2><p>Recorded payments by month</p></div><span class='dashboard-widget-tag'>KES</span></div><div class='finance-chart'>{finance_bars}</div></section>
-      <section class='dashboard-widget performance-mini'><div class='dashboard-widget-heading'><div><h2>Academic Performance</h2><p>Latest examination performance</p></div><span class='dashboard-widget-tag'>LATEST EXAM</span></div><div class='performance-ring'><strong>{latest_exam_mean_label}</strong><span>school mean</span></div><small>Based on recorded marks in the latest examination</small></section>
+      <section class='dashboard-widget attendance-widget'><div class='dashboard-widget-heading'><div><h2>Attendance</h2><p>Recent recorded attendance</p></div><span class='dashboard-widget-tag'>{attendance_rate}% present</span></div><div class='dashboard-legend'><span><i></i> Present</span><span><i></i> Recorded learners</span></div><div class='pulse-chart'>{attendance_bars}</div></section>
+      <div class='dashboard-bottom-pair overview-finance-performance'>
+        <section class='dashboard-widget finance-widget'><div class='dashboard-widget-heading'><div><h2>Fee Collections</h2><p>Recorded payments by month</p></div><span class='dashboard-widget-tag'>KES</span></div><div class='finance-chart'>{finance_bars}</div></section>
+        <section class='dashboard-widget performance-mini'><div class='dashboard-widget-heading'><div><h2>Academic Performance</h2><p>Latest examination performance</p></div><span class='dashboard-widget-tag'>LATEST EXAM</span></div><div class='performance-ring'><strong>{latest_exam_mean_label}</strong><span>school mean</span></div><small>Based on recorded marks in the latest examination</small></section>
+      </div>
     </div>
     <div class='dashboard-showcase-side'>
       <section class='dashboard-widget'><div class='dashboard-widget-heading'><div><h2>Academic Calendar</h2><p>Examinations on record</p></div><span class='dashboard-widget-mark'>▦</span></div><div class='calendar-list'>{calendar_html}</div></section>
@@ -7585,8 +7587,19 @@ def app_home(request: Request):
 .admin-registrar-overview .dashboard-showcase-main,.admin-registrar-overview .dashboard-showcase-side{{gap:14px}}
 .admin-registrar-overview .dashboard-widget{{border-color:#dfe9dd;border-radius:14px;box-shadow:0 3px 12px #294b3509}}
 .admin-registrar-overview .dashboard-widget-heading h2{{font-size:14px;letter-spacing:-.1px}}
-.admin-registrar-overview .dashboard-bottom-pair{{grid-template-columns:minmax(0,1fr)}}
+.admin-registrar-overview .dashboard-bottom-pair{{grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}}
+.admin-registrar-overview .attendance-widget{{width:78%;padding:12px}}
+.admin-registrar-overview .attendance-widget .pulse-chart{{height:108px;padding-top:6px}}
+.admin-registrar-overview .overview-finance-performance{{width:100%;align-items:stretch}}
+.admin-registrar-overview .overview-finance-performance>.dashboard-widget{{min-width:0;padding:12px}}
+.admin-registrar-overview .overview-finance-performance .finance-chart{{height:112px;gap:7px}}
+.admin-registrar-overview .overview-finance-performance .performance-mini{{min-height:138px}}
+.admin-registrar-overview .overview-finance-performance .performance-ring{{width:76px;height:76px;margin:4px auto}}
 .admin-registrar-overview .performance-mini{{min-height:156px;padding:16px}}
+.admin-registrar-overview .dashboard-showcase-side>.dashboard-widget{{padding:11px}}
+.admin-registrar-overview .dashboard-showcase-side .calendar-list,.admin-registrar-overview .dashboard-showcase-side .notice-list{{gap:5px}}
+.admin-registrar-overview .dashboard-showcase-side .calendar-row{{padding:7px 8px;gap:8px}}
+.admin-registrar-overview .dashboard-showcase-side .notice-row{{padding:6px 2px;gap:7px}}
 .admin-registrar-overview .performance-mini .dashboard-widget-heading{{width:100%;align-items:flex-start}}
 .admin-registrar-overview .performance-ring{{width:88px;height:88px;margin:2px auto 5px;border-color:#dce9df;border-top-color:#315b42;border-right-color:#6ba99a}}
 .admin-registrar-overview .admin-overview-top{{display:block;margin-top:14px}}
@@ -7598,13 +7611,15 @@ def app_home(request: Request):
 .admin-registrar-overview .admin-overview-health{{margin-top:14px}}
 @media(max-width:850px){{
   .admin-registrar-overview .dashboard-showcase-grid{{grid-template-columns:1fr}}
-  .admin-registrar-overview .dashboard-showcase-main{{grid-template-columns:repeat(2,minmax(0,1fr))}}
-  .admin-registrar-overview .dashboard-showcase-main>.performance-mini{{grid-column:1/-1}}
+  .admin-registrar-overview .dashboard-showcase-main{{grid-template-columns:1fr}}
+  .admin-registrar-overview .attendance-widget{{width:100%}}
+  .admin-registrar-overview .overview-finance-performance{{grid-template-columns:repeat(2,minmax(0,1fr))}}
 }}
 @media(max-width:650px){{
   .admin-registrar-overview .admin-dashboard-showcase{{padding:11px;border-radius:14px}}
   .admin-registrar-overview .dashboard-showcase-main{{grid-template-columns:1fr;gap:10px}}
-  .admin-registrar-overview .dashboard-showcase-main>.performance-mini{{grid-column:auto}}
+  .admin-registrar-overview .attendance-widget{{width:100%}}
+  .admin-registrar-overview .overview-finance-performance{{grid-template-columns:1fr;gap:10px}}
   .admin-registrar-overview .admin-overview-charts-panel{{padding:12px}}
   .admin-registrar-overview .admin-overview-recent .recent-activity-list{{grid-template-columns:1fr}}
 }}
