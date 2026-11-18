@@ -360,9 +360,13 @@ class DaviSchoolTabSessionMiddleware:
       function formUrl(form) {
         var action = form.getAttribute("action") || location.href;
         var url = new URL(action, location.href);
+        var seen = new Set();
         new FormData(form).forEach(function (value, key) {
           if (typeof value !== "string") return;
-          url.searchParams.delete(key);
+          if (!seen.has(key)) {
+            url.searchParams.delete(key);
+            seen.add(key);
+          }
           url.searchParams.append(key, value);
         });
         return url;
