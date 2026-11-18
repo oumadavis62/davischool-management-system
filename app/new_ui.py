@@ -1336,7 +1336,7 @@ else setupDaviActionCells();
     addTarget(document.referrer);
     // The two-step workspace is also warmed so the second Back is immediate.
     var path=window.location.pathname;
-    var roots=['/app/academics/marks-corrections','/app/academics/allocations','/app/academics/assessments','/app/academics/analysis','/app/academics','/app/admissions','/app/enrolment','/app/students','/app/staff','/app/classes','/app/subjects','/app/exams','/app/report-cards','/app/report-card-settings','/app/attendance','/app/finance','/app/accounting','/app/announcements','/app/users','/app/roles','/app/school-settings','/app/audit','/app/teacher-performance','/app/class-monitoring','/app/class-teacher','/app/parent-services','/app/library','/app/transport','/app/inventory','/app/health-welfare','/app/facilities','/app/hr','/app/timetable','/app/parent','/app/portals','/app/account','/app/teacher','/app','/super/portal-management','/super/global-control/dashboard','/schools/manage','/portal','/teacher','/student','/parent','/dashboard'];
+    var roots=['/app/academics/marks-corrections','/app/academics/allocations','/app/academics/assessments','/app/academics/analysis','/app/academics','/app/admissions','/app/enrolment','/app/students','/app/staff','/app/classes','/app/subjects','/app/exams','/app/report-cards','/app/report-card-settings','/app/attendance','/app/finance','/app/accounting','/app/announcements','/app/users','/app/roles','/app/school-settings','/app/audit','/app/teacher-performance','/app/class-monitoring','/app/class-teacher','/app/parent-services','/app/library','/app/transport','/app/inventory','/app/health','/app/welfare','/app/facilities','/app/hr','/app/timetable','/app/parent','/app/portals','/app/account','/app/teacher','/app','/super/portal-management','/super/global-control/dashboard','/schools/manage','/portal','/teacher','/student','/parent','/dashboard'];
     var root='/app';
     roots.forEach(function(r){{if(path===r || (r!=='/app' && path.indexOf(r+'/')===0) || (r==='/app' && path.indexOf('/app/')===0)){{if(r.length>root.length)root=r;}}}});
     var u=new URL(window.location.href);
@@ -1604,7 +1604,7 @@ document.addEventListener('submit',function(event){{
       var resolvedUrl=new URL(finalUrl,location.href);
       if(requestedUrl.hash)resolvedUrl.hash=requestedUrl.hash;
       finalUrl=resolvedUrl.href;
-      if(addHistory)history.pushState(Object.assign({{}},history.state||{{}},{{daviDashboardAjax:true}}),'',finalUrl);
+      if(addHistory){{var navTarget=new URL(finalUrl,location.href);var navWorkspace=window.__daviWorkspaceForPath?window.__daviWorkspaceForPath(navTarget.pathname):navTarget.pathname;history.pushState(Object.assign({{}},history.state||{{}},{{daviDashboardAjax:true,daviTwoStep:true,daviHistoryStep:'workspace',daviWorkspace:navWorkspace}}),'',finalUrl);}}
       var nextSide=incomingSide.cloneNode(true);
       var nextMain=incomingMain.cloneNode(true);
       currentSide.replaceWith(nextSide);
