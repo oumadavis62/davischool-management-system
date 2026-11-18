@@ -3224,122 +3224,147 @@ def student_delete(request: Request, student_id: int):
         return RedirectResponse("/", 303)
     if not _require_permission(request, sid, "students.edit"):
         return HTMLResponse("You do not have permission to delete students.", 403)
-    tab_id = str(request.query_params.get("ds_tab") or request.scope.get("davischool_tab_id") or "").strip()
-    if not re.fullmatch(r"[A-Za-z0-9_-]{16,64}", tab_id):
-        tab_id = ""
+
     con = _db()
     cur = con.cursor()
-    st = cur.execute("SELECT id, name, admission_no, status FROM students WHERE id=? AND school_id=?", (student_id, sid)).fetchone()
-    if not st:
-        con.close()
-        return HTMLResponse("Student not found.", 404)
-    # Graduates are permanent alumni records. Keep their student row, admission
-    # number, academic history and parent links; reverse graduation explicitly
-    # before any exceptional deletion is considered.
-    is_graduated = str(st["status"] or "").strip().lower() == "graduated"
     try:
-        is_graduated = is_graduated or bool(cur.execute(
+        st = cur.execute(
+            "SELECT id, name, admission_no, status FROM students WHERE id=? AND school_id=?",
+            (student_id, sid)
+        ).fetchone()
+        if not st:
+            return HTMLResponse("Student not found.", 404)
+
+        # Graduates are permanent alumni records; never delete them through this action.
+        is_graduated = str(st["status"] or "").strip().lower() == "graduated"
+        if cur.execute(
             "SELECT 1 FROM student_graduations WHERE school_id=? AND student_id=? LIMIT 1",
             (sid, student_id)
-        ).fetchone())
-    except Exception:
-        pass
-    if is_graduated:
-        con.close()
-        return HTMLResponse("Graduated learners are protected alumni records. Their admission number and parent–learner link remain reserved. Reverse the graduation record first if this was recorded by mistake.", 409)
-    # Do not remove a student if academic or financial records depend on them.
-    for table in ("marks", "student_marks", "fee_payments", "fees", "receipts", "attendance"):
-        try:
-            exists = cur.execute(f"SELECT 1 FROM {table} WHERE student_id=? AND school_id=? LIMIT 1", (student_id, sid)).fetchone()
-        except Exception:
-            exists = None
-        if exists:
-            con.close()
-            return HTMLResponse("This student has linked academic or financial records and cannot be deleted here. Keep the record and mark the student inactive instead.", 409)
-    try:
-        # Remove only this learner's parent relationship and saved credential.
-        # Retain the parent login itself, including access to any siblings.
+        ).fetchone():
+            is_graduated = True
+        if is_graduated:
+            return HTMLResponse(
+                "Graduated learners are protected alumni records. Reverse the graduation record first if this was recorded by mistake.",
+                409
+            )
+
+        # Check only genuine learner-specific academic/financial activity.
+        # In particular, a zero-value fee placeholder is not treated as a financial record.
+        protected_checks = (
+            ("marks", "SELECT 1 FROM marks WHERE school_id=? AND student_id=? AND TRIM(COALESCE(CAST(marks AS TEXT),''))<>'' LIMIT 1"),
+            ("student_marks", "SELECT 1 FROM student_marks WHERE school_id=? AND student_id=? LIMIT 1"),
+            ("attendance", "SELECT 1 FROM attendance WHERE school_id=? AND student_id=? LIMIT 1"),
+            ("assessment_scores", "SELECT 1 FROM assessment_scores WHERE school_id=? AND student_id=? AND score IS NOT NULL LIMIT 1"),
+            ("fee_payments", "SELECT 1 FROM fee_payments WHERE school_id=? AND student_id=? LIMIT 1"),
+            ("receipts", "SELECT 1 FROM receipts WHERE school_id=? AND student_id=? LIMIT 1"),
+            ("fees", "SELECT 1 FROM fees WHERE school_id=? AND student_id=? AND (COALESCE(CAST(amount AS REAL),0)>0 OR COALESCE(CAST(paid AS REAL),0)>0) LIMIT 1"),
+        )
+        existing_tables = {
+            str(row["name"]) for row in cur.execute(
+                "SELECT name FROM sqlite_master WHERE type='table'"
+            ).fetchall()
+        }
+        for table, query in protected_checks:
+            if table not in existing_tables:
+                continue
+            try:
+                columns = {str(row["name"]).lower() for row in cur.execute("PRAGMA table_info(%s)" % table).fetchall()}
+                if not {"school_id", "student_id"}.issubset(columns):
+                    continue
+                if table == "marks" and "marks" not in columns:
+                    continue
+                if table == "assessment_scores" and "score" not in columns:
+                    continue
+                if table == "fees" and not {"amount", "paid"}.issubset(columns):
+                    continue
+                exists = cur.execute(query, (sid, student_id)).fetchone()
+            except Exception as exc:
+                print("MABALE_ICT STUDENT DELETE CHECK FAILED:", table, repr(exc), flush=True)
+                return HTMLResponse(
+                    "Deletion was stopped because the system could not safely verify the learner's %s records. No data was changed; please retry or contact support." % table.replace("_", " "),
+                    500
+                )
+            if exists:
+                return HTMLResponse(
+                    "This learner has existing %s records and cannot be permanently deleted. Keep the learner record and mark the student inactive instead." % table.replace("_", " "),
+                    409
+                )
+
+        # Remove disposable learner-linked data and portal links, but retain parent
+        # accounts and any links to the parent's other children.
+        cleanup_tables = (
+            "parent_student_links", "parent_access_credentials", "parent_messages",
+            "student_class_history", "student_subject_allocations",
+            "student_promotion_cohort_members", "teacher_mark_drafts",
+            "subject_performance_comments", "class_teacher_comments",
+            "report_comments", "student_marks"
+        )
         linked_users = []
-        try:
-            cur.execute("SAVEPOINT delete_parent_links")
-            linked_users = cur.execute(
-                "SELECT user_id FROM parent_student_links WHERE school_id=? AND student_id=?",
-                (sid, student_id)
-            ).fetchall()
+        if "parent_student_links" in existing_tables:
+            link_cols = {str(row["name"]).lower() for row in cur.execute("PRAGMA table_info(parent_student_links)").fetchall()}
+            if {"school_id", "student_id", "user_id"}.issubset(link_cols):
+                linked_users = cur.execute(
+                    "SELECT user_id FROM parent_student_links WHERE school_id=? AND student_id=?",
+                    (sid, student_id)
+                ).fetchall()
+
+        for table in cleanup_tables:
+            if table not in existing_tables:
+                continue
+            columns = {str(row["name"]).lower() for row in cur.execute("PRAGMA table_info(%s)" % table).fetchall()}
+            if not {"school_id", "student_id"}.issubset(columns):
+                continue
             cur.execute(
-                "DELETE FROM parent_student_links WHERE school_id=? AND student_id=?",
+                "DELETE FROM %s WHERE school_id=? AND student_id=?" % table,
                 (sid, student_id)
             )
-            cur.execute("RELEASE SAVEPOINT delete_parent_links")
-        except Exception:
-            try:
-                cur.execute("ROLLBACK TO SAVEPOINT delete_parent_links")
-                cur.execute("RELEASE SAVEPOINT delete_parent_links")
-            except Exception:
-                pass
-            linked_users = []
-        try:
-            cur.execute("SAVEPOINT delete_parent_credentials")
-            cur.execute(
-                "DELETE FROM parent_access_credentials WHERE school_id=? AND student_id=?",
-                (sid, student_id)
-            )
-            cur.execute("RELEASE SAVEPOINT delete_parent_credentials")
-        except Exception:
-            try:
-                cur.execute("ROLLBACK TO SAVEPOINT delete_parent_credentials")
-                cur.execute("RELEASE SAVEPOINT delete_parent_credentials")
-            except Exception:
-                pass
-        affected_user_ids = {int(row["user_id"]) for row in linked_users if row["user_id"] is not None}
-        try:
-            cur.execute("SAVEPOINT delete_parent_fallbacks")
-            fallback_users = cur.execute(
-                "SELECT id FROM users WHERE school_id=? AND role='parent' AND student_id=?",
-                (sid, student_id)
-            ).fetchall()
-            affected_user_ids.update(int(row["id"]) for row in fallback_users)
-            cur.execute("RELEASE SAVEPOINT delete_parent_fallbacks")
-        except Exception:
-            try:
-                cur.execute("ROLLBACK TO SAVEPOINT delete_parent_fallbacks")
-                cur.execute("RELEASE SAVEPOINT delete_parent_fallbacks")
-            except Exception:
-                pass
-        for parent_user_id in affected_user_ids:
-            try:
-                cur.execute("SAVEPOINT delete_parent_fallback_lookup")
-                remaining = cur.execute(
-                    """SELECT s.id FROM parent_student_links l
-                       JOIN students s ON s.id=l.student_id AND s.school_id=l.school_id
-                       WHERE l.school_id=? AND l.user_id=?
-                       ORDER BY l.created_at, s.id LIMIT 1""",
-                    (sid, parent_user_id)
-                ).fetchone()
-                cur.execute("RELEASE SAVEPOINT delete_parent_fallback_lookup")
-                cur.execute(
-                    "UPDATE users SET student_id=? WHERE id=? AND school_id=? AND role='parent' AND student_id=?",
-                    (remaining["id"] if remaining else None, parent_user_id, sid, student_id)
-                )
-            except Exception:
-                try:
-                    cur.execute("ROLLBACK TO SAVEPOINT delete_parent_fallback_lookup")
-                    cur.execute("RELEASE SAVEPOINT delete_parent_fallback_lookup")
-                except Exception:
-                    pass
-                cur.execute(
-                    "UPDATE users SET student_id=NULL WHERE id=? AND school_id=? AND role='parent' AND student_id=?",
-                    (parent_user_id, sid, student_id)
-                )
-        cur.execute("DELETE FROM student_class_history WHERE student_id=? AND school_id=?", (student_id, sid))
+
+        # Legacy parent accounts can point directly at one child. Repoint to a
+        # remaining linked sibling, or clear only that child's legacy reference.
+        affected_user_ids = {
+            int(row["user_id"]) for row in linked_users if row["user_id"] is not None
+        }
+        if "users" in existing_tables:
+            user_cols = {str(row["name"]).lower() for row in cur.execute("PRAGMA table_info(users)").fetchall()}
+            if {"id", "school_id", "role", "student_id"}.issubset(user_cols):
+                fallback_users = cur.execute(
+                    "SELECT id FROM users WHERE school_id=? AND lower(role)='parent' AND student_id=?",
+                    (sid, student_id)
+                ).fetchall()
+                affected_user_ids.update(int(row["id"]) for row in fallback_users)
+                for parent_user_id in affected_user_ids:
+                    remaining = None
+                    if "parent_student_links" in existing_tables:
+                        remaining = cur.execute(
+                            """SELECT s.id FROM parent_student_links l
+                               JOIN students s ON s.id=l.student_id AND s.school_id=l.school_id
+                               WHERE l.school_id=? AND l.user_id=?
+                               ORDER BY l.created_at, s.id LIMIT 1""",
+                            (sid, parent_user_id)
+                        ).fetchone()
+                    cur.execute(
+                        "UPDATE users SET student_id=? WHERE id=? AND school_id=? AND lower(role)='parent' AND student_id=?",
+                        (remaining["id"] if remaining else None, parent_user_id, sid, student_id)
+                    )
+
         cur.execute("DELETE FROM students WHERE id=? AND school_id=?", (student_id, sid))
-        _audit(cur, sid, request, "STUDENT_DELETE", f"Deleted accidentally added student {st['name']} ({st['admission_no']})")
+        if cur.rowcount != 1:
+            raise RuntimeError("The learner record was not removed.")
+        _audit(
+            cur, sid, request, "STUDENT_DELETE",
+            "Deleted learner without academic or financial activity: %s (%s)" %
+            (st["name"], st["admission_no"])
+        )
         con.commit()
-    except Exception:
+    except Exception as exc:
         con.rollback()
+        print("MABALE_ICT STUDENT DELETE FAILED:", repr(exc), flush=True)
+        return HTMLResponse(
+            "The student could not be deleted. No changes were made. Database detail: %s" % escape(str(exc)[:350]),
+            409
+        )
+    finally:
         con.close()
-        return HTMLResponse("The student could not be deleted because other records are linked to this student. No changes were made.", 409)
-    con.close()
     return RedirectResponse("/app/students", 303)
 
 
