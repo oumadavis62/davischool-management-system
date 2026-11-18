@@ -21173,7 +21173,7 @@ def admissions_register_page(request: Request):
         con.commit()
     finally:
         con.close()
-    table = _admission_table_html(rows, show_action=True, allow_edit_delete=False, show_decision_actions=False)
+    table = _admission_table_html(rows, show_action=True, allow_edit_delete=True, show_decision_actions=False)
     body = f"""<div class='page adm-page adm-register-page'>
       <div class='adm-heading'><div><h1>Applications Register</h1><p>Capture prospective learners and track each admission application.</p></div></div>
       <div class='adm-card adm-form-card'><h2>New Application</h2>
@@ -21977,9 +21977,10 @@ def admission_reports_page(request: Request, year: str = "", class_id: str = "")
     body = f"""<div class='page adm-page'><div class='adm-heading'><div><h1>Admission Reports</h1><p>Summary of applications and enrolment progress for this school.</p></div><button type='button' class='adm-popup-trigger adm-report-filter-trigger'>Filter report</button></div>
       <div class='adm-report-grid'><div><small>Total Applications</small><strong>{sum(values.values())}</strong></div>
       <div><small>Pending Review</small><strong>{values.get('pending',0)}</strong></div>
-      <div><small>Accepted</small><strong>{values.get('accepted',0)}</strong></div>
+      <div><small>Accepted</small><strong>{values.get('accepted',0) + values.get('enrolled',0)}</strong></div>
       <div><small>Rejected</small><strong>{values.get('rejected',0)}</strong></div>
-      <div><small>Enrolled</small><strong>{values.get('enrolled',0)}</strong></div></div>
+      <div><small>Enrolled</small><strong>{values.get('enrolled',0)}</strong></div>
+      <div><small>Enrolment Conversion</small><strong>{(f"{(values.get('enrolled',0) / (values.get('accepted',0) + values.get('enrolled',0)) * 100):.1f}%" if (values.get('accepted',0) + values.get('enrolled',0)) else "0.0%")}</strong></div></div>
       <form class='adm-report-filter-form' method='get' action='/app/admission-reports' style='display:grid;gap:12px'>
       <label>Application year<select name='year'>{year_options}</select></label>
       <label>Class / Stream<select name='class_id'>{class_options}</select></label>
