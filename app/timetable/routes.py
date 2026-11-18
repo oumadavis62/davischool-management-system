@@ -972,12 +972,12 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
                 item["subjects"][subject_label] = item["subjects"].get(subject_label, 0) + lead_load
 
         teacher_color_cards = "".join(
-            f"<article class='tt-teacher-label-card' data-teacher-label-card data-search-name='{esc(t['name']).lower()}'><div class='tt-teacher-label-person'><span class='tt-teacher-avatar' style='--teacher-label-color:{esc(t['teacher_color'] or '#2563EB')}'>{esc((t['teacher_initials'] or (str(t['name']).strip()[:1])).upper())}</span><div><b>{esc(t['name'])}</b></div></div><div class='tt-teacher-workload'><strong>{teacher_workloads.get(int(t['id']), {}).get('total', 0)} <span>periods / week</span></strong><small>{' · '.join(esc(subject + ' ' + str(load)) for subject, load in sorted(teacher_workloads.get(int(t['id']), {}).get('subjects', {}).items(), key=lambda item: item[0].casefold())) or 'No subject requirements configured'}</small></div><form method='post' data-native-post='true' action='/app/timetable/setup/teacher-color' class='tt-teacher-color-form'>{hidden}{teacher_color_tab_field}<input type='hidden' name='teacher_id' value='{int(t['id'])}'><label class='tt-teacher-initials-field'>Label initials<input name='teacher_initials' value='{esc(t['teacher_initials'] or '')}' maxlength='4' pattern='[A-Za-z]{1,4}' placeholder='e.g. JM' required oninput='this.closest(\".tt-teacher-label-card\").querySelector(\".tt-teacher-avatar\").textContent=String(this.value).toUpperCase()'></label><label class='tt-teacher-colour-field'>Colour<input aria-label='Colour for {esc(t['name'])}' type='color' name='teacher_color' value='{esc(t['teacher_color'] or '#2563EB')}' required></label><button class='tt-btn'>Save</button></form></article>"
+            f"<article class='tt-teacher-label-card' data-teacher-label-card data-search-name='{esc(t['name']).lower()}'><div class='tt-teacher-label-person'><div><b>{esc(t['name'])}</b></div></div><div class='tt-teacher-workload'><strong>{teacher_workloads.get(int(t['id']), {}).get('total', 0)} <span>periods / week</span></strong><small>{' · '.join(esc(subject + ' ' + str(load)) for subject, load in sorted(teacher_workloads.get(int(t['id']), {}).get('subjects', {}).items(), key=lambda item: item[0].casefold())) or 'No subject requirements configured'}</small></div><form method='post' data-native-post='true' action='/app/timetable/setup/teacher-color' class='tt-teacher-color-form'>{hidden}{teacher_color_tab_field}<input type='hidden' name='teacher_id' value='{int(t['id'])}'><label class='tt-teacher-initials-field'>Label initials<input name='teacher_initials' value='{esc(t['teacher_initials'] or '')}' maxlength='12' pattern='[A-Za-z]{1,12}' placeholder='e.g. JM' required></label><label class='tt-teacher-colour-field'>Colour<input aria-label='Colour for {esc(t['name'])}' type='color' name='teacher_color' value='{esc(t['teacher_color'] or '#2563EB')}' required></label><button class='tt-btn'>Save</button></form></article>"
             for t in teachers
         ) or "<div class='tt-teacher-label-empty'>No teachers are registered yet.</div>"
         teacher_colour_section = f"""
         <section class='tt-section tt-teacher-colours'>
-          <div class='tt-section-title'><div><span class='tt-kicker'>09 · TIMETABLE APPEARANCE</span><h3>Teacher Labels</h3><p>Choose a short label and colour for each teacher. Labels appear in the bottom-right of their lesson cells. Weekly workload updates automatically from Subject Requirements.</p></div></div>
+          <div class='tt-section-title'><div><span class='tt-kicker'>09 · TIMETABLE APPEARANCE</span><h3>Teacher Labels</h3><p>Set each teacher's label initials and colour. Weekly workload updates automatically from Subject Requirements.</p></div></div>
           <div class='tt-teacher-label-toolbar'><div><b>{len(teachers)} teachers</b></div><input type='search' class='tt-teacher-label-search' placeholder='Search teachers…' aria-label='Search teachers' oninput="this.closest('.tt-teacher-colours').querySelectorAll('[data-teacher-label-card]').forEach(card=>card.hidden=!card.dataset.searchName.includes(this.value.trim().toLowerCase()))"></div>
           <div class='tt-teacher-label-grid'>{teacher_color_cards}</div>
           <style>
@@ -989,11 +989,11 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
             .tt-teacher-workload{{display:grid;gap:4px;margin:0 0 10px;padding:9px 11px;border-radius:9px;background:linear-gradient(110deg,#edf6ee,#f8fbf8);border:1px solid #e1ece2}}
             .tt-teacher-workload>strong{{font-size:18px;line-height:1.2;color:#245d3b}}.tt-teacher-workload>strong span{{font-size:10px;font-weight:700;color:#6c8171}}
             .tt-teacher-workload>small{{font-size:9px;line-height:1.5;color:#718276}}
-            .tt-teacher-label-person{{display:flex;align-items:center;gap:9px;margin-bottom:12px}}.tt-teacher-avatar{{display:grid;place-items:center;flex:0 0 auto;width:auto;min-width:34px;height:34px;padding:0 8px;box-sizing:border-box;white-space:nowrap;border-radius:10px;background:color-mix(in srgb,var(--teacher-label-color) 14%,white);border:1px solid color-mix(in srgb,var(--teacher-label-color) 35%,white);color:var(--teacher-label-color);font-size:11px;font-weight:900}}
+            .tt-teacher-label-person{{display:flex;align-items:center;min-width:0;margin-bottom:12px}}
             .tt-teacher-label-person>div{{display:grid;gap:3px;min-width:0}}.tt-teacher-label-person b{{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#294b35;font-size:12px}}.tt-teacher-label-person small{{color:#829087;font-size:9px}}
             .tt-teacher-colours .tt-teacher-color-form{{display:flex;align-items:end;gap:9px;flex-wrap:wrap;padding-top:10px;border-top:1px solid #edf2ed}}
             .tt-teacher-initials-field,.tt-teacher-colour-field{{display:grid;gap:4px;font-size:9px;font-weight:800;color:#55705d}}
-            .tt-teacher-initials-field input{{width:66px;min-width:66px;max-width:100%;field-sizing:content;height:34px;box-sizing:border-box;border:1px solid #d5e4d7;border-radius:8px;padding:6px;text-transform:uppercase;font-weight:900;letter-spacing:.08em}}
+            .tt-teacher-initials-field input{{width:auto;min-width:66px;max-width:min(100%,240px);field-sizing:content;height:34px;box-sizing:border-box;border:1px solid #d5e4d7;border-radius:8px;padding:6px 9px;text-transform:uppercase;font-weight:900;letter-spacing:.08em}}
             .tt-teacher-colours input[type=color]{{width:43px;height:34px;padding:2px;border:1px solid #d5e4d7;border-radius:8px;background:#fff;cursor:pointer}}
             .tt-teacher-colours .tt-btn{{min-height:33px;padding:7px 12px;font-size:10px}}
             .tt-teacher-label-empty{{padding:25px;text-align:center;border:1px dashed #cddfce;border-radius:12px;color:#718276;font-size:11px}}
@@ -2610,8 +2610,8 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
             return RedirectResponse("/", 303)
         color = teacher_color.strip().upper()
         initials = teacher_initials.strip().upper()
-        if not re.fullmatch(r"[A-Z]{1,4}", initials):
-            return redirect_setup(profile_id, "Enter 1–4 letters for teacher initials.", True, request=request)
+        if not re.fullmatch(r"[A-Z]{1,12}", initials):
+            return redirect_setup(profile_id, "Enter 1–12 letters for teacher initials.", True, request=request)
         if len(color) != 7 or not color.startswith("#") or not all(ch in "0123456789ABCDEF" for ch in color[1:]):
             return redirect_setup(profile_id, "Choose a valid teacher colour.", True, request=request)
         con = get_db()
