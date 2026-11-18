@@ -15599,7 +15599,32 @@ def classes_edit_page(request: Request, class_id:int):
     row=cur.execute("SELECT id,name,level,stream FROM classes WHERE id=? AND school_id=?",(class_id,sid)).fetchone()
     con.close()
     if not row:return HTMLResponse("Class/stream not found. <a href='/app/classes'>Back</a>",404)
-    body=f"""<div class='page'><h1>Edit Class / Stream</h1><div class='card section'><div class='marksheet-scroll class-edit-scroll' tabindex='0'><form method='post' action='/app/classes/edit/{class_id}' class='class-edit-form'><input name='name' required class='field' value='{escape(str(row["name"] or ""),quote=True)}' placeholder='Class name'><select name='level' class='field'><option value=''>Select level</option>{''.join("<option value='"+v+"' "+("selected" if str(row["level"] or "")==v else "")+">"+v+"</option>" for v in ["Pre-Primary","Lower Primary","Upper Primary","Junior Secondary","Senior Secondary","College","Other"])}></select><input name='stream' class='field' value='{escape(str(row["stream"] or ""),quote=True)}' placeholder='Stream'><button class='btn'>Save Changes</button><a class='btn secondary' href='/app/classes'>Cancel</a></form></div></div><style>.class-edit-scroll{{width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch;touch-action:pan-x pan-y;padding-bottom:8px}}.class-edit-form{{display:grid;grid-template-columns:260px 220px 180px auto auto;gap:10px;width:max-content;min-width:100%}}.field{{padding:11px;border:1px solid #dbe2ea;border-radius:9px}}.btn{{padding:11px 16px;border:0;border-radius:9px;background:#111827;color:white;font-weight:800;text-decoration:none;cursor:pointer;white-space:nowrap}}.secondary{{background:#64748b}}</style></div>"""
+    body=f"""<div class='page'><h1>Edit Class / Stream</h1><div class='card section'><div class='marksheet-scroll class-edit-scroll' tabindex='0'><form method='post' action='/app/classes/edit/{class_id}' class='class-edit-form'><input name='name' required class='field' value='{escape(str(row["name"] or ""),quote=True)}' placeholder='Class name'><select name='level' class='field'><option value=''>Select level</option>{''.join("<option value='"+v+"' "+("selected" if str(row["level"] or "")==v else "")+">"+v+"</option>" for v in ["Pre-Primary","Lower Primary","Upper Primary","Junior Secondary","Senior Secondary","College","Other"])}></select><input name='stream' class='field' value='{escape(str(row["stream"] or ""),quote=True)}' placeholder='Stream'><button class='btn'>Save Changes</button><a class='btn secondary' href='/app/classes'>Cancel</a></form></div></div><style>.class-edit-scroll{{width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch;touch-action:pan-x pan-y;padding-bottom:8px}}.class-edit-form{{display:grid;grid-template-columns:260px 220px 180px auto auto;gap:10px;width:max-content;min-width:100%}}.field{{padding:11px;border:1px solid #dbe2ea;border-radius:9px}}.btn{{padding:11px 16px;border:0;border-radius:9px;background:#111827;color:white;font-weight:800;text-decoration:none;cursor:pointer;white-space:nowrap}}.secondary{{background:#64748b}}/* School Overview hierarchy: operational, finance, and communication rows. */
+.admin-registrar-overview .dashboard-overview-layout{{display:grid;gap:14px;min-width:0}}
+.admin-registrar-overview .dashboard-overview-row{{display:grid;gap:14px;min-width:0;align-items:stretch}}
+.admin-registrar-overview .overview-row-attendance,.admin-registrar-overview .overview-row-finance{{grid-template-columns:minmax(0,2fr) minmax(260px,1fr)}}
+.admin-registrar-overview .overview-row-communications{{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.admin-registrar-overview .dashboard-overview-row>.dashboard-widget,.admin-registrar-overview .dashboard-overview-row>.admin-overview-recent{{height:100%;min-width:0;margin:0}}
+.admin-registrar-overview .overview-row-attendance .attendance-widget{{min-height:220px}}
+.admin-registrar-overview .overview-row-attendance .calendar-widget{{min-height:220px}}
+.admin-registrar-overview .overview-row-finance .finance-widget{{min-height:205px}}
+.admin-registrar-overview .overview-row-finance .performance-mini{{min-height:205px}}
+.admin-registrar-overview .overview-row-communications .notice-widget,.admin-registrar-overview .overview-row-communications .admin-overview-recent{{min-height:190px}}
+.admin-registrar-overview .overview-row-communications .admin-overview-recent{{padding:15px}}
+.admin-registrar-overview .overview-row-communications .recent-activity-list{{grid-template-columns:1fr;gap:4px}}
+.admin-registrar-overview .admin-overview-top{{margin-top:14px}}
+.admin-registrar-overview .admin-overview-health{{margin-top:14px}}
+@media(max-width:850px){{
+ .admin-registrar-overview .dashboard-overview-row{{grid-template-columns:repeat(2,minmax(0,1fr))}}
+ .admin-registrar-overview .overview-row-attendance,.admin-registrar-overview .overview-row-finance{{grid-template-columns:minmax(0,1.5fr) minmax(220px,1fr)}}
+}}
+@media(max-width:650px){{
+ .admin-registrar-overview .dashboard-overview-layout,.admin-registrar-overview .dashboard-overview-row{{gap:10px}}
+ .admin-registrar-overview .dashboard-overview-row{{grid-template-columns:1fr}}
+ .admin-registrar-overview .overview-row-attendance .attendance-widget,.admin-registrar-overview .overview-row-attendance .calendar-widget,.admin-registrar-overview .overview-row-finance .finance-widget,.admin-registrar-overview .overview-row-finance .performance-mini{{min-height:0}}
+ .admin-registrar-overview .overview-row-communications .notice-widget,.admin-registrar-overview .overview-row-communications .admin-overview-recent{{min-height:0}}
+}}
+</style></div>"""
     return _school_page(request,"Edit Class / Stream",body)
 
 @router.post("/app/classes/edit/{class_id}")
@@ -15809,32 +15834,7 @@ def subjects_edit_page(request: Request, subject_id: int):
     con.close()
     if not row:
         return HTMLResponse("Subject not found. <a href='/app/subjects'>Back</a>",404)
-    body=f"""<div class='page'><h1>Edit Subject</h1><div class='card section'><form method='post' action='/app/subjects/edit/{subject_id}' style='display:grid;grid-template-columns:1fr 1fr 1fr auto auto;gap:10px'><input name='name' required class='field' value='{escape(str(row["name"] or ""), quote=True)}' placeholder='Subject name'><input name='code' class='field' value='{escape(str(row["code"] or ""), quote=True)}' placeholder='Code'><input name='initial' class='field' value='{escape(str(row["initial"] or ""), quote=True)}' placeholder='Initial'><button class='btn'>Save Changes</button><a class='btn secondary' href='/app/subjects'>Cancel</a></form></div><style>.field{{padding:11px;border:1px solid #dbe2ea;border-radius:9px}}.btn{{padding:11px 16px;border:0;border-radius:9px;background:#111827;color:white;font-weight:800;text-decoration:none;cursor:pointer}}.secondary{{background:#64748b}}/* School Overview hierarchy: operational, finance, and communication rows. */
-.admin-registrar-overview .dashboard-overview-layout{{display:grid;gap:14px;min-width:0}}
-.admin-registrar-overview .dashboard-overview-row{{display:grid;gap:14px;min-width:0;align-items:stretch}}
-.admin-registrar-overview .overview-row-attendance,.admin-registrar-overview .overview-row-finance{{grid-template-columns:minmax(0,2fr) minmax(260px,1fr)}}
-.admin-registrar-overview .overview-row-communications{{grid-template-columns:repeat(2,minmax(0,1fr))}}
-.admin-registrar-overview .dashboard-overview-row>.dashboard-widget,.admin-registrar-overview .dashboard-overview-row>.admin-overview-recent{{height:100%;min-width:0;margin:0}}
-.admin-registrar-overview .overview-row-attendance .attendance-widget{{min-height:220px}}
-.admin-registrar-overview .overview-row-attendance .calendar-widget{{min-height:220px}}
-.admin-registrar-overview .overview-row-finance .finance-widget{{min-height:205px}}
-.admin-registrar-overview .overview-row-finance .performance-mini{{min-height:205px}}
-.admin-registrar-overview .overview-row-communications .notice-widget,.admin-registrar-overview .overview-row-communications .admin-overview-recent{{min-height:190px}}
-.admin-registrar-overview .overview-row-communications .admin-overview-recent{{padding:15px}}
-.admin-registrar-overview .overview-row-communications .recent-activity-list{{grid-template-columns:1fr;gap:4px}}
-.admin-registrar-overview .admin-overview-top{{margin-top:14px}}
-.admin-registrar-overview .admin-overview-health{{margin-top:14px}}
-@media(max-width:850px){{
- .admin-registrar-overview .dashboard-overview-row{{grid-template-columns:repeat(2,minmax(0,1fr))}}
- .admin-registrar-overview .overview-row-attendance,.admin-registrar-overview .overview-row-finance{{grid-template-columns:minmax(0,1.5fr) minmax(220px,1fr)}}
-}}
-@media(max-width:650px){{
- .admin-registrar-overview .dashboard-overview-layout,.admin-registrar-overview .dashboard-overview-row{{gap:10px}}
- .admin-registrar-overview .dashboard-overview-row{{grid-template-columns:1fr}}
- .admin-registrar-overview .overview-row-attendance .attendance-widget,.admin-registrar-overview .overview-row-attendance .calendar-widget,.admin-registrar-overview .overview-row-finance .finance-widget,.admin-registrar-overview .overview-row-finance .performance-mini{{min-height:0}}
- .admin-registrar-overview .overview-row-communications .notice-widget,.admin-registrar-overview .overview-row-communications .admin-overview-recent{{min-height:0}}
-}}
- </style></div>"""
+    body=f"""<div class='page'><h1>Edit Subject</h1><div class='card section'><form method='post' action='/app/subjects/edit/{subject_id}' style='display:grid;grid-template-columns:1fr 1fr 1fr auto auto;gap:10px'><input name='name' required class='field' value='{escape(str(row["name"] or ""), quote=True)}' placeholder='Subject name'><input name='code' class='field' value='{escape(str(row["code"] or ""), quote=True)}' placeholder='Code'><input name='initial' class='field' value='{escape(str(row["initial"] or ""), quote=True)}' placeholder='Initial'><button class='btn'>Save Changes</button><a class='btn secondary' href='/app/subjects'>Cancel</a></form></div><style>.field{{padding:11px;border:1px solid #dbe2ea;border-radius:9px}}.btn{{padding:11px 16px;border:0;border-radius:9px;background:#111827;color:white;font-weight:800;text-decoration:none;cursor:pointer}}.secondary{{background:#64748b}} </style></div>"""
     return _school_page(request,"Edit Subject",body)
 
 @router.post("/app/subjects/edit/{subject_id}")
