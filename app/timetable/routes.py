@@ -971,8 +971,26 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
                 item["total"] += lead_load
                 item["subjects"][subject_label] = item["subjects"].get(subject_label, 0) + lead_load
 
+        teacher_palette = [
+            "#1D4ED8", "#2563EB", "#3B82F6", "#0EA5E9", "#0891B2",
+            "#0F766E", "#059669", "#16A34A", "#22C55E", "#65A30D",
+            "#84CC16", "#A3A30A", "#CA8A04", "#EAB308", "#D97706",
+            "#EA580C", "#F97316", "#DC2626", "#EF4444", "#F43F5E",
+            "#E11D48", "#DB2777", "#C026D3", "#A21CAF", "#9333EA",
+            "#7C3AED", "#6D28D9", "#5B21B6", "#4F46E5", "#6366F1",
+            "#4338CA", "#1E40AF", "#075985", "#155E75", "#134E4A",
+            "#065F46", "#166534", "#3F6212", "#4D7C0F", "#854D0E",
+            "#92400E", "#9A3412", "#9F1239", "#881337", "#9D174D",
+            "#86198F", "#701A75", "#6B21A8", "#581C87", "#334155",
+        ]
+        def teacher_color_swatches(current):
+            current = str(current or "#2563EB").upper()
+            return "".join(
+                f"<button type='button' class='tt-colour-swatch{' is-selected' if colour == current else ''}' style='--swatch:{colour}' title='{colour}' aria-label='Select {colour}' aria-pressed='{'true' if colour == current else 'false'}' onclick='const p=this.closest(".tt-teacher-color-form").querySelector("input[type=color]");p.value="{colour}";p.dispatchEvent(new Event("input",{{bubbles:true}}));p.dispatchEvent(new Event("change",{{bubbles:true}}));this.parentElement.querySelectorAll(".tt-colour-swatch").forEach(s=>{{s.classList.remove("is-selected");s.setAttribute("aria-pressed","false")}});this.classList.add("is-selected");this.setAttribute("aria-pressed","true")'></button>"
+                for colour in teacher_palette
+            )
         teacher_color_cards = "".join(
-            f"<article class='tt-teacher-label-card' data-teacher-label-card data-search-name='{esc(t['name']).lower()}'><div class='tt-teacher-label-person'><div><b>{esc(t['name'])}</b></div></div><div class='tt-teacher-workload'><strong>{teacher_workloads.get(int(t['id']), {}).get('total', 0)} <span>periods / week</span></strong><small>{' · '.join(esc(subject + ' ' + str(load)) for subject, load in sorted(teacher_workloads.get(int(t['id']), {}).get('subjects', {}).items(), key=lambda item: item[0].casefold())) or 'No subject requirements configured'}</small></div><form method='post' data-native-post='true' action='/app/timetable/setup/teacher-color' class='tt-teacher-color-form'>{hidden}{teacher_color_tab_field}<input type='hidden' name='teacher_id' value='{int(t['id'])}'><label class='tt-teacher-initials-field'>Label initials<input name='teacher_initials' value='{esc(t['teacher_initials'] or '')}' maxlength='12' pattern='[A-Za-z]{1,12}' placeholder='e.g. JM' required></label><label class='tt-teacher-colour-field'>Colour<input aria-label='Colour for {esc(t['name'])}' type='color' name='teacher_color' value='{esc(t['teacher_color'] or '#2563EB')}' required></label><button class='tt-btn'>Save</button></form></article>"
+            f"<article class='tt-teacher-label-card' data-teacher-label-card data-search-name='{esc(t['name']).lower()}'><div class='tt-teacher-label-person'><div><b>{esc(t['name'])}</b></div></div><div class='tt-teacher-workload'><strong>{teacher_workloads.get(int(t['id']), {}).get('total', 0)} <span>periods / week</span></strong><small>{' · '.join(esc(subject + ' ' + str(load)) for subject, load in sorted(teacher_workloads.get(int(t['id']), {}).get('subjects', {}).items(), key=lambda item: item[0].casefold())) or 'No subject requirements configured'}</small></div><form method='post' data-native-post='true' action='/app/timetable/setup/teacher-color' class='tt-teacher-color-form'>{hidden}{teacher_color_tab_field}<input type='hidden' name='teacher_id' value='{int(t['id'])}'><label class='tt-teacher-initials-field'>Label initials<input name='teacher_initials' value='{esc(t['teacher_initials'] or '')}' maxlength='12' pattern='[A-Za-z]{1,12}' placeholder='e.g. JM' required></label><label class='tt-teacher-colour-field'>Colour<input aria-label='Custom colour for {esc(t['name'])}' type='color' name='teacher_color' value='{esc(t['teacher_color'] or '#2563EB')}' required><span class='tt-colour-help'>50 preset colours + custom picker</span></label><div class='tt-colour-palette' role='group' aria-label='50 teacher colour choices'>{teacher_color_swatches(t['teacher_color'] or '#2563EB')}</div><button class='tt-btn'>Save</button></form></article>"
             for t in teachers
         ) or "<div class='tt-teacher-label-empty'>No teachers are registered yet.</div>"
         teacher_colour_section = f"""
@@ -995,6 +1013,12 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
             .tt-teacher-initials-field,.tt-teacher-colour-field{{display:grid;gap:4px;font-size:9px;font-weight:800;color:#55705d}}
             .tt-teacher-initials-field input{{width:auto;min-width:66px;max-width:min(100%,240px);field-sizing:content;height:34px;box-sizing:border-box;border:1px solid #d5e4d7;border-radius:8px;padding:6px 9px;text-transform:uppercase;font-weight:900;letter-spacing:.08em}}
             .tt-teacher-colours input[type=color]{{width:43px;height:34px;padding:2px;border:1px solid #d5e4d7;border-radius:8px;background:#fff;cursor:pointer}}
+            .tt-teacher-colour-field{{align-self:start}}.tt-colour-help{{font-size:8px;font-weight:600;color:#829087;white-space:nowrap}}
+            .tt-colour-palette{{display:grid;grid-template-columns:repeat(10,22px);gap:5px;align-self:end;max-width:265px;padding:7px;border:1px solid #e2ece3;border-radius:10px;background:#f8fbf8}}
+            .tt-colour-swatch{{width:22px;height:22px;padding:0;border:2px solid #fff;border-radius:6px;background:var(--swatch);box-shadow:0 0 0 1px #d6e2d7;cursor:pointer}}
+            .tt-colour-swatch:hover{{transform:scale(1.12);box-shadow:0 0 0 2px #6c9875}}
+            .tt-colour-swatch.is-selected{{outline:2px solid #1d563b;outline-offset:2px}}
+            @media(max-width:420px){{.tt-colour-palette{{grid-template-columns:repeat(10,20px);gap:4px}}.tt-colour-swatch{{width:20px;height:20px}}}}
             .tt-teacher-colours .tt-btn{{min-height:33px;padding:7px 12px;font-size:10px}}
             .tt-teacher-label-empty{{padding:25px;text-align:center;border:1px dashed #cddfce;border-radius:12px;color:#718276;font-size:11px}}
             @media(max-width:650px){{.tt-teacher-label-grid{{grid-template-columns:1fr}}.tt-teacher-label-toolbar{{align-items:stretch}}.tt-teacher-label-search{{width:100%}}}}
