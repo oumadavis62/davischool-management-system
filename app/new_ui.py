@@ -21590,20 +21590,15 @@ def enrolment_complete(request: Request, application_id: int, class_id: str = Fo
             (sid,admission_no,assessment_value,learner_name,cid,learner_gender,
              learner_parent_name,learner_parent_phone,str(class_row["stream"] or "").strip(),
              learner_category,learner_parent_name))
-        cur.execute("""UPDATE admission_applications SET applicant_name=?,gender=?,parent_name=?,parent_phone=?,
-            applying_class_id=?,status='enrolled',enrolled_student_id=?,admission_no=?,updated_at=?
-            WHERE id=? AND school_id=? AND enrolled_student_id IS NULL""",
-            (learner_name,learner_gender,learner_parent_name,learner_parent_phone,cid,
-             student_id,admission_no,now,application_id,sid))
         student = cur.execute("SELECT id FROM students WHERE school_id=? AND lower(admission_no)=lower(?) ORDER BY id DESC LIMIT 1",(sid,admission_no)).fetchone()
         if not student: raise RuntimeError("Student record was not created.")
         student_id = int(student["id"])
-        if str(app_row["parent_phone"] or "").strip():
+        if learner_parent_phone:
             cur.execute("SAVEPOINT parent_access_sync")
             try:
                 from app.main import _create_or_link_parent_access
-                _create_or_link_parent_access(cur,sid,student_id,admission_no,parent_name,
-                    str(app_row["parent_phone"] or "").strip())
+                _create_or_link_parent_access(cur,sid,student_id,admission_no,learner_parent_name,
+                    learner_parent_phone)
             except Exception as parent_exc:
                 try:
                     cur.execute("ROLLBACK TO SAVEPOINT parent_access_sync")
@@ -21619,9 +21614,11 @@ def enrolment_complete(request: Request, application_id: int, class_id: str = Fo
             (school_id,student_id,from_class_id,to_class_id,changed_at,changed_by,reason,from_academic_year,to_academic_year)
             VALUES(?,?,?,?,?,?,?,?,?)""",
             (sid,student_id,None,cid,now,request.session.get("email",""),"Initial class enrollment",None,entry_year))
-        cur.execute("""UPDATE admission_applications SET status='enrolled',enrolled_student_id=?,admission_no=?,updated_at=?
+        cur.execute("""UPDATE admission_applications SET applicant_name=?,gender=?,parent_name=?,parent_phone=?,
+            applying_class_id=?,status='enrolled',enrolled_student_id=?,admission_no=?,updated_at=?
             WHERE id=? AND school_id=? AND enrolled_student_id IS NULL""",
-            (student_id,admission_no,now,application_id,sid))
+            (learner_name,learner_gender,learner_parent_name,learner_parent_phone,cid,
+             student_id,admission_no,now,application_id,sid))
         if cur.rowcount != 1: raise RuntimeError("The application enrolment state changed. No duplicate learner was created.")
         _audit(cur,sid,request,"STUDENT_ENROLLED",f"Enrolled {learner_name} with admission number {admission_no}")
         con.commit()
