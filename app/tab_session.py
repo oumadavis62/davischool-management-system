@@ -430,9 +430,13 @@ class DaviSchoolTabSessionMiddleware:
         } catch (_) {}
       }, true);
       window.addEventListener("popstate", function () {
-        // The dashboard shell has its own AJAX page renderer. Other portal
-        // shells need a document request to render the restored URL.
-        if (!window.__daviDashboardAjaxNav) location.reload();
+        // Delegate to the dashboard renderer when present; otherwise request
+        // the restored portal page as a normal document.
+        if (typeof window.__daviAjaxPopstateHandler === "function") {
+          window.__daviAjaxPopstateHandler();
+        } else {
+          location.reload();
+        }
       });
       window.addEventListener("pageshow", function (event) {
         if (event.persisted && isManagedPage(location.pathname)) location.reload();
