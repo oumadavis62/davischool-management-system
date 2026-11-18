@@ -271,7 +271,7 @@ class DaviSchoolTabSessionMiddleware:
         "/app/accounting", "/app/announcements", "/app/users", "/app/roles",
         "/app/school-settings", "/app/audit", "/app/teacher-performance",
         "/app/class-monitoring", "/app/class-teacher", "/app/parent-services",
-        "/app/library", "/app/transport", "/app/inventory", "/app/health-welfare",
+        "/app/library", "/app/transport", "/app/inventory", "/app/health", "/app/welfare",
         "/app/facilities", "/app/hr", "/app/timetable", "/app/parent",
         "/app/portals", "/app/account", "/app/teacher", "/app",
         "/schools/manage", "/super/portal-management",
@@ -323,6 +323,7 @@ class DaviSchoolTabSessionMiddleware:
       function currentState() {
         return history.state && typeof history.state === "object" ? history.state : {};
       }
+      window.__daviWorkspaceForPath = workspace;
       function isManagedPage(path) {
         return isSystemPath(path) && workspace(path) !== "/";
       }
@@ -359,11 +360,11 @@ class DaviSchoolTabSessionMiddleware:
       function formUrl(form) {
         var action = form.getAttribute("action") || location.href;
         var url = new URL(action, location.href);
-        var params = new URLSearchParams();
         new FormData(form).forEach(function (value, key) {
-          if (typeof value === "string") params.append(key, value);
+          if (typeof value !== "string") return;
+          url.searchParams.delete(key);
+          url.searchParams.append(key, value);
         });
-        url.search = params.toString();
         return url;
       }
       document.addEventListener("submit", function (event) {
