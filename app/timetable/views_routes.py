@@ -226,38 +226,29 @@ def register_timetable_view_routes(app, get_db, get_school_obj, module_page):
                                 teacher_color = str(lesson["teacher_color"] or "").strip()
                                 if not (len(teacher_color) == 7 and teacher_color.startswith("#") and all(ch in "0123456789abcdefABCDEF" for ch in teacher_color[1:])):
                                     teacher_color = "#2563EB"
-                                teacher_initials = str(lesson["teacher_initials"] or "").strip().upper()
-                                if not teacher_initials:
-                                    name_parts = [part for part in str(lesson["teacher_name"] or "").split() if part]
-                                    teacher_initials = "".join(part[0] for part in (name_parts[:1] + (name_parts[-1:] if len(name_parts) > 1 else []))).upper()[:4] or ""
                                 subject_initial = str(lesson["subject_initial"] or "").strip().upper()
                                 room_html = "" if view_type == "room" else f"<div class='tb-meta tb-room-label'>⌂ {esc(lesson['room_name'] or 'Room not assigned')}</div>"
                                 class_label = esc(str(lesson["class_name"]) + ((" " + str(lesson["stream"])) if lesson["stream"] else ""))
                                 class_initials = esc(str(lesson.get("class_initials") or "").strip().upper() or class_label)
                                 if view_type in ("teacher", "room"):
                                     room_footer = ("<span class='tb-resource-room'>" + esc(lesson["room_name"]) + "</span>") if view_type == "teacher" and lesson.get("room_name") else ""
-                                    teacher_footer = ("<span class='tb-resource-teacher'>" + esc(teacher_initials) + "</span>") if view_type == "room" else ""
-                                    resource_footer = "<div class='tb-resource-cell-footer'>" + room_footer + teacher_footer + "</div>"
+                                    resource_footer = "<div class='tb-resource-cell-footer'>" + room_footer + "</div>"
                                     cards.append(
                                         f"<div class='tb-lesson tb-resource-lesson {'tb-lesson-double' if duration > 1 else ''}' style='--teacher-color:{teacher_color}' title='{esc(lesson['subject_name'])} · {esc(lesson['class_name'])} {esc(lesson['stream'] or '')} · {esc(lesson['teacher_name'])}'>"
                                         f"<div class='tb-resource-subject'>{esc(subject_initial)}</div><div class='tb-resource-class'>{class_initials}</div>"
                                         f"<div class='tb-resource-duration'>{duration}P</div>{resource_footer}</div>"
                                     )
                                 else:
-                                    teacher_footer = f"<div class='tb-lesson-footer'><span class='tb-teacher-initials' title='{esc(lesson['teacher_name'])}'>{esc(teacher_initials)}</span></div>"
                                     cards.append(
                                         f"<div class='tb-lesson {'tb-lesson-double' if duration > 1 else ''}' style='--teacher-color:{teacher_color}' title='{esc(lesson['subject_name'])} · {esc(lesson['teacher_name'])}'>"
-                                        f"<div class='tb-lesson-top'><b class='tb-subject-initials'>{esc(subject_initial)}</b><span>{duration}P</span></div>{room_html}{teacher_footer}</div>"
+                                        f"<div class='tb-lesson-top'><b class='tb-subject-initials'>{esc(subject_initial)}</b><span>{duration}P</span></div>{room_html}</div>"
                                     )
                             cells.append(f"<td class='tb-cell tb-cell-multi {'tb-cell-double' if cell_span > 1 else ''}' colspan='{cell_span}'>{''.join(cards)}</td>")
                         elif continued_lessons:
                             continued_cards = []
                             for item in continued_lessons:
-                                continued_avatar = ""
-                                if view_type not in ("teacher", "room"):
-                                    continued_avatar = f" <b class='tb-teacher-initials'>{esc(str(item['teacher_initials'] or '').strip().upper() or '')}</b>"
                                 continued_cards.append(
-                                    f"<div class='tb-continued-item' style='--teacher-color:{str(item['teacher_color'] or '#2563EB')}' title='{esc(item['subject_name'])} · {esc(item['teacher_name'])}'>↳ {esc(str(item['subject_initial'] or '').strip().upper() or '')} continues{continued_avatar}</div>"
+                                    f"<div class='tb-continued-item' style='--teacher-color:{str(item['teacher_color'] or '#2563EB')}' title='{esc(item['subject_name'])} · {esc(item['teacher_name'])}'>↳ {esc(str(item['subject_initial'] or '').strip().upper() or '')} continues</div>"
                                 )
                             continued_html = "".join(continued_cards)
                             cells.append(f"<td class='tb-cell tb-continued'>{continued_html}</td>")
