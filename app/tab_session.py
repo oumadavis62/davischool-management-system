@@ -255,78 +255,178 @@ class DaviSchoolTabSessionMiddleware:
     }, true);
 
 
-    // DaviSchool browser-history policy:
-    // First filter/search preserves the original page in Back history.
-    // Further filter/search changes replace the current filtered entry.
-    // Back starts a fresh filtering cycle. ds_tab is ignored as a filter.
+    // One navigation controller owns filter history across every authenticated portal.
+    // A filtered display is one step after its unfiltered page; changing filters
+    // replaces that display. Ordinary tabs, views and record selectors are not filters.
     (function () {
-      var HISTORY_KEY = "davischool_filter_history:" + (window.location.pathname || "/");
-      function appPage(path) {
-        return path === "/app" || path.indexOf("/app/") === 0 ||
-               path === "/school" || path.indexOf("/school/") === 0;
+      if (window.__daviTwoStepNavigation) return;
+      window.__daviTwoStepNavigation = true;
+      var TAB = "ds_tab";
+      var roots = [
+        "/app/academics/marks-corrections", "/app/academics/allocations",
+        "/app/academics/assessments", "/app/academics/analysis", "/app/academics",
+        "/app/admissions", "/app/enrolment", "/app/students", "/app/staff",
+        "/app/classes", "/app/subjects", "/app/exams", "/app/report-cards",
+        "/app/report-card-settings", "/app/attendance", "/app/finance",
+        "/app/accounting", "/app/announcements", "/app/users", "/app/roles",
+        "/app/school-settings", "/app/audit", "/app/teacher-performance",
+        "/app/class-monitoring", "/app/class-teacher", "/app/parent-services",
+        "/app/library", "/app/transport", "/app/inventory", "/app/health-welfare",
+        "/app/facilities", "/app/hr", "/app/timetable", "/app/parent",
+        "/app/portals", "/app/account", "/app/teacher", "/app",
+        "/schools/manage", "/super/portal-management",
+        "/super/global-control/dashboard", "/account/change-password",
+        "/portal", "/teacher", "/student", "/parent", "/dashboard"
+      ];
+      var excluded = /^(ds_tab|tab|view|section|profile|mode|layout|panel|return_to|next|redirect|ticket|preview|print|download|export|page_size|per_page)$/i;
+      var filterNames = /^(q|search|query|keyword|status|gender|class|class_id|stream|stream_id|subject|subject_id|teacher|teacher_id|student|student_id|exam|exam_id|term|year|academic_year|from|to|from_date|to_date|start_date|end_date|date|category|type|grade|allocation_id|page|sort|sort_by|direction)$/i;
+      function cleanPath(path) {
+        return String(path || "/").replace(/\/+$/, "") || "/";
       }
-      function realQuery(url) {
-        var yes = false;
-        url.searchParams.forEach(function (_, key) { if (key !== "ds_tab") yes = true; });
-        return yes;
+      function workspace(path) {
+        path = cleanPath(path);
+        var best = "/";
+        roots.forEach(function (root) {
+          if (path === root || path.indexOf(root + "/") === 0) {
+            if (root.length > best.length) best = root;
+          }
+        });
+        return best;
       }
-      function started() {
-        try { return sessionStorage.getItem(HISTORY_KEY) === "1"; } catch (_) { return false; }
+      function isSystemPath(path) {
+        path = cleanPath(path);
+        return roots.some(function (root) {
+          return path === root || path.indexOf(root + "/") === 0;
+        }) || /^\/(super|schools|portal|teacher|student|parent|dashboard|account)(\/|$)/.test(path);
       }
-      function reset() {
-        try { sessionStorage.removeItem(HISTORY_KEY); } catch (_) {}
+      function hasFilter(url) {
+        var found = false;
+        url.searchParams.forEach(function (value, key) {
+          if (!excluded.test(key) && filterNames.test(key) && String(value || "").trim() !== "") found = true;
+        });
+        return found;
       }
-      function filteredNavigate(url) {
-        if (url.origin !== window.location.origin ||
-            url.pathname !== window.location.pathname ||
-            !appPage(url.pathname) || !realQuery(url)) return false;
-        var destination = url.pathname + url.search + url.hash;
-        if (started()) {
-          window.location.replace(destination);
-        } else {
-          try { sessionStorage.setItem(HISTORY_KEY, "1"); } catch (_) {}
-          window.location.href = destination;
+      function defaultUrl(url) {
+        var copy = new URL(url.href);
+        Array.from(copy.searchParams.keys()).forEach(function (key) {
+          if (!excluded.test(key) && filterNames.test(key)) copy.searchParams.delete(key);
+        });
+        return copy;
+      }
+      function stateFor(url, step) {
+        return {
+          daviHistoryStep: step,
+          daviWorkspace: workspace(url.pathname),
+          daviTwoStep: true
+        };
+      }
+      function currentState() {
+        return history.state && typeof history.state === "object" ? history.state : {};
+      }
+      function isManagedPage(path) {
+        return isSystemPath(path) && workspace(path) !== "/";
+      }
+      function initialize() {
+        if (!isManagedPage(location.pathname)) return;
+        var current = new URL(location.href);
+        var state = currentState();
+        if (hasFilter(current)) {
+          if (state.daviTwoStep && state.daviHistoryStep === "filtered") return;
+          var base = defaultUrl(current);
+          history.replaceState(stateFor(base, "workspace"), "", base.href);
+          history.pushState(stateFor(current, "filtered"), "", current.href);
+          return;
         }
+        if (!state.daviTwoStep || state.daviHistoryStep !== "workspace" ||
+            state.daviWorkspace !== workspace(current.pathname)) {
+          history.replaceState(stateFor(current, "workspace"), "", current.href);
+        }
+      }
+      function navigateFilter(url) {
+        if (url.origin !== location.origin || url.pathname !== location.pathname ||
+            !isManagedPage(url.pathname) || !hasFilter(url)) return false;
+        var state = currentState();
+        var step = state.daviTwoStep && state.daviHistoryStep === "filtered" ? "filtered" : "workspace";
+        var destination = url.href;
+        if (step === "filtered") {
+          history.replaceState(stateFor(url, "filtered"), "", destination);
+        } else {
+          history.pushState(stateFor(url, "filtered"), "", destination);
+        }
+        location.reload();
         return true;
       }
-
+      function formUrl(form) {
+        var action = form.getAttribute("action") || location.href;
+        var url = new URL(action, location.href);
+        var params = new URLSearchParams();
+        new FormData(form).forEach(function (value, key) {
+          if (typeof value === "string") params.append(key, value);
+        });
+        url.search = params.toString();
+        return url;
+      }
       document.addEventListener("submit", function (event) {
         var form = event.target;
-        if (!form || String(form.method || "get").toLowerCase() !== "get") return;
-        if (form.hasAttribute("data-native-get") || form.hasAttribute("data-no-history-filter")) return;
+        if (!form || form.hasAttribute("data-native-get") ||
+            form.hasAttribute("data-no-history-filter")) return;
+        var method = String(form.method || "get").toLowerCase();
+        if (method === "get") {
+          try {
+            var url = formUrl(form);
+            if (url.origin === location.origin && url.pathname === location.pathname &&
+                hasFilter(url) && navigateFilter(url)) event.preventDefault();
+          } catch (_) {}
+          return;
+        }
+        if (method !== "post" || !form.matches(".marks-filter-form")) return;
         try {
-          var action = form.getAttribute("action") || window.location.href;
-          var url = new URL(action, window.location.href);
-          if (url.origin !== window.location.origin ||
-              url.pathname !== window.location.pathname || !appPage(url.pathname)) return;
+          var action = new URL(form.getAttribute("action") || location.href, location.href);
+          if (action.origin !== location.origin || !isManagedPage(action.pathname)) return;
+          event.preventDefault();
           var data = new FormData(form);
-          var params = new URLSearchParams();
-          var hasFilter = false;
-          data.forEach(function (value, key) {
-            params.append(key, value);
-            if (key !== "ds_tab") hasFilter = true;
-          });
-          if (!hasFilter) return;
-          url.search = params.toString();
-          if (filteredNavigate(url)) event.preventDefault();
-        } catch (_) {}
+          fetch(action.href, {
+            method: "POST", body: data, credentials: "same-origin",
+            redirect: "follow", cache: "no-store"
+          }).then(function (response) {
+            if (!response.ok) throw new Error("Filter request failed");
+            var finalUrl = new URL(response.url || action.href, location.href);
+            if (finalUrl.origin !== location.origin) throw new Error("Unexpected filter destination");
+            var state = currentState();
+            var step = state.daviTwoStep && state.daviHistoryStep === "filtered" ? "filtered" : "workspace";
+            if (step === "filtered") history.replaceState(stateFor(finalUrl, "filtered"), "", finalUrl.href);
+            else history.pushState(stateFor(finalUrl, "filtered"), "", finalUrl.href);
+            location.reload();
+          }).catch(function () { form.submit(); });
+        } catch (_) { form.submit(); }
       }, true);
-
       document.addEventListener("click", function (event) {
         var link = event.target && event.target.closest ? event.target.closest("a[href]") : null;
-        if (!link || event.defaultPrevented) return;
-        if (link.hasAttribute("data-native-get") || link.hasAttribute("data-no-history-filter")) return;
-        if (link.target === "_blank" || link.hasAttribute("download")) return;
-        if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+        if (!link || event.defaultPrevented || link.target === "_blank" ||
+            link.hasAttribute("download") || link.hasAttribute("data-native-get") ||
+            link.hasAttribute("data-no-history-filter") || event.button !== 0 ||
+            event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
         try {
-          var url = new URL(link.href, window.location.href);
-          if (filteredNavigate(url)) event.preventDefault();
+          var url = new URL(link.href, location.href);
+          if (url.pathname === location.pathname && url.search &&
+              navigateFilter(url)) event.preventDefault();
+          else if (link.matches("a.marksheet-page-nav") &&
+                   url.origin === location.origin && isManagedPage(url.pathname)) {
+            event.preventDefault();
+            history.replaceState(stateFor(url, "workspace"), "", url.href);
+            location.assign(url.href);
+          }
         } catch (_) {}
       }, true);
-
-      if (!realQuery(new URL(window.location.href))) reset();
-      window.addEventListener("popstate", reset);
-      window.addEventListener("pageshow", function (event) { if (event.persisted) reset(); });
+      window.addEventListener("popstate", function () {
+        // The dashboard shell has its own AJAX page renderer. Other portal
+        // shells need a document request to render the restored URL.
+        if (!window.__daviDashboardAjaxNav) location.reload();
+      });
+      window.addEventListener("pageshow", function (event) {
+        if (event.persisted && isManagedPage(location.pathname)) location.reload();
+      });
+      initialize();
     })();
 
     // Keep an open authenticated tab alive independently of clicks on its
