@@ -537,7 +537,7 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
                 (school_id,pid),
             ).fetchall()
             requirements = cur.execute(
-                """SELECT r.*,c.name class_name,c.stream,s.name subject_name,t.name teacher_name
+                """SELECT r.*,c.name class_name,c.stream,s.name subject_name,s.initial subject_initial,t.name teacher_name
                    FROM ds_timetable_class_requirements r
                    JOIN classes c ON c.id=r.class_id AND c.school_id=r.school_id
                    JOIN subjects s ON s.id=r.subject_id AND s.school_id=r.school_id
@@ -941,7 +941,7 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
         teacher_workloads = {}
         for req in requirements:
             lead_teacher_id = int(req["teacher_id"])
-            subject_label = str(req["subject_name"])
+            subject_label = str(req["subject_initial"] or "").strip().upper() or str(req["subject_name"])
             patterns = requirement_pattern_rows.get(int(req["id"]), [])
             expected_lead_load = max(0, int(req["lessons_per_week"] or 0)) * max(1, int(req["duration_periods"] or 1))
             configured_pattern_load = 0
