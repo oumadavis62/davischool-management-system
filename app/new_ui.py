@@ -8261,6 +8261,60 @@ def app_home(request: Request):
   .admin-registrar-overview .admin-overview-charts-panel{{padding:12px}}
   .admin-registrar-overview .admin-overview-recent .recent-activity-list{{grid-template-columns:1fr}}
 }}
+
+/* Overview sections are presented as a responsive tile grid. School Overview
+   remains a separate full-width profile section below this dashboard area. */
+.admin-registrar-overview .dashboard-overview-layout{{
+  display:grid;grid-template-columns:repeat(3,minmax(0,1fr));
+  gap:14px;align-items:stretch;min-width:0
+}}
+.admin-registrar-overview .dashboard-overview-row{{
+  display:contents
+}}
+.admin-registrar-overview .dashboard-overview-layout .dashboard-widget,
+.admin-registrar-overview .dashboard-overview-layout .admin-overview-recent{{
+  display:flex;flex-direction:column;min-width:0;min-height:210px;
+  height:100%;margin:0;padding:16px;border:1px solid #dce8dc;
+  border-radius:15px;background:linear-gradient(155deg,#fff 0%,#f5f9f3 100%);
+  box-shadow:0 4px 14px #294b350b;overflow:hidden
+}}
+.admin-registrar-overview .dashboard-overview-layout .finance-widget{{
+  background:linear-gradient(145deg,#31533d 0%,#244832 100%);
+  border-color:#31533d
+}}
+.admin-registrar-overview .dashboard-overview-layout .dashboard-widget-heading{{
+  align-items:flex-start;min-height:36px
+}}
+.admin-registrar-overview .dashboard-overview-layout .pulse-chart,
+.admin-registrar-overview .dashboard-overview-layout .finance-chart{{
+  margin-top:auto;min-height:128px
+}}
+.admin-registrar-overview .dashboard-overview-layout .calendar-list,
+.admin-registrar-overview .dashboard-overview-layout .notice-list,
+.admin-registrar-overview .dashboard-overview-layout .recent-activity-list{{
+  flex:1;min-width:0
+}}
+.admin-registrar-overview .dashboard-overview-layout .performance-mini{{
+  align-items:center;justify-content:center;text-align:center
+}}
+.admin-registrar-overview .dashboard-overview-layout .admin-overview-recent .recent-activity-list{{
+  grid-template-columns:1fr;gap:2px
+}}
+.admin-registrar-overview .dashboard-overview-layout .dashboard-widget:hover,
+.admin-registrar-overview .dashboard-overview-layout .admin-overview-recent:hover{{
+  border-color:#b9d1b8;box-shadow:0 8px 20px #294b3514;
+  transform:translateY(-1px);transition:transform .18s ease,box-shadow .18s ease,border-color .18s ease
+}}
+@media(max-width:1050px){{
+  .admin-registrar-overview .dashboard-overview-layout{{grid-template-columns:repeat(2,minmax(0,1fr))}}
+}}
+@media(max-width:620px){{
+  .admin-registrar-overview .dashboard-overview-layout{{grid-template-columns:minmax(0,1fr);gap:10px}}
+  .admin-registrar-overview .dashboard-overview-layout .dashboard-widget,
+  .admin-registrar-overview .dashboard-overview-layout .admin-overview-recent{{
+    min-height:190px;padding:13px
+  }}
+}}
 </style></div>"""
 
     con.close()
