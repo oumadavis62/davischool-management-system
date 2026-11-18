@@ -1258,10 +1258,9 @@ else setupDaviActionCells();
   window.toggleSidebar=toggleSidebar;
   function initSidebar(){{
     try{{
-      var mobile=window.matchMedia && window.matchMedia('(max-width: 760px)').matches;
       var saved=localStorage.getItem('{ "davischool_teacher_sidebar_hidden" if teacher_locked else "davischool_sidebar_hidden" }')==='1';
-      applySidebarState(mobile || saved);
-    }}catch(e){{applySidebarState(!!(window.matchMedia && window.matchMedia('(max-width: 760px)').matches));}}
+      applySidebarState(saved);
+    }}catch(e){{applySidebarState(false);}}
   }}
   // Delegate from document so the control keeps working after Academic Manager
   // tile navigation replaces the document using the prefetched HTML cache.
@@ -1763,19 +1762,19 @@ document.addEventListener('submit',function(event){{
       oldScript.replaceWith(fresh);
     }});
   }}
-  function collapseDashboardSidebar(){{
-    document.body.classList.add('sidebar-hidden');
-    document.body.classList.remove('sidebar-open');
+  function restoreDashboardSidebarState(){{
+    var hidden=false;
+    try{{
+      hidden=localStorage.getItem('{ "davischool_teacher_sidebar_hidden" if teacher_locked else "davischool_sidebar_hidden" }')==='1';
+    }}catch(error){{}}
+    document.body.classList.toggle('sidebar-hidden',hidden);
+    document.body.classList.toggle('sidebar-open',!hidden);
     var toggle=document.getElementById('sidebarToggle');
     if(toggle){{
-      toggle.setAttribute('aria-label','Show sidebar');
-      toggle.setAttribute('title','Show sidebar');
-      toggle.setAttribute('aria-expanded','false');
+      toggle.setAttribute('aria-label',hidden?'Show sidebar':'Hide sidebar');
+      toggle.setAttribute('title',hidden?'Show sidebar':'Hide sidebar');
+      toggle.setAttribute('aria-expanded',hidden?'false':'true');
     }}
-    try{{
-      localStorage.setItem('davischool_sidebar_hidden','1');
-      localStorage.setItem('davischool_teacher_sidebar_hidden','1');
-    }}catch(error){{}}
   }}
   async function loadPage(destination,addHistory){{
     if(busy)return;
@@ -1844,7 +1843,7 @@ document.addEventListener('submit',function(event){{
       }}
       document.dispatchEvent(new CustomEvent('davi:page-loaded',{{detail:{{url:finalUrl}}}}));
       // Hide the sidebar only after the new page and its scripts have finished loading.
-      collapseDashboardSidebar();
+      restoreDashboardSidebarState();
       scheduleWarm();
     }}catch(error){{
       location.assign(destination);
