@@ -2097,7 +2097,7 @@ def _school_page(request, title, body):
     # Promote those styles into <head> so both direct loads and dashboard AJAX
     # navigation have the page layout rules before the content is painted.
     if title == "Students List":
-        page_styles = re.findall(r"<style(?:\\s[^>]*)?>.*?</style>", body, flags=re.IGNORECASE | re.DOTALL)
+        page_styles = re.findall(r"<style>.*?</style>", body, flags=re.IGNORECASE | re.DOTALL)
         if page_styles:
             for page_style in page_styles:
                 body = body.replace(page_style, "", 1)
