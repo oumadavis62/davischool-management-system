@@ -8090,13 +8090,11 @@ def app_home(request: Request):
   </div>
   <div class='dashboard-showcase-grid'>
     <div class='dashboard-showcase-main'>
-      <section class='dashboard-widget'><div class='dashboard-widget-heading'><div><h2>Attendance</h2><p>Recent recorded attendance</p></div><span class='dashboard-widget-tag'>{attendance_rate}% present</span></div><div class='dashboard-legend'><span><i></i> Present</span><span><i></i> Recorded learners</span></div><div class='pulse-chart'>{attendance_bars}</div></section>
+      <section class='dashboard-widget attendance-widget'><div class='dashboard-widget-heading'><div><h2>Attendance</h2><p>Recent recorded attendance</p></div><span class='dashboard-widget-tag'>{attendance_rate}% present</span></div><div class='dashboard-legend'><span><i></i> Present</span><span><i></i> Recorded learners</span></div><div class='pulse-chart'>{attendance_bars}</div></section>
+      <section class='dashboard-widget calendar-widget'><div class='dashboard-widget-heading'><div><h2>Academic Calendar</h2><p>Examinations on record</p></div><span class='dashboard-widget-mark'>▦</span></div><div class='calendar-list'>{calendar_html}</div></section>
       <section class='dashboard-widget finance-widget'><div class='dashboard-widget-heading'><div><h2>Fee Collections</h2><p>Recorded payments by month</p></div><span class='dashboard-widget-tag'>KES</span></div><div class='finance-chart'>{finance_bars}</div></section>
       <section class='dashboard-widget performance-mini'><div class='dashboard-widget-heading'><div><h2>Academic Performance</h2><p>Latest examination performance</p></div><span class='dashboard-widget-tag'>LATEST EXAM</span></div><div class='performance-ring'><strong>{latest_exam_mean_label}</strong><span>school mean</span></div><small>Based on recorded marks in the latest examination</small></section>
-    </div>
-    <div class='dashboard-showcase-side'>
-      <section class='dashboard-widget'><div class='dashboard-widget-heading'><div><h2>Academic Calendar</h2><p>Examinations on record</p></div><span class='dashboard-widget-mark'>▦</span></div><div class='calendar-list'>{calendar_html}</div></section>
-      <section class='dashboard-widget'><div class='dashboard-widget-heading'><div><h2>Notice Board</h2><p>Latest school announcements</p></div><span class='dashboard-widget-mark'>◎</span></div><div class='notice-list'>{dashboard_notice_html}</div></section>
+      <section class='dashboard-widget notice-widget'><div class='dashboard-widget-heading'><div><h2>Notice Board</h2><p>Latest school announcements</p></div><span class='dashboard-widget-mark'>◎</span></div><div class='notice-list'>{dashboard_notice_html}</div></section>
     </div>
   </div>
 </div>
@@ -8226,6 +8224,14 @@ def app_home(request: Request):
 .admin-registrar-overview .dashboard-kpi{{transition:transform .18s ease,box-shadow .18s ease}}
 .admin-registrar-overview .dashboard-kpi:hover{{transform:translateY(-2px);box-shadow:0 7px 16px #294b3514}}
 .admin-registrar-overview .dashboard-showcase-grid{{grid-template-columns:minmax(0,1.08fr) minmax(280px,.92fr);gap:14px}}
+.admin-registrar-overview .dashboard-showcase-grid{{grid-template-columns:minmax(0,1fr)}}
+.admin-registrar-overview .dashboard-showcase-main{{grid-template-columns:repeat(3,minmax(0,1fr));align-items:stretch}}
+.admin-registrar-overview .attendance-widget,.admin-registrar-overview .calendar-widget{{grid-column:1/-1}}
+.admin-registrar-overview .finance-widget,.admin-registrar-overview .performance-mini,.admin-registrar-overview .notice-widget{{grid-column:auto;min-width:0}}
+@media(max-width:850px){{
+ .admin-registrar-overview .dashboard-showcase-main{{grid-template-columns:minmax(0,1fr)}}
+ .admin-registrar-overview .attendance-widget,.admin-registrar-overview .calendar-widget,.admin-registrar-overview .finance-widget,.admin-registrar-overview .performance-mini,.admin-registrar-overview .notice-widget{{grid-column:1/-1}}
+}}
 .admin-registrar-overview .dashboard-showcase-main,.admin-registrar-overview .dashboard-showcase-side{{gap:14px}}
 .admin-registrar-overview .dashboard-widget{{border-color:#dfe9dd;border-radius:14px;box-shadow:0 3px 12px #294b3509}}
 .admin-registrar-overview .dashboard-widget-heading h2{{font-size:14px;letter-spacing:-.1px}}
