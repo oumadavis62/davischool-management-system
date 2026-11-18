@@ -479,7 +479,7 @@ def _pdf_response(pdf_bytes, filename):
                     headers={"Content-Disposition": f'attachment; filename="{safe_name}"'})
 
 
-def _pdf_build(story, pagesize, title, page_border=False):
+def _pdf_build(story, pagesize, title, page_border=False, show_page_count=False):
     from io import BytesIO
     from reportlab.platypus import SimpleDocTemplate, PageBreak
     from reportlab.lib.units import mm
@@ -502,6 +502,34 @@ def _pdf_build(story, pagesize, title, page_border=False):
         canvas.drawCentredString(pagesize[0] / 2, 6 * mm, footer)
         canvas.restoreState()
 
+    class TotalPageCountCanvas(__import__("reportlab.pdfgen.canvas", fromlist=["Canvas"]).Canvas):
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, **kwargs)
+            self._saved_page_states = []
+
+        def showPage(self):
+            self._saved_page_states.append(dict(self.__dict__))
+            self._startPage()
+
+        def save(self):
+            total_pages = len(self._saved_page_states)
+            for state in self._saved_page_states:
+                self.__dict__.update(state)
+                self.saveState()
+                if page_border:
+                    self.setStrokeColorRGB(0.09, 0.42, 0.23)
+                    self.setLineWidth(0.7)
+                    self.line(6 * mm, 8 * mm, 6 * mm, pagesize[1] - 8 * mm)
+                    self.line(pagesize[0] - 6 * mm, 8 * mm, pagesize[0] - 6 * mm, pagesize[1] - 8 * mm)
+                self.setFont("Helvetica", 7)
+                footer = "Mabale_ICT Software  ·  Generated: %s  ·  Page %d of %d" % (
+                    generated_at, self._pageNumber, total_pages
+                )
+                self.setFillColorRGB(0.09, 0.42, 0.23)
+                self.drawCentredString(pagesize[0] / 2, 6 * mm, footer)
+                super().showPage()
+            super().save()
+
     doc = SimpleDocTemplate(
         buffer,
         pagesize=pagesize,
@@ -513,7 +541,10 @@ def _pdf_build(story, pagesize, title, page_border=False):
         author="Mabale_ICT Software",
     )
     try:
-        doc.build(story, onFirstPage=draw_footer, onLaterPages=draw_footer)
+        if show_page_count:
+            doc.build(story, canvasmaker=TotalPageCountCanvas)
+        else:
+            doc.build(story, onFirstPage=draw_footer, onLaterPages=draw_footer)
         return buffer.getvalue()
     except Exception as exc:
         print("MABALE_ICT PDF STORY FALLBACK:", repr(exc), flush=True)
@@ -6256,7 +6287,7 @@ function printDocument(){
         "@media(max-width:900px){.marksheet-overview{grid-template-columns:repeat(2,minmax(0,1fr))}.marksheet-select{grid-template-columns:repeat(2,minmax(0,1fr))}.marksheet-page-heading{align-items:flex-start;flex-direction:column}}"
         "@media(max-width:560px){.marksheet-overview{gap:8px}.marksheet-stat{padding:11px}.marksheet-stat strong{font-size:20px}.marksheet-select{grid-template-columns:1fr}.marksheet-heading-actions{width:100%}.marksheet-heading-actions>*{flex:1}}"
         "@media(prefers-reduced-motion:reduce){.btn,.btnlink{transition:none}}"
-        "@media print{body{background:#fff}.marksheet-pagination{display:none!important}.marksheet tbody tr{display:table-row!important}.side,.top,.no-print,.page>h1,.page>.muted{display:none!important}.main{margin-left:0!important;padding:0!important}.page{padding:0!important;margin:0!important;max-width:none!important}.marksheet-card{display:block!important;border:0!important;box-shadow:none!important;margin:0!important;padding:0!important;width:100%!important}.marksheet-card .doc-header{margin-top:0}.marksheet-title{font-size:20px}.marksheet-school{font-size:20px}.marksheet th,.marksheet td{padding:4px 5px;font-size:10px}}"
+        "@media print{@page{margin:10mm 10mm 16mm} @page{ @bottom-center{content:'Page ' counter(page) ' of ' counter(pages);font-family:Arial,sans-serif;font-size:9px;color:#28563a}} body{background:#fff}.marksheet-pagination{display:none!important}.marksheet tbody tr{display:table-row!important}.side,.top,.no-print,.page>h1,.page>.muted{display:none!important}.main{margin-left:0!important;padding:0!important}.page{padding:0!important;margin:0!important;max-width:none!important}.marksheet-card{display:block!important;border:0!important;box-shadow:none!important;margin:0!important;padding:0!important;width:100%!important}.marksheet-card .doc-header{margin-top:0}.marksheet-title{font-size:20px}.marksheet-school{font-size:20px}.marksheet th,.marksheet td{padding:4px 5px;font-size:10px}}"
         "</style></div>"
     )
     con.close()
@@ -6738,7 +6769,7 @@ def class_marksheets_pdf(
             re.sub(r"[^A-Za-z0-9]+", "_", class_title).strip("_") or "Class",
             re.sub(r"[^A-Za-z0-9]+", "_", exam_title).strip("_") or "Exam",
         )
-        pdf = _pdf_build(story, landscape(A4), "Mabale_ICT MarkSheet")
+        pdf = _pdf_build(story, landscape(A4), "Mabale_ICT MarkSheet", show_page_count=True)
         return _pdf_response(pdf, filename)
     except Exception as exc:
         print("MABALE_ICT MARKSHEET PDF ROUTE ERROR:", repr(exc), flush=True)
