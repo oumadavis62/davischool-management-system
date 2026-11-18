@@ -8262,6 +8262,12 @@ def app_home(request: Request):
   .admin-registrar-overview .admin-overview-recent .recent-activity-list{{grid-template-columns:1fr}}
 }}
 
+/* Keep Attendance and Academic Calendar as independent dashboard tiles. */
+.admin-registrar-overview .dashboard-overview-layout .attendance-widget,
+.admin-registrar-overview .dashboard-overview-layout .calendar-widget{{
+  display:flex;flex-direction:column;grid-column:auto;align-self:stretch;
+  width:100%;min-width:0;min-height:210px;height:100%;margin:0
+}}
 /* Overview sections are presented as a responsive tile grid. School Overview
    remains a separate full-width profile section below this dashboard area. */
 .admin-registrar-overview .dashboard-overview-layout{{
