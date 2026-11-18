@@ -3395,6 +3395,44 @@ def _staff_manager_styles():
 .staff-manager-page .staff-table-scroll{display:block!important;width:100%!important;max-width:100%!important;min-width:0!important;overflow-x:auto!important;-webkit-overflow-scrolling:touch!important}
 @media(max-width:900px){.main.staff-workspace{flex:1 1 0!important;width:auto!important;margin-left:72px!important}}
 @media(max-width:600px){.main.staff-workspace{flex:1 1 0!important;width:auto!important;max-width:100%!important;margin-left:0!important}.main.staff-workspace>.staff-manager-page{width:100%!important;padding-left:14px!important;padding-right:14px!important}.staff-manager-page{padding-left:14px!important;padding-right:14px!important}}
+
+/* Staff List desktop width: the sidebar is fixed-position, so size the
+   workspace against the viewport rather than the narrow flex/grid track. */
+@media(min-width:901px){
+  body:has(.main.staff-workspace) .main.staff-workspace{
+    display:block!important;position:relative!important;
+    flex:0 0 calc(100vw - 250px)!important;
+    width:calc(100vw - 250px)!important;
+    max-width:calc(100vw - 250px)!important;
+    min-width:0!important;margin-left:250px!important;
+    box-sizing:border-box!important;
+  }
+  body:has(.main.staff-workspace) .main.staff-workspace>.page.staff-manager-page{
+    display:block!important;width:100%!important;max-width:none!important;
+    min-width:0!important;box-sizing:border-box!important;
+  }
+  body:has(.main.staff-workspace) .main.staff-workspace .staff-register-card,
+  body:has(.main.staff-workspace) .main.staff-workspace .staff-table-scroll{
+    display:block!important;width:100%!important;max-width:none!important;
+    min-width:0!important;box-sizing:border-box!important;
+  }
+}
+@media(min-width:601px) and (max-width:900px){
+  body:has(.main.staff-workspace) .main.staff-workspace{
+    flex:0 0 calc(100vw - 72px)!important;
+    width:calc(100vw - 72px)!important;max-width:calc(100vw - 72px)!important;
+    margin-left:72px!important;min-width:0!important;box-sizing:border-box!important;
+  }
+  body:has(.main.staff-workspace) .main.staff-workspace>.page.staff-manager-page{
+    width:100%!important;max-width:none!important;min-width:0!important;
+  }
+}
+@media(max-width:600px){
+  body:has(.main.staff-workspace) .main.staff-workspace{
+    flex:0 0 100vw!important;width:100vw!important;max-width:100vw!important;
+    margin-left:0!important;min-width:0!important;box-sizing:border-box!important;
+  }
+}
 </style>"""
 
 @router.get("/app/staff", response_class=HTMLResponse)
