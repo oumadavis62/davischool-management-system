@@ -274,12 +274,12 @@ class DaviSchoolTabSessionMiddleware:
         "/app/library", "/app/transport", "/app/inventory", "/app/health", "/app/welfare",
         "/app/facilities", "/app/hr", "/app/timetable", "/app/parent",
         "/app/portals", "/app/account", "/app/teacher", "/app",
-        "/schools/manage", "/super/portal-management",
-        "/super/global-control/dashboard", "/account/change-password",
-        "/portal", "/teacher", "/student", "/parent", "/dashboard"
+        "/super/portal-management", "/super/global-control/dashboard", "/super",
+        "/schools/manage", "/schools", "/account/change-password", "/account",
+        "/school", "/portal", "/teacher", "/student", "/parent", "/dashboard"
       ];
       var excluded = /^(ds_tab|tab|view|view_type|section|profile|mode|layout|panel|return_to|next|redirect|ticket|preview|print|download|export|page|page_size|per_page)$/i;
-      var filterNames = /^(q|search|search_text|search_term|query|keyword|status|gender|class|class_id|class_name|stream|stream_id|stream_name|subject|subject_id|subject_name|teacher|teacher_id|teacher_name|student|student_id|student_name|admission_no|admission_number|exam|exam_id|exam_type|term|term_id|year|year_id|academic_year|academic_year_id|from|to|from_date|to_date|start_date|end_date|date|month|from_month|to_month|category|type|grade|grade_id|level|department|designation|role|allocation|allocation_id|route_id|house|boarding_status|payment_status|fee_type|invoice_status|sort|sort_by|direction)$/i;
+      var filterNames = /^(q|search|search_text|search_term|query|keyword|status|gender|class|class_id|class_name|stream|stream_id|stream_name|subject|subject_id|subject_name|teacher|teacher_id|teacher_name|student|student_id|student_name|admission_no|admission_number|id|record_id|item_id|entry_id|edit_id|detail_id|selected_id|selected_class|selected_stream|selected_subject|selected_teacher|selected_exam|selected_term|selected_year|exam|exam_id|exam_type|term|term_id|year|year_id|academic_year|academic_year_id|from|to|from_date|to_date|start_date|end_date|date|month|from_month|to_month|category|type|grade|grade_id|level|department|designation|role|allocation|allocation_id|route_id|house|boarding_status|payment_status|fee_type|invoice_status|sort|sort_by|direction)$/i;
       function cleanPath(path) {
         return String(path || "/").replace(/\/+$/, "") || "/";
       }
