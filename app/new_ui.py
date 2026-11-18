@@ -8087,13 +8087,21 @@ def app_home(request: Request):
     <div class='dashboard-kpi kpi-stone'><div class='dashboard-kpi-label'><span class='dashboard-kpi-icon' aria-hidden='true'>▦</span><span>CLASSES</span></div><strong>{c:,}</strong><small>Registered classes</small></div>
     <div class='dashboard-kpi kpi-rose'><div class='dashboard-kpi-label'><span class='dashboard-kpi-icon' aria-hidden='true'>🎓</span><span>GRADUATED</span></div><strong>{dashboard_graduated_count:,}</strong><small>Graduated learners</small></div>
   </div>
-  <div class='dashboard-showcase-grid'>
-    <div class='dashboard-showcase-main'>
+  <div class='dashboard-overview-layout'>
+    <div class='dashboard-overview-row overview-row-attendance'>
       <section class='dashboard-widget attendance-widget'><div class='dashboard-widget-heading'><div><h2>Attendance</h2><p>Recent recorded attendance</p></div><span class='dashboard-widget-tag'>{attendance_rate}% present</span></div><div class='dashboard-legend'><span><i></i> Present</span><span><i></i> Recorded learners</span></div><div class='pulse-chart'>{attendance_bars}</div></section>
       <section class='dashboard-widget calendar-widget'><div class='dashboard-widget-heading'><div><h2>Academic Calendar</h2><p>Examinations on record</p></div><span class='dashboard-widget-mark'>▦</span></div><div class='calendar-list'>{calendar_html}</div></section>
+    </div>
+    <div class='dashboard-overview-row overview-row-finance'>
       <section class='dashboard-widget finance-widget'><div class='dashboard-widget-heading'><div><h2>Fee Collections</h2><p>Recorded payments by month</p></div><span class='dashboard-widget-tag'>KES</span></div><div class='finance-chart'>{finance_bars}</div></section>
       <section class='dashboard-widget performance-mini'><div class='dashboard-widget-heading'><div><h2>Academic Performance</h2><p>Latest examination performance</p></div><span class='dashboard-widget-tag'>LATEST EXAM</span></div><div class='performance-ring'><strong>{latest_exam_mean_label}</strong><span>school mean</span></div><small>Based on recorded marks in the latest examination</small></section>
+    </div>
+    <div class='dashboard-overview-row overview-row-communications'>
       <section class='dashboard-widget notice-widget'><div class='dashboard-widget-heading'><div><h2>Notice Board</h2><p>Latest school announcements</p></div><span class='dashboard-widget-mark'>◎</span></div><div class='notice-list'>{dashboard_notice_html}</div></section>
+      <section class='card recent-activity-card admin-overview-panel admin-overview-recent'>
+        <div class='recent-activity-head'><div><h2>Recent Activities</h2><div class='muted'>Latest updates from this school workspace.</div></div></div>
+        <div class='recent-activity-list'>{recent_activity_html}</div>
+      </section>
     </div>
   </div>
 </div>
@@ -8107,10 +8115,6 @@ def app_home(request: Request):
     </div>
   </section>
 </div>
-<section class='card recent-activity-card admin-overview-panel admin-overview-recent'>
-  <div class='recent-activity-head'><div><h2>Recent Activities</h2><div class='muted'>Latest updates from this school workspace.</div></div></div>
-  <div class='recent-activity-list'>{recent_activity_html}</div>
-</section>
 <section class='admin-overview-health admin-overview-panel'>{admin_health}</section>
 </div>
 <style>
@@ -15595,7 +15599,32 @@ def classes_edit_page(request: Request, class_id:int):
     row=cur.execute("SELECT id,name,level,stream FROM classes WHERE id=? AND school_id=?",(class_id,sid)).fetchone()
     con.close()
     if not row:return HTMLResponse("Class/stream not found. <a href='/app/classes'>Back</a>",404)
-    body=f"""<div class='page'><h1>Edit Class / Stream</h1><div class='card section'><div class='marksheet-scroll class-edit-scroll' tabindex='0'><form method='post' action='/app/classes/edit/{class_id}' class='class-edit-form'><input name='name' required class='field' value='{escape(str(row["name"] or ""),quote=True)}' placeholder='Class name'><select name='level' class='field'><option value=''>Select level</option>{''.join("<option value='"+v+"' "+("selected" if str(row["level"] or "")==v else "")+">"+v+"</option>" for v in ["Pre-Primary","Lower Primary","Upper Primary","Junior Secondary","Senior Secondary","College","Other"])}></select><input name='stream' class='field' value='{escape(str(row["stream"] or ""),quote=True)}' placeholder='Stream'><button class='btn'>Save Changes</button><a class='btn secondary' href='/app/classes'>Cancel</a></form></div></div><style>.class-edit-scroll{{width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch;touch-action:pan-x pan-y;padding-bottom:8px}}.class-edit-form{{display:grid;grid-template-columns:260px 220px 180px auto auto;gap:10px;width:max-content;min-width:100%}}.field{{padding:11px;border:1px solid #dbe2ea;border-radius:9px}}.btn{{padding:11px 16px;border:0;border-radius:9px;background:#111827;color:white;font-weight:800;text-decoration:none;cursor:pointer;white-space:nowrap}}.secondary{{background:#64748b}}</style></div>"""
+    body=f"""<div class='page'><h1>Edit Class / Stream</h1><div class='card section'><div class='marksheet-scroll class-edit-scroll' tabindex='0'><form method='post' action='/app/classes/edit/{class_id}' class='class-edit-form'><input name='name' required class='field' value='{escape(str(row["name"] or ""),quote=True)}' placeholder='Class name'><select name='level' class='field'><option value=''>Select level</option>{''.join("<option value='"+v+"' "+("selected" if str(row["level"] or "")==v else "")+">"+v+"</option>" for v in ["Pre-Primary","Lower Primary","Upper Primary","Junior Secondary","Senior Secondary","College","Other"])}></select><input name='stream' class='field' value='{escape(str(row["stream"] or ""),quote=True)}' placeholder='Stream'><button class='btn'>Save Changes</button><a class='btn secondary' href='/app/classes'>Cancel</a></form></div></div><style>.class-edit-scroll{{width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch;touch-action:pan-x pan-y;padding-bottom:8px}}.class-edit-form{{display:grid;grid-template-columns:260px 220px 180px auto auto;gap:10px;width:max-content;min-width:100%}}.field{{padding:11px;border:1px solid #dbe2ea;border-radius:9px}}.btn{{padding:11px 16px;border:0;border-radius:9px;background:#111827;color:white;font-weight:800;text-decoration:none;cursor:pointer;white-space:nowrap}}.secondary{{background:#64748b}}/* School Overview hierarchy: operational, finance, and communication rows. */
+.admin-registrar-overview .dashboard-overview-layout{{display:grid;gap:14px;min-width:0}}
+.admin-registrar-overview .dashboard-overview-row{{display:grid;gap:14px;min-width:0;align-items:stretch}}
+.admin-registrar-overview .overview-row-attendance,.admin-registrar-overview .overview-row-finance{{grid-template-columns:minmax(0,2fr) minmax(260px,1fr)}}
+.admin-registrar-overview .overview-row-communications{{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.admin-registrar-overview .dashboard-overview-row>.dashboard-widget,.admin-registrar-overview .dashboard-overview-row>.admin-overview-recent{{height:100%;min-width:0;margin:0}}
+.admin-registrar-overview .overview-row-attendance .attendance-widget{{min-height:220px}}
+.admin-registrar-overview .overview-row-attendance .calendar-widget{{min-height:220px}}
+.admin-registrar-overview .overview-row-finance .finance-widget{{min-height:205px}}
+.admin-registrar-overview .overview-row-finance .performance-mini{{min-height:205px}}
+.admin-registrar-overview .overview-row-communications .notice-widget,.admin-registrar-overview .overview-row-communications .admin-overview-recent{{min-height:190px}}
+.admin-registrar-overview .overview-row-communications .admin-overview-recent{{padding:15px}}
+.admin-registrar-overview .overview-row-communications .recent-activity-list{{grid-template-columns:1fr;gap:4px}}
+.admin-registrar-overview .admin-overview-top{{margin-top:14px}}
+.admin-registrar-overview .admin-overview-health{{margin-top:14px}}
+@media(max-width:850px){{
+ .admin-registrar-overview .dashboard-overview-row{{grid-template-columns:repeat(2,minmax(0,1fr))}}
+ .admin-registrar-overview .overview-row-attendance,.admin-registrar-overview .overview-row-finance{{grid-template-columns:minmax(0,1.5fr) minmax(220px,1fr)}}
+}}
+@media(max-width:650px){{
+ .admin-registrar-overview .dashboard-overview-layout,.admin-registrar-overview .dashboard-overview-row{{gap:10px}}
+ .admin-registrar-overview .dashboard-overview-row{{grid-template-columns:1fr}}
+ .admin-registrar-overview .overview-row-attendance .attendance-widget,.admin-registrar-overview .overview-row-attendance .calendar-widget,.admin-registrar-overview .overview-row-finance .finance-widget,.admin-registrar-overview .overview-row-finance .performance-mini{{min-height:0}}
+ .admin-registrar-overview .overview-row-communications .notice-widget,.admin-registrar-overview .overview-row-communications .admin-overview-recent{{min-height:0}}
+}}
+</style></div>"""
     return _school_page(request,"Edit Class / Stream",body)
 
 @router.post("/app/classes/edit/{class_id}")
