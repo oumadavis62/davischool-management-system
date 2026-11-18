@@ -3382,7 +3382,7 @@ def _staff_manager_styles():
    zero flex basis so it receives all remaining horizontal space exactly once.
    Do not subtract the sidebar width from both flex-basis and margin-left. */
 /* Keep the Staff List workspace at the full width remaining beside the fixed sidebar. */
-.main.staff-workspace{display:block!important;flex:1 1 auto!important;width:calc(100% - 250px)!important;min-width:0!important;max-width:none!important;margin-left:250px!important;box-sizing:border-box!important}
+.main.staff-workspace{display:block!important;flex:1 1 0!important;width:auto!important;min-width:0!important;max-width:none!important;margin-left:250px!important;align-self:stretch!important;box-sizing:border-box!important}
 .main.staff-workspace>.staff-manager-page{display:block!important;flex:0 0 100%!important;width:100%!important;max-width:none!important;min-width:0!important;margin:0!important;box-sizing:border-box!important}
 .main.staff-workspace>.staff-manager-page.page{padding-left:28px!important;padding-right:28px!important;max-width:none!important}
 .main.staff-workspace .staff-register-card{display:block!important;float:none!important;flex:none!important;width:100%!important;max-width:none!important;min-width:0!important;box-sizing:border-box!important}
@@ -3393,8 +3393,8 @@ def _staff_manager_styles():
 .staff-manager-page>.staff-register-card{display:block!important;width:100%!important;max-width:none!important;min-width:0!important}
 .staff-manager-page .staff-add-panel{flex:0 0 100%!important;width:100%!important;max-width:none!important;min-width:0!important;box-sizing:border-box!important}
 .staff-manager-page .staff-table-scroll{display:block!important;width:100%!important;max-width:100%!important;min-width:0!important;overflow-x:auto!important;-webkit-overflow-scrolling:touch!important}
-@media(max-width:900px){.main.staff-workspace{flex:1 1 auto!important;width:calc(100% - 72px)!important;margin-left:72px!important}}
-@media(max-width:600px){.main.staff-workspace{flex:1 1 100%!important;width:100%!important;max-width:100%!important;margin-left:0!important}.main.staff-workspace>.staff-manager-page{width:100%!important;padding-left:14px!important;padding-right:14px!important}.staff-manager-page{padding-left:14px!important;padding-right:14px!important}}
+@media(max-width:900px){.main.staff-workspace{flex:1 1 0!important;width:auto!important;margin-left:72px!important}}
+@media(max-width:600px){.main.staff-workspace{flex:1 1 0!important;width:auto!important;max-width:100%!important;margin-left:0!important}.main.staff-workspace>.staff-manager-page{width:100%!important;padding-left:14px!important;padding-right:14px!important}.staff-manager-page{padding-left:14px!important;padding-right:14px!important}}
 </style>"""
 
 @router.get("/app/staff", response_class=HTMLResponse)
