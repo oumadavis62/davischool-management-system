@@ -8321,6 +8321,29 @@ def app_home(request: Request):
     min-height:190px;padding:13px
   }}
 }}
+/* Match Fee Collections to the standard sage-and-white tile theme. */
+.admin-registrar-overview .dashboard-overview-layout .finance-widget{{
+  background:linear-gradient(155deg,#fff 0%,#f5f9f3 100%);
+  border-color:#dce8dc;color:inherit
+}}
+.admin-registrar-overview .dashboard-overview-layout .finance-widget .dashboard-widget-heading,
+.admin-registrar-overview .dashboard-overview-layout .finance-widget .dashboard-widget-heading h2,
+.admin-registrar-overview .dashboard-overview-layout .finance-widget .dashboard-widget-heading p{{
+  color:inherit
+}}
+/* Keep the Academic Performance heading aligned at the top like other tiles. */
+.admin-registrar-overview .dashboard-overview-layout .performance-mini{{
+  align-items:stretch;justify-content:flex-start;text-align:left
+}}
+.admin-registrar-overview .dashboard-overview-layout .performance-mini .dashboard-widget-heading{{
+  width:100%;align-self:stretch;flex:0 0 auto;text-align:left
+}}
+.admin-registrar-overview .dashboard-overview-layout .performance-mini .performance-ring{{
+  flex:0 0 auto;margin:8px auto 5px
+}}
+.admin-registrar-overview .dashboard-overview-layout .performance-mini>small{{
+  align-self:center;text-align:center
+}}
 </style></div>"""
 
     con.close()
