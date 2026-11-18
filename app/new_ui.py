@@ -3250,6 +3250,11 @@ def student_delete(request: Request, student_id: int):
         if not st:
             return HTMLResponse("Student not found.", 404)
 
+        # Keep the admission/enrolment register synchronized with Student Register.
+        # The linked application and class-history rows are removed in this same
+        # transaction if this learner is eligible for permanent deletion.
+        _ensure_admissions_schema(cur)
+
         # Graduates are permanent alumni records; never delete them through this action.
         is_graduated = str(st["status"] or "").strip().lower() == "graduated"
         if cur.execute(
@@ -3374,6 +3379,15 @@ def student_delete(request: Request, student_id: int):
                         (remaining["id"] if remaining else None, parent_user_id, sid, student_id)
                     )
 
+        # Remove only admission records explicitly linked to this student.
+        # Pending/accepted applications for other learners are never affected.
+        cur.execute(
+            "DELETE FROM admission_applications WHERE school_id=? AND enrolled_student_id=?",
+            (sid, student_id)
+        )
+
+        # student_class_history is already part of cleanup_tables above, so the
+        # initial enrolment and all later class/promotion history disappear too.
         cur.execute("DELETE FROM students WHERE id=? AND school_id=?", (student_id, sid))
         if cur.rowcount != 1:
             raise RuntimeError("The learner record was not removed.")
