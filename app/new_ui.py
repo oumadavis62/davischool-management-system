@@ -20917,7 +20917,7 @@ def _ensure_admissions_schema(cur):
         WHERE application_ref IS NULL OR trim(application_ref)=''""").fetchall()
     for legacy in legacy_refs:
         date_text = str(legacy["application_date"] or legacy["created_at"] or "").strip()
-        year_match = re.match(r"^(\\d{4})", date_text)
+        year_match = re.match(r"^([0-9]{4})", date_text)
         ref_year = year_match.group(1) if year_match else str(datetime.now(ZoneInfo("Africa/Nairobi")).year)
         cur.execute("UPDATE admission_applications SET application_ref=? WHERE id=? AND (application_ref IS NULL OR trim(application_ref)='')",
             (f"APP-{ref_year}-{int(legacy['id']):06d}", int(legacy["id"])))
