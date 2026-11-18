@@ -924,13 +924,57 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
             for x in class_records
         )
         class_limit_form = f"""<section class='tt-section'><div class='tt-section-title'><div><span class='tt-kicker'>08 · CLASS WORKLOAD LIMITS</span><h3>Allocation Limits</h3><p>Set a ceiling independently for each class or stream. Double and triple lessons count by their actual period duration toward the daily period ceiling.</p></div></div><div class='tt-split'><form method='post' data-native-post='true' action='/app/timetable/setup/class-limits' class='tt-form compact'>{hidden}<label class='wide'>Class / stream<select name='class_id' required><option value=''>Select class or stream</option>{class_limit_class_opts}</select></label><label>Class initials<input name='class_initials' maxlength='8' placeholder='e.g. 7G'></label><label>Maximum lessons per week<input name='max_lessons_per_week' type='number' min='1' max='100' placeholder='No limit'></label><label>Maximum periods per day<input name='max_periods_per_day' type='number' min='1' max='30' placeholder='No limit'></label><label class='wide'>Notes<input name='notes' maxlength='180' placeholder='Optional workload guidance'></label><button class='tt-btn'>Save class workload limits</button></form><div class='tt-table'><style>.tt-actions-cell{{text-align:center}}.tt-actions{{display:flex;justify-content:center;align-items:center;gap:8px;flex-wrap:wrap}}.tt-actions form{{margin:0}}</style><table><tr><th>Class / stream</th><th>Initials</th><th>Max lessons / week</th><th>Max periods / day</th><th style='text-align:center'>Actions</th></tr>{class_limit_rows}</table></div></div></section>"""
+        # Calculate each teacher's configured weekly workload directly from the
+        # Subject Requirements page. Session durations are counted as periods,
+        # and co-teachers receive credit for the sessions they participate in.
+        # Linked classes share one session record, so they do not inflate the
+        # teacher's workload with duplicate copies of the same lesson.
+        teacher_workloads = {}
+        for req in requirements:
+            lead_teacher_id = int(req["teacher_id"])
+            subject_label = str(req["subject_name"])
+            patterns = cur.execute(
+                """SELECT duration_periods,co_teacher_ids_json
+                   FROM ds_timetable_requirement_patterns
+                   WHERE school_id=? AND profile_id=? AND requirement_id=?
+                   ORDER BY session_no""",
+                (school_id, pid, int(req["id"])),
+            ).fetchall()
+            if patterns:
+                session_loads = []
+                for pattern in patterns:
+                    duration = max(1, int(pattern["duration_periods"] or 1))
+                    try:
+                        co_ids = json.loads(pattern["co_teacher_ids_json"] or "[]")
+                    except (TypeError, ValueError):
+                        co_ids = []
+                    participants = [lead_teacher_id]
+                    for value in co_ids:
+                        try:
+                            teacher_id = int(value)
+                        except (TypeError, ValueError):
+                            continue
+                        if teacher_id > 0 and teacher_id not in participants:
+                            participants.append(teacher_id)
+                    session_loads.append((duration, participants))
+            else:
+                # Older requirements without a session planner still carry
+                # their full weekly allocation in lessons_per_week.
+                duration = max(0, int(req["lessons_per_week"] or 0)) * max(1, int(req["duration_periods"] or 1))
+                session_loads = [(duration, [lead_teacher_id])] if duration else []
+            for duration, participants in session_loads:
+                for teacher_id in participants:
+                    item = teacher_workloads.setdefault(teacher_id, {"total": 0, "subjects": {}})
+                    item["total"] += duration
+                    item["subjects"][subject_label] = item["subjects"].get(subject_label, 0) + duration
+
         teacher_color_cards = "".join(
-            f"<article class='tt-teacher-label-card' data-teacher-label-card data-search-name='{esc(t['name']).lower()}'><div class='tt-teacher-label-person'><span class='tt-teacher-avatar' style='--teacher-label-color:{esc(t['teacher_color'] or '#2563EB')}'>{esc((t['teacher_initials'] or (str(t['name']).strip()[:1])).upper())}</span><div><b>{esc(t['name'])}</b><small>Timetable appearance</small></div></div><form method='post' data-native-post='true' action='/app/timetable/setup/teacher-color' class='tt-teacher-color-form'>{hidden}{teacher_color_tab_field}<input type='hidden' name='teacher_id' value='{int(t['id'])}'><label class='tt-teacher-initials-field'>Label initials<input name='teacher_initials' value='{esc(t['teacher_initials'] or '')}' maxlength='4' pattern='[A-Za-z]{1,4}' placeholder='e.g. JM' required></label><label class='tt-teacher-colour-field'>Colour<input aria-label='Colour for {esc(t['name'])}' type='color' name='teacher_color' value='{esc(t['teacher_color'] or '#2563EB')}' required></label><span class='tt-teacher-color-code'>{esc(t['teacher_color'] or '#2563EB')}</span><button class='tt-btn'>Save</button></form></article>"
+            f"<article class='tt-teacher-label-card' data-teacher-label-card data-search-name='{esc(t['name']).lower()}'><div class='tt-teacher-label-person'><span class='tt-teacher-avatar' style='--teacher-label-color:{esc(t['teacher_color'] or '#2563EB')}'>{esc((t['teacher_initials'] or (str(t['name']).strip()[:1])).upper())}</span><div><b>{esc(t['name'])}</b><small>Timetable appearance</small></div></div><div class='tt-teacher-workload'><strong>{teacher_workloads.get(int(t['id']), {}).get('total', 0)} <span>periods / week</span></strong><small>{' · '.join(esc(subject + ' ' + str(load)) for subject, load in sorted(teacher_workloads.get(int(t['id']), {}).get('subjects', {}).items(), key=lambda item: item[0].casefold())) or 'No subject requirements configured'}</small></div><form method='post' data-native-post='true' action='/app/timetable/setup/teacher-color' class='tt-teacher-color-form'>{hidden}{teacher_color_tab_field}<input type='hidden' name='teacher_id' value='{int(t['id'])}'><label class='tt-teacher-initials-field'>Label initials<input name='teacher_initials' value='{esc(t['teacher_initials'] or '')}' maxlength='4' pattern='[A-Za-z]{1,4}' placeholder='e.g. JM' required></label><label class='tt-teacher-colour-field'>Colour<input aria-label='Colour for {esc(t['name'])}' type='color' name='teacher_color' value='{esc(t['teacher_color'] or '#2563EB')}' required></label><span class='tt-teacher-color-code'>{esc(t['teacher_color'] or '#2563EB')}</span><button class='tt-btn'>Save</button></form></article>"
             for t in teachers
         ) or "<div class='tt-teacher-label-empty'>No teachers are registered yet.</div>"
         teacher_colour_section = f"""
         <section class='tt-section tt-teacher-colours'>
-          <div class='tt-section-title'><div><span class='tt-kicker'>09 · TIMETABLE APPEARANCE</span><h3>Teacher Labels</h3><p>Choose a short label and colour for each teacher. Labels appear in the bottom-right of their lesson cells.</p></div></div>
+          <div class='tt-section-title'><div><span class='tt-kicker'>09 · TIMETABLE APPEARANCE</span><h3>Teacher Labels</h3><p>Choose a short label and colour for each teacher. Labels appear in the bottom-right of their lesson cells. Weekly workload updates automatically from Subject Requirements.</p></div></div>
           <div class='tt-teacher-label-toolbar'><div><b>{len(teachers)} teachers</b><small>Personalise timetable labels</small></div><input type='search' class='tt-teacher-label-search' placeholder='Search teachers…' aria-label='Search teachers' oninput="this.closest('.tt-teacher-colours').querySelectorAll('[data-teacher-label-card]').forEach(card=>card.hidden=!card.dataset.searchName.includes(this.value.trim().toLowerCase()))"></div>
           <div class='tt-teacher-label-grid'>{teacher_color_cards}</div>
           <style>
@@ -939,6 +983,9 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
             .tt-teacher-label-search{{width:min(100%,260px);height:37px;padding:0 12px;border:1px solid #d6e5d8;border-radius:9px;background:#fff;font-size:11px;outline:none}}.tt-teacher-label-search:focus{{border-color:#57936a;box-shadow:0 0 0 3px #e8f3e9}}
             .tt-teacher-label-grid{{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}}
             .tt-teacher-label-card{{min-width:0;padding:13px;border:1px solid #e0eae1;border-radius:13px;background:#fff;box-shadow:0 2px 8px rgba(30,75,43,.035)}}
+            .tt-teacher-workload{{display:grid;gap:4px;margin:0 0 10px;padding:9px 11px;border-radius:9px;background:linear-gradient(110deg,#edf6ee,#f8fbf8);border:1px solid #e1ece2}}
+            .tt-teacher-workload>strong{{font-size:18px;line-height:1.2;color:#245d3b}}.tt-teacher-workload>strong span{{font-size:10px;font-weight:700;color:#6c8171}}
+            .tt-teacher-workload>small{{font-size:9px;line-height:1.5;color:#718276}}
             .tt-teacher-label-person{{display:flex;align-items:center;gap:9px;margin-bottom:12px}}.tt-teacher-avatar{{display:grid;place-items:center;flex:0 0 34px;width:34px;height:34px;border-radius:10px;background:color-mix(in srgb,var(--teacher-label-color) 14%,white);border:1px solid color-mix(in srgb,var(--teacher-label-color) 35%,white);color:var(--teacher-label-color);font-size:11px;font-weight:900}}
             .tt-teacher-label-person>div{{display:grid;gap:3px;min-width:0}}.tt-teacher-label-person b{{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#294b35;font-size:12px}}.tt-teacher-label-person small{{color:#829087;font-size:9px}}
             .tt-teacher-colours .tt-teacher-color-form{{display:flex;align-items:end;gap:9px;flex-wrap:wrap;padding-top:10px;border-top:1px solid #edf2ed}}
