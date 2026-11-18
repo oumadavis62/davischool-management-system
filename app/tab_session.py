@@ -279,7 +279,7 @@ class DaviSchoolTabSessionMiddleware:
         "/portal", "/teacher", "/student", "/parent", "/dashboard"
       ];
       var excluded = /^(ds_tab|tab|view|section|profile|mode|layout|panel|return_to|next|redirect|ticket|preview|print|download|export|page_size|per_page)$/i;
-      var filterNames = /^(q|search|query|keyword|status|gender|class|class_id|stream|stream_id|subject|subject_id|teacher|teacher_id|student|student_id|exam|exam_id|term|year|academic_year|from|to|from_date|to_date|start_date|end_date|date|category|type|grade|allocation_id|page|sort|sort_by|direction)$/i;
+      var filterNames = /^(q|search|query|keyword|status|gender|class|class_id|stream|stream_id|subject|subject_id|teacher|teacher_id|student|student_id|exam|exam_id|term|year|academic_year|from|to|from_date|to_date|start_date|end_date|date|category|type|grade|allocation_id|sort|sort_by|direction)$/i;
       function cleanPath(path) {
         return String(path || "/").replace(/\/+$/, "") || "/";
       }
