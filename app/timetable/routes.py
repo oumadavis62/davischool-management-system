@@ -993,7 +993,7 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
             .tt-teacher-label-person>div{{display:grid;gap:3px;min-width:0}}.tt-teacher-label-person b{{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#294b35;font-size:12px}}.tt-teacher-label-person small{{color:#829087;font-size:9px}}
             .tt-teacher-colours .tt-teacher-color-form{{display:flex;align-items:end;gap:9px;flex-wrap:wrap;padding-top:10px;border-top:1px solid #edf2ed}}
             .tt-teacher-initials-field,.tt-teacher-colour-field{{display:grid;gap:4px;font-size:9px;font-weight:800;color:#55705d}}
-            .tt-teacher-initials-field input{{width:66px;height:34px;box-sizing:border-box;border:1px solid #d5e4d7;border-radius:8px;padding:6px;text-transform:uppercase;font-weight:900;letter-spacing:.08em}}
+            .tt-teacher-initials-field input{{width:66px;min-width:66px;max-width:100%;field-sizing:content;height:34px;box-sizing:border-box;border:1px solid #d5e4d7;border-radius:8px;padding:6px;text-transform:uppercase;font-weight:900;letter-spacing:.08em}}
             .tt-teacher-colours input[type=color]{{width:43px;height:34px;padding:2px;border:1px solid #d5e4d7;border-radius:8px;background:#fff;cursor:pointer}}
             .tt-teacher-color-code{{align-self:center;font:700 10px ui-monospace,monospace;color:#607669;min-width:58px}}
             .tt-teacher-colours .tt-btn{{min-height:33px;padding:7px 12px;font-size:10px}}
