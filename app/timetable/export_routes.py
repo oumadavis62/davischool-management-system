@@ -315,7 +315,7 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                 self.canv.setFont("Helvetica", 7)
                 self.canv.setFillColor(colors.HexColor("#536b58"))
                 self.canv.drawString(self.leftMargin, 18, self.footer_left)
-                self.canv.drawRightString(self.pagesize[0] - self.rightMargin, 18, self.footer_right)
+                self.canv.drawRightString(self.pagesize[0] - self.rightMargin - 8, 18, self.footer_right)
                 self.canv.restoreState()
                 super().afterPage()
 
@@ -351,7 +351,7 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
             cover_center.append(Paragraph(details, details_style))
         if cover_title:
             cover_center.append(Paragraph("<u><b>" + pdf_text(cover_title) + "</b></u>", title_style))
-        cover = Table([[logo_cell, cover_center, logo_cell]], colWidths=[60, doc.width-120, 60])
+        cover = Table([[logo_cell, cover_center, logo_cell]], colWidths=[76, doc.width-152, 76])
         cover.setStyle(TableStyle([("ALIGN",(0,0),(-1,-1),"CENTER"),("VALIGN",(0,0),(-1,-1),"MIDDLE"),
                                    ("LEFTPADDING",(0,0),(-1,-1),2),("RIGHTPADDING",(0,0),(-1,-1),2)]))
         story = [cover]
@@ -831,7 +831,7 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                 table.wrap(doc.width, doc.height)
                 natural_heights = list(table._rowHeights)
                 header_height = natural_heights[0] if natural_heights else 22
-                target_grid_height = max(header_height, doc.height - 82 - 8 * (len(day_rows) + 1))
+                target_grid_height = max(header_height, doc.height - 82)
                 equal_data_row_height = max(74 if view_type == "room" else 24, (target_grid_height - header_height) / max(1, len(day_rows)))
                 table = Table(
                     data,
