@@ -122,6 +122,9 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
             "profile_id": profile_id, "view_type": view_type,
             "class_id": class_id, "teacher_id": teacher_id, "room_id": room_id,
             "remedial_display": remedial_display, "inline": 1, "print_sheet": 1,
+            # Give every print request a fresh URL so a previously opened teacher PDF
+            # cannot be reused by a browser or intermediary cache after regeneration.
+            "_print_refresh": datetime.now().timestamp(),
         })
         return RedirectResponse("/app/timetable/export/pdf?" + pdf_query, status_code=303, headers={"Cache-Control": "no-store, no-cache, must-revalidate, max-age=0", "Pragma": "no-cache", "Expires": "0"})
 
