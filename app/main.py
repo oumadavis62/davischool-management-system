@@ -1099,30 +1099,82 @@ label{display:block;margin:18px 0 8px;color:#294c39;font-size:12px;font-weight:8
 (function () {
   try {
     var key = "davischool_tab_id";
-    var field = document.querySelector("form input[name='ds_tab']");
+    var form = document.querySelector("form");
+    var field = form && form.querySelector("input[name='ds_tab']");
     if (!field) return;
     var url = new URL(window.location.href);
     var forceNew = url.searchParams.get("ds_tab_new") === "1";
     var current = sessionStorage.getItem(key) || "";
-    var urlId = url.searchParams.get("ds_tab") || "";
     var valid = /^[A-Za-z0-9_-]{16,64}$/;
     function newTabId() {
       if (window.crypto && crypto.randomUUID) return crypto.randomUUID().replace(/-/g, "");
       return Date.now().toString(36) + Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2);
     }
-    // A fresh browser tab must not adopt a ds_tab copied from another tab's URL.
-    // The server-issued field value is used for forced new tabs; otherwise
-    // create a new identity when this tab has no tab-scoped storage yet.
+
+    // Reuse this tab's identity on refresh, but detect duplicated tabs.
+    // Browsers may clone sessionStorage when a tab is duplicated; without
+    // this handshake both tabs would write to the same signed session cookie.
     var id = forceNew ? field.value : (valid.test(current) ? current : newTabId());
     if (!valid.test(id)) return;
     field.value = id;
     sessionStorage.setItem(key, id);
+    var instanceId = newTabId();
+    var channel = null;
+    var rotating = false;
+
+    if (!forceNew && window.BroadcastChannel) {
+      try {
+        channel = new BroadcastChannel("davischool-tab-session:" + id);
+        channel.onmessage = function (event) {
+          var data = event && event.data || {};
+          if (!data || data.instance === instanceId) return;
+          if (data.type === "HELLO") {
+            channel.postMessage({type:"CLAIM", instance:instanceId});
+            return;
+          }
+          // Deterministically let the lexicographically smaller page keep
+          // the existing ID; the other page receives a fresh server cookie.
+          if (data.type === "CLAIM" && String(data.instance) < String(instanceId) && !rotating) {
+            rotating = true;
+            var rotateUrl = new URL(window.location.href);
+            rotateUrl.searchParams.delete("ds_tab");
+            rotateUrl.searchParams.set("ds_tab_source", id);
+            rotateUrl.searchParams.set("ds_tab_new", "1");
+            channel.close();
+            window.location.replace(rotateUrl.pathname + rotateUrl.search + rotateUrl.hash);
+          }
+        };
+        channel.postMessage({type:"HELLO", instance:instanceId});
+      } catch (_) { channel = null; }
+    }
+
     url.searchParams.delete("ds_tab_new");
     url.searchParams.delete("ds_tab_source");
     url.searchParams.set("ds_tab", id);
     if (url.search !== window.location.search) {
       window.history.replaceState(null, "", url.pathname + url.search + url.hash);
     }
+
+    // If the duplicate-tab handshake is still resolving, do not let a login
+    // submit race the identity rotation. The user can submit immediately
+    // after the brief startup check.
+    var submitButton = form.querySelector("button[type='submit']");
+    if (submitButton) submitButton.disabled = true;
+    window.setTimeout(function () {
+      if (!rotating && submitButton) submitButton.disabled = false;
+    }, 150);
+    form.addEventListener("submit", function (event) {
+      if (rotating) {
+        event.preventDefault();
+        return;
+      }
+      field.value = id;
+      var action = new URL(form.action, window.location.origin);
+      if (action.origin === window.location.origin) {
+        action.searchParams.set("ds_tab", id);
+        form.action = action.pathname + action.search + action.hash;
+      }
+    }, true);
   } catch (_) {}
 })();
 </script></body></html>""")
