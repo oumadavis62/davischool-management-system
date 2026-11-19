@@ -439,7 +439,7 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                             # within the merged break column, as in the original layout.
                             break_style = ParagraphStyle(
                                 "ClassPrintFullHeightBreak", parent=cell_style,
-                                alignment=TA_CENTER, fontSize=22, leading=24,
+                                alignment=TA_CENTER, fontSize=24, leading=24,
                                 textColor=colors.black,
                             )
                             cells.append(Paragraph("<b>" + break_label + "</b>", break_style))
