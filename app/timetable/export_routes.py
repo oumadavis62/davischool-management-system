@@ -364,9 +364,14 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
             meta_style,
         )
         story.extend([meta_line, Spacer(1,6)])
+        # Measure the actual cover block, then give the individual timetable grid
+        # all remaining printable height above the reserved footer margin.
+        cover_height = cover.wrap(doc.width, doc.height)[1]
+        meta_height = meta_line.wrap(doc.width, doc.height)[1]
+        grid_available_height = max(1, doc.height - cover_height - meta_height - 6)
         layout = build_export_grid(result, view_type)
         timeline = layout["timeline"]
-        individual_row_height = max(24, (doc.height - 82 - 22) / max(1, len(layout["rows"]))) if view_type in ("class", "teacher", "room") else 58
+        individual_row_height = max(24, (grid_available_height - 22) / max(1, len(layout["rows"]))) if view_type in ("class", "teacher", "room") else 58
         first_width = 48
         class_width = 52 if layout["show_class_column"] else 0
         if view_type == "school":
@@ -831,7 +836,7 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                 table.wrap(doc.width, doc.height)
                 natural_heights = list(table._rowHeights)
                 header_height = natural_heights[0] if natural_heights else 22
-                target_grid_height = max(header_height, doc.height - 82)
+                target_grid_height = max(header_height, grid_available_height)
                 equal_data_row_height = max(74 if view_type == "room" else 24, (target_grid_height - header_height) / max(1, len(day_rows)))
                 table = Table(
                     data,
@@ -870,7 +875,7 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
             timetable_flowables = story[timetable_story_start:]
             del story[timetable_story_start:]
             story.append(KeepInFrame(
-                doc.width, max(1, doc.height - 82), timetable_flowables,
+                doc.width, grid_available_height, timetable_flowables,
                 # Room subject/class font sizes are explicit export settings.
                 # Do not scale the complete room sheet down after applying them.
                 mode=("overflow" if view_type == "room" else "shrink"),
