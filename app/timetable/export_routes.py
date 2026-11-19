@@ -435,16 +435,11 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                         if row_index == 1:
                             break_item = timeline[timeline_cursor][2]
                             break_label = "<br/>".join(pdf_text(ch) for ch in str(break_item["label"]))
-                            # The break cell is merged through every timetable row.
-                            # Distribute its stacked label across that full merged height
-                            # instead of leaving a short paragraph vertically centred.
-                            break_line_count = max(1, len(str(break_item["label"])))
-                            break_row_height = max(74 if view_type == "room" else 24, individual_row_height)
-                            break_span_height = break_row_height * max(1, len(day_rows))
-                            break_leading = max(10, break_span_height / break_line_count)
+                            # Keep the stacked break label compact so it sits centred
+                            # within the merged break column, as in the original layout.
                             break_style = ParagraphStyle(
                                 "ClassPrintFullHeightBreak", parent=cell_style,
-                                alignment=TA_CENTER, fontSize=22, leading=break_leading,
+                                alignment=TA_CENTER, fontSize=22, leading=11,
                                 textColor=colors.black,
                             )
                             cells.append(Paragraph("<b>" + break_label + "</b>", break_style))
