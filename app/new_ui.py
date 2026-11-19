@@ -5379,7 +5379,7 @@ def class_marksheets_csv(
     header_top = ["ADM NO.", "NAME"]
     header_bottom = ["", ""]
     if combined_mode:
-        header_top.append("STREAM")
+        header_top.append("STRM.....")
         header_bottom.append("")
     for subject in subjects:
         label = _subject_marksheet_label(subject)
@@ -5393,7 +5393,9 @@ def class_marksheets_csv(
 
     for student, total, total_points, count, values in computed:
         row = [str(student["admission_no"] or ""), str(student["name"] or "")]
-        if combined_mode: row.append(str(student["stream"] or ""))
+        if combined_mode:
+            raw_stream = str(student["stream"] or "").strip()
+            row.append(raw_stream[:1].upper() if raw_stream else "")
         for subject in subjects:
             value = values[int(subject["id"])]
             metrics = subject_metric_map[int(subject["id"])]
@@ -5922,7 +5924,8 @@ def class_marksheets(request: Request, exam_id: str = "", exam_ids: str = "", cl
             overall_grade=_default_grade_points(average)[0] if count else "—"
         average=(total/count) if count else 0
         student_stream = str(student["stream"] or "").strip() or class_stream_by_id.get(int(student["class_id"] or 0), "")
-        stream_cell = "<td class='stream-cell'><b>%s</b></td>" % escape(student_stream) if combined_mode else ""
+        stream_initial = student_stream[:1].upper() if student_stream else ""
+        stream_cell = "<td class='stream-cell'><b>%s</b></td>" % escape(stream_initial) if combined_mode else ""
         overall_cells = "".join({
             "mks": "<td class='overall-marks-col'><b>%.1f</b></td>" % total,
             "pts": "<td class='overall-points-col'><b>%.1f</b></td>" % total_points,
@@ -5973,7 +5976,7 @@ def class_marksheets(request: Request, exam_id: str = "", exam_ids: str = "", cl
     else:
         class_title = "Select a class"
     exam_name = escape(" + ".join(str(e["name"]) for e in exams if int(e["id"]) in selected_exam_ids)) if selected_exam_ids else "Select examinations"
-    stream_col_html = "<th rowspan='2'>STREAM</th>" if combined_mode else ""
+    stream_col_html = "<th rowspan='2'>STRM.....</th>" if combined_mode else ""
     stream_colgroup_html = "<col class='stream-col'>" if combined_mode else ""
     colspan = (3 if combined_mode else 2) + sum(len(subject_metric_map.get(int(s["id"]), ["mks", "grade", "pts"])) for s in subjects) + len(overall_metric_list)
     selected_class_param = quote(str(class_id), safe='') if class_id else quote(str(cid), safe='')
