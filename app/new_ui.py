@@ -5976,7 +5976,7 @@ def class_marksheets(request: Request, exam_id: str = "", exam_ids: str = "", cl
     else:
         class_title = "Select a class"
     exam_name = escape(" + ".join(str(e["name"]) for e in exams if int(e["id"]) in selected_exam_ids)) if selected_exam_ids else "Select examinations"
-    stream_col_html = "<th rowspan='2' class='stream-head'>STRM</th>" if combined_mode else ""
+    stream_col_html = "<th rowspan='2' class='stream-head' style='text-align:center!important;vertical-align:middle!important'>STRM</th>" if combined_mode else ""
     stream_colgroup_html = "<col class='stream-col'>" if combined_mode else ""
     colspan = (3 if combined_mode else 2) + sum(len(subject_metric_map.get(int(s["id"]), ["mks", "grade", "pts"])) for s in subjects) + len(overall_metric_list)
     selected_class_param = quote(str(class_id), safe='') if class_id else quote(str(cid), safe='')
