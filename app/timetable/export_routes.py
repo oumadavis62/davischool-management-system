@@ -482,7 +482,7 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                             break_label = "<br/>".join(pdf_text(ch) for ch in str(b["label"]))
                             break_style = ParagraphStyle(
                                 "ExportBreak", parent=cell_style, alignment=TA_CENTER,
-                                fontSize=10, leading=11,
+                                fontSize=24, leading=24,
                                 textColor=colors.black if print_sheet else colors.HexColor("#75551d"),
                             )
                             cells.append(Paragraph("<b>" + break_label + "</b>", break_style))
