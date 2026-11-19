@@ -444,7 +444,7 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                             break_leading = max(10, break_span_height / break_line_count)
                             break_style = ParagraphStyle(
                                 "ClassPrintFullHeightBreak", parent=cell_style,
-                                alignment=TA_CENTER, fontSize=10, leading=break_leading,
+                                alignment=TA_CENTER, fontSize=14, leading=break_leading,
                                 textColor=colors.black,
                             )
                             cells.append(Paragraph("<b>" + break_label + "</b>", break_style))
