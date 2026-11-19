@@ -878,7 +878,7 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                 doc.width, grid_available_height, timetable_flowables,
                 # Room subject/class font sizes are explicit export settings.
                 # Do not scale the complete room sheet down after applying them.
-                mode=("overflow" if view_type == "room" else "shrink"),
+                mode="overflow",
                 hAlign="LEFT", vAlign="TOP",
             ))
 
