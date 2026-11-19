@@ -831,7 +831,7 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                 table.wrap(doc.width, doc.height)
                 natural_heights = list(table._rowHeights)
                 header_height = natural_heights[0] if natural_heights else 22
-                target_grid_height = max(header_height, doc.height - 82)
+                target_grid_height = max(header_height, doc.height - 82 - 8 * (len(day_rows) + 1))
                 equal_data_row_height = max(74 if view_type == "room" else 24, (target_grid_height - header_height) / max(1, len(day_rows)))
                 table = Table(
                     data,
