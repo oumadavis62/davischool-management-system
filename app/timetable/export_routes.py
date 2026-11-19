@@ -239,7 +239,10 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
         elif view_type == "room":
             title = escape(str(result["target"]["name"]))
         else:
-            title = escape(str(result["title"]))
+            class_title = str(result["title"]).strip()
+            if view_type == "class" and class_title.upper().endswith(" TIMETABLE"):
+                class_title = class_title[:-len(" TIMETABLE")].rstrip()
+            title = escape(class_title)
         logo_src=school_logo_data(school)
         logo_img=("<img style='width:60px;height:60px;object-fit:contain' src='" + escape(logo_src, quote=True) + "' alt='School logo'>") if logo_src else ""
         school_details_html=" · ".join(escape(label + ": " + value) for label,value in school_details(school))
@@ -343,7 +346,10 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                 logo_cell = ReportLabImage(BytesIO(base64.b64decode(encoded)), width=52, height=52, kind="proportional")
             except Exception:
                 logo_cell = ""
-        cover_title = "MASTER TIMETABLE" if view_type == "school" else ("TEACHER " + str(result["target"]["name"]) if view_type == "teacher" else (str(result["target"]["name"]).upper() if view_type == "room" else str(result["title"]).upper()))
+        class_title = str(result["title"]).strip()
+        if view_type == "class" and class_title.upper().endswith(" TIMETABLE"):
+            class_title = class_title[:-len(" TIMETABLE")].rstrip()
+        cover_title = "MASTER TIMETABLE" if view_type == "school" else ("TEACHER " + str(result["target"]["name"]) if view_type == "teacher" else (str(result["target"]["name"]).upper() if view_type == "room" else class_title.upper()))
         details = "   |   ".join(pdf_text(label + ": " + value) for label,value in school_details(school))
         cover_center = [Paragraph("<u><b>" + school_name + "</b></u>", school_style)]
         if details:
