@@ -123,7 +123,7 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
             "class_id": class_id, "teacher_id": teacher_id, "room_id": room_id,
             "remedial_display": remedial_display, "inline": 1, "print_sheet": 1,
         })
-        return RedirectResponse("/app/timetable/export/pdf?" + pdf_query, status_code=303)
+        return RedirectResponse("/app/timetable/export/pdf?" + pdf_query, status_code=303, headers={"Cache-Control": "no-store, no-cache, must-revalidate, max-age=0", "Pragma": "no-cache", "Expires": "0"})
 
         school, result, error = load_view(request, profile_id, view_type, class_id, teacher_id, room_id)
         if error:
@@ -958,7 +958,7 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
         doc.build(story)
         buffer.seek(0)
         filename = filename_prefix(school,result) + ".pdf"
-        return StreamingResponse(buffer, media_type="application/pdf", headers={"Content-Disposition": ("inline" if inline else "attachment") + "; filename=" + filename})
+        return StreamingResponse(buffer, media_type="application/pdf", headers={"Content-Disposition": ("inline" if inline else "attachment") + "; filename=" + filename, "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0", "Pragma": "no-cache", "Expires": "0"})
 
     @app.get("/app/timetable/export/xlsx")
     def timetable_export_xlsx(
@@ -1209,4 +1209,4 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
         workbook.save(buffer)
         buffer.seek(0)
         filename = filename_prefix(school,result) + ".xlsx"
-        return StreamingResponse(buffer, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", headers={"Content-Disposition": "attachment; filename=" + filename})
+        return StreamingResponse(buffer, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", headers={"Content-Disposition": "attachment; filename=" + filename, "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0", "Pragma": "no-cache", "Expires": "0"})
