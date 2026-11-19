@@ -651,19 +651,12 @@ class DaviSchoolTabSessionMiddleware:
             await send({"type": "http.response.body", "body": retry_html})
             return
 
-        # If an internal navigation arrives without ds_tab and without a usable
-        # Referer, recover only when this browser request carries exactly one
-        # authenticated DaviSchool tab cookie. This avoids falling back to the
-        # now-retired generic session cookie after a tab has been upgraded.
+        # Read the browser's shared cookie header only to select the cookie
+        # already named by this request's tab ID; never infer a tab from it.
         cookie_header = next(
             (value.decode("latin-1", "ignore") for name, value in scope.get("headers", []) if name.lower() == b"cookie"),
             "",
         )
-        early_cookie_pairs = [
-            (part.strip().split("=", 1)[0], part.strip().split("=", 1)[1])
-            for part in cookie_header.split(";")
-            if "=" in part
-        ]
 
         def cookie_has_authenticated_session(value):
             if not value:
@@ -676,13 +669,6 @@ class DaviSchoolTabSessionMiddleware:
                 return bool(payload.get("email"))
             except (BadSignature, ValueError, TypeError, UnicodeDecodeError, json.JSONDecodeError):
                 return False
-
-        authenticated_tab_ids = []
-        for name, value in early_cookie_pairs:
-            prefix = "davischool_session_"
-            candidate = name[len(prefix):] if name.startswith(prefix) else ""
-            if _TAB_RE.fullmatch(candidate or "") and cookie_has_authenticated_session(value):
-                authenticated_tab_ids.append(candidate)
 
         # Never infer a request's tab identity from the cookies present in the
         # browser. Cookies are shared by every tab on this origin, so even a
