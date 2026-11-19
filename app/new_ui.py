@@ -5648,6 +5648,16 @@ def class_marksheets(request: Request, exam_id: str = "", exam_ids: str = "", cl
             "SELECT * FROM students WHERE school_id=? AND ("
             "(class_id IN (" + class_marks_placeholders + ") "
             "AND lower(coalesce(status,'active'))='active' "
+            # Once a promotion-cycle snapshot exists, it is the authoritative
+            # roster for that class/year. Do not let a later/current class
+            # assignment pull a new arrival into an earlier examination.
+            "AND (NOT EXISTS (SELECT 1 FROM student_promotion_cohort_snapshots cohort_snapshot "
+            "WHERE cohort_snapshot.school_id=students.school_id "
+            "AND cohort_snapshot.cycle_year=? AND cohort_snapshot.class_id=students.class_id) "
+            "OR EXISTS (SELECT 1 FROM student_promotion_cohort_members cohort_current "
+            "WHERE cohort_current.school_id=students.school_id "
+            "AND cohort_current.cycle_year=? AND cohort_current.class_id=students.class_id "
+            "AND cohort_current.student_id=students.id)) "
             "AND NOT EXISTS (SELECT 1 FROM student_graduations sg "
             "WHERE sg.school_id=students.school_id AND sg.student_id=students.id) "
             "AND NOT EXISTS (SELECT 1 FROM student_class_history incoming "
@@ -5668,7 +5678,7 @@ def class_marksheets(request: Request, exam_id: str = "", exam_ids: str = "", cl
             "AND historical.exam_id=? AND historical.class_id IN (" + class_marks_placeholders + ")))"
         )
         student_params = (
-            [sid] + selected_class_ids + selected_class_ids + [cohort_year] +
+            [sid] + selected_class_ids + [cohort_year, cohort_year] + selected_class_ids + [cohort_year] +
             selected_class_ids + [cohort_year, cohort_year] +
             selected_class_ids + [cohort_year] + [eid] + selected_class_ids
         )
