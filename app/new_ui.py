@@ -7791,7 +7791,7 @@ def app_home(request: Request):
             flip_script = "<script>(function(){\n  var tiles=document.querySelectorAll('.overview-flip-tile');\n  tiles.forEach(function(tile){\n    var moved=false,startX=0,startY=0;\n    tile.addEventListener('touchstart',function(e){\n      if(e.touches&&e.touches[0]){startX=e.touches[0].clientX;startY=e.touches[0].clientY;}\n      moved=false;\n    },{passive:true});\n    tile.addEventListener('touchmove',function(e){\n      if(e.touches&&e.touches[0] && (Math.abs(e.touches[0].clientX-startX)>8 || Math.abs(e.touches[0].clientY-startY)>8)) moved=true;\n    },{passive:true});\n    tile.addEventListener('click',function(e){\n      if(moved || e.target.closest('.class-size-bars')) return;\n      tile.classList.toggle('is-flipped');\n    });\n  });\n})();</script>"
 
             teacher_classes_html=f"""<section class='section card teacher-assignment-panel' id='teacher-classes'>
-      <div class='teacher-section-heading'><div><h2>My Classes & Teaching Assignments</h2><div class='muted'>Your allocated classes, streams and subjects.</div></div><a class='teacher-section-link' href='/app/academics/marks'>Record Marks</a></div>
+      <div class='teacher-section-heading'><div><h2>My Classes & Teaching Assignments</h2><div class='muted'>Your allocated classes, streams and subjects.</div></div></div>
       <div class='teacher-assignment-scroll'><table><thead><tr><th>Class</th><th>Stream</th><th>Subject</th></tr></thead><tbody>{teacher_assignment_rows or "<tr><td colspan='3'>No teaching assignments are available.</td></tr>"}</tbody></table></div>
     </section>""" if _require_permission(request,int(school_id or 0),"teacher_portal.classes") else ""
             teacher_subjects_html=f"""<section class='section card teacher-assignment-panel' id='teacher-subjects'>
@@ -7799,7 +7799,7 @@ def app_home(request: Request):
       <div class='teacher-chip-list'>{teacher_subjects_html}</div>
     </section>""" if _require_permission(request,int(school_id or 0),"teacher_portal.subjects") else ""
             teacher_submission_html=f"""<section class='section card teacher-assignment-panel' id='teacher-submission-status'>
-      <div class='teacher-section-heading'><div><h2>Marks Submission Progress</h2><div class='muted'>Your progress for {escape(latest_exam_name)}.</div></div><a class='teacher-section-link' href='/app/academics/marks'>Open Marks Entry</a></div>
+      <div class='teacher-section-heading'><div><h2>Marks Submission Progress</h2><div class='muted'>Your progress for {escape(latest_exam_name)}.</div></div></div>
       <div class='teacher-progress-meta'><strong>{entered_marks:,} of {expected_marks:,} marks entered</strong><span>{marks_pct:.0f}%</span></div>
       <div class='teacher-progress-track'><span style='width:{max(0,min(100,marks_pct)):.2f}%'></span></div>
       <div class='teacher-workspace-detail-row'><span>{open_mark_subjects} subject/class combinations still open for editing</span><span>{pending_corrections} pending correction requests</span></div>
