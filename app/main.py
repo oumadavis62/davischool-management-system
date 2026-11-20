@@ -2461,24 +2461,56 @@ def del_teacher(tid: int, request: Request):
 @app.get("/school/record-marks", response_class=HTMLResponse)
 def school_record_marks(request: Request):
     if "email" not in request.session: return RedirectResponse("/")
-    school = get_school_obj(request); name = request.session.get("name",""); is_imp = request.session.get("is_impersonating", False)
+    school = get_school_obj(request)
+    if not school: return RedirectResponse("/", status_code=303)
+    name = request.session.get("name",""); is_imp = request.session.get("is_impersonating", False)
     con = get_db(); cur = con.cursor()
-    cur.execute("SELECT * FROM classes WHERE school_id=? ORDER BY name", (school["id"],)); classes = cur.fetchall()
-    cur.execute("SELECT DISTINCT stream FROM classes WHERE school_id=? AND stream!='' ORDER BY stream", (school["id"],)); streams = [r["stream"] for r in cur.fetchall()]
-    cur.execute("SELECT DISTINCT year FROM terms WHERE school_id=? ORDER BY year DESC", (school["id"],)); years = [r["year"] for r in cur.fetchall() if r["year"]]
+    is_teacher = request.session.get("role") == "teacher"
+    if is_teacher:
+        # Teachers only need the classes, streams and subjects assigned to them.
+        # A single joined query replaces full-school class/subject scans.
+        teacher_id = request.session.get("teacher_id")
+        allocations = []
+        if teacher_id:
+            cur.execute("""SELECT DISTINCT c.id AS class_id, c.name AS class_name,
+                                  c.stream AS stream_name, s.id AS subject_id,
+                                  s.name AS subject_name
+                           FROM teacher_allocations ta
+                           JOIN classes c ON c.id=ta.class_id AND c.school_id=ta.school_id
+                           JOIN subjects s ON s.id=ta.subject_id AND s.school_id=ta.school_id
+                           WHERE ta.school_id=? AND ta.teacher_id=?
+                           ORDER BY c.name, c.stream, s.name""",
+                        (school["id"], teacher_id))
+            allocations = cur.fetchall()
+        class_names = sorted({r["class_name"] for r in allocations if r["class_name"]})
+        streams = sorted({r["stream_name"] for r in allocations if r["stream_name"]})
+        subject_map = {r["subject_id"]: r["subject_name"] for r in allocations}
+        classes = [{"name": n} for n in class_names]
+        subjects = [{"id": sid, "name": sname} for sid, sname in subject_map.items()]
+    else:
+        cur.execute("SELECT name FROM classes WHERE school_id=? ORDER BY name", (school["id"],))
+        classes = cur.fetchall()
+        cur.execute("SELECT DISTINCT stream FROM classes WHERE school_id=? AND stream!='' ORDER BY stream", (school["id"],))
+        streams = [r["stream"] for r in cur.fetchall()]
+        cur.execute("SELECT id,name FROM subjects WHERE school_id=? ORDER BY name", (school["id"],))
+        subjects = cur.fetchall()
+    # One academic-calendar query replaces separate year and term queries.
+    cur.execute("SELECT DISTINCT year, term_name FROM terms WHERE school_id=?", (school["id"],))
+    academic_periods = cur.fetchall()
+    years = sorted({r["year"] for r in academic_periods if r["year"]}, reverse=True)
+    terms_list = sorted({r["term_name"] for r in academic_periods if r["term_name"]})
     if not years: years = [str(datetime.now().year)]
-    cur.execute("SELECT DISTINCT term_name FROM terms WHERE school_id=?", (school["id"],)); terms_list = [r["term_name"] for r in cur.fetchall()]
     if not terms_list: terms_list = ["Term 1","Term 2","Term 3"]
-    cur.execute("SELECT * FROM exams WHERE school_id=? ORDER BY id DESC", (school["id"],)); exams = cur.fetchall()
-    cur.execute("SELECT * FROM subjects WHERE school_id=? ORDER BY name", (school["id"],)); subjects = cur.fetchall()
+    cur.execute("SELECT id,name FROM exams WHERE school_id=? ORDER BY id DESC", (school["id"],))
+    exams = cur.fetchall()
     con.close()
     header = school_header(school, name, "record-marks", is_impersonating=is_imp)
-    opts_class = "".join([f"<option>{c['name']}</option>" for c in classes])
-    opts_stream = "".join([f"<option>{s}</option>" for s in streams])
-    opts_year = "".join([f"<option>{y}</option>" for y in years])
-    opts_term = "".join([f"<option>{t}</option>" for t in terms_list])
-    opts_exam = "".join([f"<option value='{e['id']}'>{e['name']}</option>" for e in exams])
-    opts_subj = "".join([f"<option value='{s['id']}'>{s['name']}</option>" for s in subjects])
+    opts_class = "".join([f"<option>{escape(str(c['name']))}</option>" for c in classes])
+    opts_stream = "".join([f"<option>{escape(str(s))}</option>" for s in streams])
+    opts_year = "".join([f"<option>{escape(str(y))}</option>" for y in years])
+    opts_term = "".join([f"<option>{escape(str(t))}</option>" for t in terms_list])
+    opts_exam = "".join([f"<option value='{e['id']}'>{escape(str(e['name']))}</option>" for e in exams])
+    opts_subj = "".join([f"<option value='{s['id']}'>{escape(str(s['name']))}</option>" for s in subjects])
     html = f"""<div style='padding:20px;max-width:1400px;margin:auto'><h1 style='margin:0;font-size:22px;font-weight:900'>âï¸ Record Marks</h1><p style='color:#64748b;font-size:13px'>Select filters â system checks Out Of from Set Marks</p><div style='background:white;border:1px solid #e2e8f0;border-radius:16px;padding:18px;margin-top:14px;display:grid;grid-template-columns:repeat(3,1fr);gap:12px'><form method='post' action='/school/record-marks/load' style='display:contents'><select name='class_name' required class='input-field'><option value=''>Select Class *</option>{opts_class}</select><select name='stream' required class='input-field'><option value=''>Select Stream *</option>{opts_stream}</select><select name='year' required class='input-field'><option value=''>Select Year *</option>{opts_year}</select><select name='term' required class='input-field'><option value=''>Select Term *</option>{opts_term}</select><select name='exam_id' required class='input-field'><option value=''>Select Exam *</option>{opts_exam}</select><select name='subject_id' required class='input-field'><option value=''>Select Subject *</option>{opts_subj}</select><button style='grid-column:span 3;background:#0b3d91;color:white;padding:12px;border:none;border-radius:10px;font-weight:800'>ð Load Students</button></form></div></div>"""
     return HTMLResponse(f"<html><head><meta name='viewport' content='width=device-width, initial-scale=1'><style>body{{margin:0;font-family:Arial;background:#f8fafc}}.input-field{{width:100%;padding:11px 12px;border:1px solid #e2e8f0;border-radius:10px;margin:6px 0;font-size:13px;background:white}}.add-btn{{width:100%;background:#0b3d91;color:white;padding:12px;border:none;border-radius:10px;font-weight:700;cursor:pointer}}</style></head><body>{header}{html}</div></div></body></html>")
 
