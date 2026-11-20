@@ -47,6 +47,11 @@ class SchoolPermissionRoute(APIRoute):
             # Non-administrator accounts are confined to their own portal routes.
             # This prevents direct URL access to school administration modules.
             if role == "teacher":
+                # The Academics sidebar entry is a workspace landing route for
+                # school administrators. Teachers must land directly on their
+                # permitted Record Marks screen instead of receiving a 403.
+                if method == "GET" and path == "/app/academics":
+                    return RedirectResponse("/app/academics/marks", status_code=303)
                 teacher_routes = {
                     ("GET", "/app"), ("GET", "/app/class-teacher"),
                     ("GET", "/app/class-monitoring"), ("POST", "/app/class-monitoring/follow-up"),
@@ -9340,15 +9345,22 @@ def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: 
                 active_cohort_marks_by_exam={}
                 historical_cohort_pairs_by_exam={}
                 if teacher_id_for_exam_filter:
+                    # Drive this lookup from the teacher's small allocation set,
+                    # then reach marks through the indexed student/subject key.
+                    # Starting at the whole-school marks table made every visit to
+                    # Record Marks scan historical marks unrelated to this teacher.
                     active_rows=cur.execute("""SELECT DISTINCT m.exam_id,st.class_id AS current_class_id,
                           m.class_id AS historical_class_id,m.subject_id
-                      FROM marks m JOIN students st ON st.school_id=m.school_id AND st.id=m.student_id
-                      JOIN teacher_allocations ta ON ta.school_id=st.school_id
-                        AND ta.teacher_id=? AND ta.class_id=st.class_id AND ta.subject_id=m.subject_id
-                      WHERE m.school_id=? AND lower(coalesce(st.status,'active'))='active'
+                      FROM teacher_allocations ta
+                      JOIN students st ON st.school_id=ta.school_id AND st.class_id=ta.class_id
+                        AND lower(coalesce(st.status,'active'))='active'
+                      JOIN marks m ON m.school_id=st.school_id AND m.student_id=st.id
+                        AND m.subject_id=ta.subject_id
+                      WHERE ta.school_id=? AND ta.teacher_id=?
+                        AND ta.class_id IS NOT NULL AND ta.subject_id IS NOT NULL
                         AND NOT EXISTS (SELECT 1 FROM student_graduations sg
                           WHERE sg.school_id=st.school_id AND sg.student_id=st.id)
-                    """,(teacher_id_for_exam_filter,sid)).fetchall()
+                    """,(sid,teacher_id_for_exam_filter)).fetchall()
                     for row in active_rows:
                         key=int(row["exam_id"])
                         subject_key=int(row["subject_id"])
