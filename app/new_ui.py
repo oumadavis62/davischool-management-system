@@ -1337,7 +1337,7 @@ else setupDaviActionCells();
     // The two-step workspace is also warmed so the second Back is immediate.
     var path=window.location.pathname;
     var roots=['/app/academics/marks-corrections','/app/academics/allocations','/app/academics/assessments','/app/academics/analysis','/app/academics','/app/admissions','/app/enrolment','/app/students','/app/staff','/app/classes','/app/subjects','/app/exams','/app/report-cards','/app/report-card-settings','/app/attendance','/app/finance','/app/accounting','/app/announcements','/app/users','/app/roles','/app/school-settings','/app/audit','/app/teacher-performance','/app/class-monitoring','/app/class-teacher','/app/parent-services','/app/library','/app/transport','/app/inventory','/app/health','/app/welfare','/app/facilities','/app/hr','/app/timetable','/app/parent','/app/portals','/app/account','/app/teacher','/app','/super/portal-management','/super/global-control/dashboard','/schools/manage','/portal','/teacher','/student','/parent','/dashboard'];
-     if(teacher_locked){roots=roots.filter(function(r){return r!=='/app/academics';});}
+     if({str(teacher_locked).lower()}){{roots=roots.filter(function(r){{return r!=='/app/academics';}});}}
     var root='/app';
     roots.forEach(function(r){{if(path===r || (r!=='/app' && path.indexOf(r+'/')===0) || (r==='/app' && path.indexOf('/app/')===0)){{if(r.length>root.length)root=r;}}}});
     var u=new URL(window.location.href);
