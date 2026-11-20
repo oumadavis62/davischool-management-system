@@ -1847,12 +1847,12 @@ def _school_page(request, title, body):
     sid=_school_session(request)
     if not sid: return RedirectResponse("/")
     page_html = _shell(title,request.session.get("name","Mabale_ICT"),request.session.get("role",""),body,sid,request=request)
-    # The Student List has a substantial page-specific stylesheet. Keeping it
-    # at the end of the body lets the browser briefly paint the register before
-    # its layout rules arrive, causing the visible distorted-to-normal flash.
-    # Promote those styles into <head> so both direct loads and dashboard AJAX
-    # navigation have the page layout rules before the content is painted.
-    if title == "Students List":
+    # Students List and Alumni List have substantial page-specific styles.
+    # Leaving those styles at the end of the body lets the browser paint the
+    # content before its layout rules arrive, causing a distorted-to-normal
+    # flash on reload. Promote the styles into <head> so direct loads and
+    # dashboard navigation paint with the correct layout from the start.
+    if title in ("Students List", "Alumni List"):
         page_styles = re.findall(r"<style>.*?</style>", body, flags=re.IGNORECASE | re.DOTALL)
         if page_styles:
             for page_style in page_styles:
