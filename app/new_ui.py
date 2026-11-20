@@ -1465,7 +1465,7 @@ document.addEventListener('submit',function(event){{
       // Keep it on a full document navigation until its AJAX lifecycle is verified,
       // matching the known-good rendering produced by a manual refresh.
       if(url.pathname==='/app/users'||url.pathname.indexOf('/app/users/')===0)return false;
-      if(/\.(pdf|csv|xlsx?|zip)(?:$)/i.test(url.pathname))return false;
+      if(/\\.(pdf|csv|xlsx?|zip)(?:$)/i.test(url.pathname))return false;
       if(url.searchParams.has('download')||url.searchParams.has('export'))return false;
       return true;
     }}catch(error){{return false;}}
