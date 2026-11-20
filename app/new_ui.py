@@ -9526,9 +9526,10 @@ def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: 
             _historic_subject_map={int(x["id"]):x for x in subjects}
             _exam_keys=[int(x["id"]) for x in exams]
             if _exam_keys:
-                _exam_placeholders=",".join("?" for _ in _exam_keys)
                 _historical_pairs=set()
                 for _exam_key,_pairs in historical_cohort_pairs_by_exam.items():
+                    if _exam_key not in _exam_keys:
+                        continue
                     _scope=exam_class_scope.get(_exam_key)
                     for _old_class_id,_old_subject_id in _pairs:
                         if _scope is not None and _old_class_id not in _scope:
