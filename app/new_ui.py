@@ -1337,6 +1337,7 @@ else setupDaviActionCells();
     // The two-step workspace is also warmed so the second Back is immediate.
     var path=window.location.pathname;
     var roots=['/app/academics/marks-corrections','/app/academics/allocations','/app/academics/assessments','/app/academics/analysis','/app/academics','/app/admissions','/app/enrolment','/app/students','/app/staff','/app/classes','/app/subjects','/app/exams','/app/report-cards','/app/report-card-settings','/app/attendance','/app/finance','/app/accounting','/app/announcements','/app/users','/app/roles','/app/school-settings','/app/audit','/app/teacher-performance','/app/class-monitoring','/app/class-teacher','/app/parent-services','/app/library','/app/transport','/app/inventory','/app/health','/app/welfare','/app/facilities','/app/hr','/app/timetable','/app/parent','/app/portals','/app/account','/app/teacher','/app','/super/portal-management','/super/global-control/dashboard','/schools/manage','/portal','/teacher','/student','/parent','/dashboard'];
+     if(teacher_locked){roots=roots.filter(function(r){return r!=='/app/academics';});}
     var root='/app';
     roots.forEach(function(r){{if(path===r || (r!=='/app' && path.indexOf(r+'/')===0) || (r==='/app' && path.indexOf('/app/')===0)){{if(r.length>root.length)root=r;}}}});
     var u=new URL(window.location.href);
@@ -9315,138 +9316,90 @@ def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: 
         # exams, marks, and historical reports remain untouched for admins.
         if role=="teacher":
             try:
-                _ensure_exam_class_participation_table(cur)
-                scope_rows=cur.execute(
-                    "SELECT exam_id,class_id FROM exam_class_participation WHERE school_id=?",
-                    (sid,)
-                ).fetchall()
-                scoped_classes_by_exam={}
-                for scope_row in scope_rows:
-                    scoped_classes_by_exam.setdefault(int(scope_row["exam_id"]),set()).add(int(scope_row["class_id"]))
-                active_class_rows=cur.execute("""SELECT DISTINCT c.id
-                    FROM classes c
-                    JOIN students st ON st.school_id=c.school_id AND st.class_id=c.id
-                    WHERE c.school_id=?
-                      AND lower(coalesce(st.status,'active'))='active'
-                      AND NOT EXISTS (
-                          SELECT 1 FROM student_graduations sg
-                          WHERE sg.school_id=st.school_id AND sg.student_id=st.id
-                      )""",(sid,)).fetchall()
-                active_class_ids={int(row["id"]) for row in active_class_rows}
+                # Keep teacher exam visibility scoped to allocated classes and active learners.
                 teacher_id_for_exam_filter=int(request.session.get("teacher_id") or 0)
-                teacher_active_class_rows=cur.execute("""SELECT DISTINCT c.id
-                    FROM classes c
-                    JOIN teacher_allocations ta
-                      ON ta.school_id=c.school_id AND ta.class_id=c.id
-                    WHERE c.school_id=? AND ta.teacher_id=?
-                      AND EXISTS (
-                          SELECT 1 FROM students st
-                          WHERE st.school_id=c.school_id AND st.class_id=c.id
-                            AND lower(coalesce(st.status,'active'))='active'
-                            AND NOT EXISTS (
-                                SELECT 1 FROM student_graduations sg
-                                WHERE sg.school_id=st.school_id AND sg.student_id=st.id
-                            )
-                      )""",(sid,teacher_id_for_exam_filter)).fetchall()
+                _ensure_exam_class_participation_table(cur)
+                scope_rows=cur.execute("SELECT exam_id,class_id FROM exam_class_participation WHERE school_id=?",(sid,)).fetchall()
+                scoped_classes_by_exam={}
+                for row in scope_rows:
+                    scoped_classes_by_exam.setdefault(int(row["exam_id"]),set()).add(int(row["class_id"]))
+                teacher_alloc_rows=cur.execute("""SELECT DISTINCT class_id,subject_id FROM teacher_allocations
+                    WHERE school_id=? AND teacher_id=? AND class_id IS NOT NULL AND subject_id IS NOT NULL""",
+                    (sid,teacher_id_for_exam_filter)).fetchall()
+                teacher_pairs={(int(row["class_id"]),int(row["subject_id"])) for row in teacher_alloc_rows}
+                teacher_active_class_rows=cur.execute("""SELECT DISTINCT c.id FROM classes c
+                    JOIN teacher_allocations ta ON ta.school_id=c.school_id AND ta.class_id=c.id
+                    WHERE c.school_id=? AND ta.teacher_id=? AND EXISTS (
+                      SELECT 1 FROM students st WHERE st.school_id=c.school_id AND st.class_id=c.id
+                        AND lower(coalesce(st.status,'active'))='active'
+                        AND NOT EXISTS (SELECT 1 FROM student_graduations sg
+                          WHERE sg.school_id=st.school_id AND sg.student_id=st.id)
+                    )""",(sid,teacher_id_for_exam_filter)).fetchall()
                 eligible_active_class_ids={int(row["id"]) for row in teacher_active_class_rows}
-                # Fetch legacy participation from marks in one grouped query,
-                # rather than issuing a separate database round-trip per exam.
+                # One allocation-scoped read supplies current and historical cohort pairs.
+                active_cohort_marks_by_exam={}
+                historical_cohort_pairs_by_exam={}
+                if teacher_id_for_exam_filter:
+                    active_rows=cur.execute("""SELECT DISTINCT m.exam_id,st.class_id AS current_class_id,
+                          m.class_id AS historical_class_id,m.subject_id
+                      FROM marks m JOIN students st ON st.school_id=m.school_id AND st.id=m.student_id
+                      JOIN teacher_allocations ta ON ta.school_id=st.school_id
+                        AND ta.teacher_id=? AND ta.class_id=st.class_id AND ta.subject_id=m.subject_id
+                      WHERE m.school_id=? AND lower(coalesce(st.status,'active'))='active'
+                        AND NOT EXISTS (SELECT 1 FROM student_graduations sg
+                          WHERE sg.school_id=st.school_id AND sg.student_id=st.id)
+                    """,(teacher_id_for_exam_filter,sid)).fetchall()
+                    for row in active_rows:
+                        key=int(row["exam_id"])
+                        subject_key=int(row["subject_id"])
+                        active_cohort_marks_by_exam.setdefault(key,set()).add(
+                            (int(row["current_class_id"]),subject_key))
+                        if row["historical_class_id"] is not None:
+                            historical_cohort_pairs_by_exam.setdefault(key,set()).add(
+                                (int(row["historical_class_id"]),subject_key))
                 marked_classes_by_exam={}
                 exams_with_marks=set()
-                try:
-                    mark_scope_rows=cur.execute("""SELECT exam_id,class_id
-                        FROM marks WHERE school_id=? GROUP BY exam_id,class_id""",(sid,)).fetchall()
-                    for mark_scope in mark_scope_rows:
-                        mark_exam_id=int(mark_scope["exam_id"])
-                        exams_with_marks.add(mark_exam_id)
-                        if mark_scope["class_id"] is not None:
-                            marked_classes_by_exam.setdefault(mark_exam_id,set()).add(int(mark_scope["class_id"]))
-                except Exception:
-                    marked_classes_by_exam={}
-                    exams_with_marks=set()
-                # Legacy exams without saved participation rows are checked
-                # against classes represented by their recorded marks.
+                if eligible_active_class_ids:
+                    ph=",".join("?" for _ in eligible_active_class_ids)
+                    marked_rows=cur.execute(
+                        "SELECT DISTINCT exam_id,class_id FROM marks WHERE school_id=? AND class_id IN ("+ph+")",
+                        [sid]+sorted(eligible_active_class_ids)).fetchall()
+                    for row in marked_rows:
+                        key=int(row["exam_id"])
+                        marked_classes_by_exam.setdefault(key,set()).add(int(row["class_id"]))
+                        exams_with_marks.add(key)
+                for key,pairs in historical_cohort_pairs_by_exam.items():
+                    exams_with_marks.add(key)
+                    for old_class_id,_subject_id in pairs:
+                        marked_classes_by_exam.setdefault(key,set()).add(old_class_id)
                 for exam in all_exams:
-                    exam_key=int(exam["id"])
-                    if exam_key not in scoped_classes_by_exam:
-                        scoped_classes_by_exam[exam_key]=set(marked_classes_by_exam.get(exam_key,set()))
-                # A teacher may see an exam when it includes one of their
-                # currently allocated active classes, OR when the exam contains
-                # historical marks for active, non-graduated learners now in a
-                # class/subject allocated to that teacher. The latter preserves
-                # access to last year's Grade 7 marks after those learners move
-                # to Grade 8, without exposing exams belonging only to a fully
-                # graduated cohort.
-                teacher_alloc_rows=cur.execute("""SELECT DISTINCT ta.class_id,ta.subject_id
-                    FROM teacher_allocations ta
-                    WHERE ta.school_id=? AND ta.teacher_id=?
-                      AND ta.class_id IS NOT NULL AND ta.subject_id IS NOT NULL""",
-                    (sid,teacher_id_for_exam_filter)).fetchall()
-                # Reuse the active allocated-class set fetched above.
-                teacher_pairs={(int(row["class_id"]),int(row["subject_id"])) for row in teacher_alloc_rows}
-                # Batch the "historical marks follow active learners" check for
-                # every exam. The former nested loop could execute one query for
-                # every exam x allocated class/subject pair on each page load.
-                active_cohort_marks_by_exam={}
-                try:
-                    active_cohort_mark_rows=cur.execute("""SELECT DISTINCT m.exam_id,st.class_id,m.subject_id
-                        FROM marks m
-                        JOIN students st ON st.school_id=m.school_id AND st.id=m.student_id
-                        JOIN teacher_allocations ta ON ta.school_id=st.school_id
-                          AND ta.teacher_id=? AND ta.class_id=st.class_id
-                          AND ta.subject_id=m.subject_id
-                        WHERE m.school_id=?
-                          AND lower(coalesce(st.status,'active'))='active'
-                          AND NOT EXISTS (
-                              SELECT 1 FROM student_graduations sg
-                              WHERE sg.school_id=st.school_id AND sg.student_id=st.id
-                          )""",(teacher_id_for_exam_filter,sid)).fetchall()
-                    for active_mark in active_cohort_mark_rows:
-                        active_cohort_marks_by_exam.setdefault(int(active_mark["exam_id"]),set()).add(
-                            (int(active_mark["class_id"]),int(active_mark["subject_id"]))
-                        )
-                except Exception:
-                    active_cohort_marks_by_exam={}
+                    key=int(exam["id"])
+                    if key not in scoped_classes_by_exam:
+                        scoped_classes_by_exam[key]=set(marked_classes_by_exam.get(key,set()))
+                current_pairs={(class_id,subject_id) for class_id,subject_id in teacher_pairs
+                               if class_id in eligible_active_class_ids}
                 visible_teacher_exams=[]
                 for exam in all_exams:
-                    exam_key=int(exam["id"])
-                    participating=scoped_classes_by_exam.get(exam_key,set())
-                    # Class IDs are reused as learners are promoted, so a class
-                    # having active learners today does NOT prove that those
-                    # learners sat an older exam assigned to that class ID.
-                    # When an exam has marks, distinguish actual marked cohorts
-                    # from a later cohort that now occupies the same class.
-                    marked_class_ids=marked_classes_by_exam.get(exam_key,set())
-                    has_marks=exam_key in exams_with_marks
-                    # If there are no marks yet, use the explicit participation
-                    # list and current active classes. If marks exist, do not
-                    # count a participating class already represented only by
-                    # the old exam's marks as active merely because a new
-                    # cohort has since been promoted into that class ID.
+                    key=int(exam["id"])
+                    participating=scoped_classes_by_exam.get(key,set())
+                    marked=marked_classes_by_exam.get(key,set())
                     visible=bool(participating & eligible_active_class_ids)
-                    if has_marks:
-                        visible=bool((participating & eligible_active_class_ids) - marked_class_ids)
-                    # Keep historical exams visible when at least one currently
-                    # active, non-graduated learner with marks for this exam is
-                    # now in a class/subject allocated to this teacher.
-                    if not visible and teacher_pairs:
-                        visible=bool(
-                            active_cohort_marks_by_exam.get(exam_key,set())
-                            & teacher_pairs
-                            & {(class_key,subject_key) for class_key,subject_key in teacher_pairs
-                               if class_key in eligible_active_class_ids}
-                        )
+                    if key in exams_with_marks:
+                        visible=bool((participating & eligible_active_class_ids)-marked)
+                    if not visible and current_pairs:
+                        visible=bool(active_cohort_marks_by_exam.get(key,set()) & current_pairs)
                     if visible:
                         visible_teacher_exams.append(exam)
+                con.commit()
                 all_exams=visible_teacher_exams
             except Exception as scope_exc:
-                # Fail closed: if eligibility cannot be verified, never expose
-                # exams that may belong exclusively to graduated classes.
-                # Historical marks remain stored and admin/registrar history
-                # is unaffected; the teacher can retry after the data issue is fixed.
                 print("MABALE_ICT TEACHER EXAM VISIBILITY FAILED CLOSED:",repr(scope_exc),flush=True)
                 try: con.rollback()
                 except Exception: pass
+                scoped_classes_by_exam={}
+                marked_classes_by_exam={}
+                active_cohort_marks_by_exam={}
+                historical_cohort_pairs_by_exam={}
                 all_exams=[]
         available_years=sorted({str(e["year"]).strip() for e in all_exams if str(e["year"] or "").strip()}, reverse=True)
         year_filter=str(year or "").strip()
@@ -9504,105 +9457,60 @@ def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: 
     # first exam. The user chooses the year, then the exam, then class/subject.
     eid=selected_exam_ids[0] if selected_exam_ids else 0
     exam_class_scope={}
-    try:
-        _ensure_exam_class_participation_table(cur)
-        scope_rows=cur.execute("SELECT exam_id,class_id FROM exam_class_participation WHERE school_id=?",(sid,)).fetchall()
-        scoped_classes={}
-        for scope_row in scope_rows:
-            scoped_classes.setdefault(int(scope_row["exam_id"]),set()).add(int(scope_row["class_id"]))
-        # Fetch historical class participation for every exam in one query.
-        # The former per-exam lookup added one database round trip per exam and
-        # made opening/loading Marks Entry slower as examination history grew.
-        marked_classes_by_exam={}
-        try:
-            marked_class_rows=cur.execute(
-                "SELECT DISTINCT exam_id,class_id FROM marks WHERE school_id=? AND class_id IS NOT NULL",
-                (sid,)
-            ).fetchall()
-            for marked_row in marked_class_rows:
-                marked_classes_by_exam.setdefault(int(marked_row["exam_id"]),set()).add(int(marked_row["class_id"]))
-        except Exception as marks_scope_exc:
-            print("MABALE_ICT MARKS CLASS SCOPE BATCH LOOKUP:",repr(marks_scope_exc),flush=True)
+    if role=="teacher":
+        # Reuse the scoped results above; do not scan the school's marks again.
         for exam_row in all_exams:
-            exam_key=int(exam_row["id"])
-            known_classes=set(scoped_classes.get(exam_key,set()))
-            # Include the class recorded on marks as well as saved participation
-            # scope. Promotion must not replace the class the learners sat the
-            # historical exam in.
-            known_classes.update(marked_classes_by_exam.get(exam_key,set()))
-            exam_class_scope[exam_key]=known_classes if known_classes else (None if exam_key not in scoped_classes else set())
+            key=int(exam_row["id"])
+            known=set(scoped_classes_by_exam.get(key,set()))
+            known.update(marked_classes_by_exam.get(key,set()))
+            exam_class_scope[key]=known if known else (None if key not in scoped_classes_by_exam else set())
         participating_ids=exam_class_scope.get(eid) if eid else None
-        if role=="teacher":
-            if participating_ids is None and eid:
-                try:
-                    mark_class_rows=cur.execute(
-                        "SELECT DISTINCT class_id FROM marks WHERE school_id=? AND exam_id=? AND class_id IS NOT NULL",
-                        (sid,eid)
-                    ).fetchall()
-                    participating_ids={int(row["class_id"]) for row in mark_class_rows}
-                except Exception:
-                    participating_ids=set()
-            # Add a former class only when this teacher historically taught
-            # it, it participated in this exam, and active non-graduated
-            # learners have marks for that class/exam. This preserves a
-            # promoted cohort's old-class marks without exposing final
-            # graduated classes that no longer have active learners.
-            if eid and participating_ids:
-                try:
-                    # Find historical classes from the actual student cohort,
-                    # not solely from archived allocations. A current Grade 8
-                    # English allocation can therefore open Grade 7 English
-                    # marks for the same active learners in a prior-year exam.
-                    # Find all prior-class marks for the teacher's current
-                    # allocations in one database query, rather than one query
-                    # for every allocated class/subject pair.
-                    cohort_mark_rows=cur.execute("""SELECT DISTINCT m.class_id,m.subject_id
-                        FROM marks m
-                        JOIN students st ON st.school_id=m.school_id AND st.id=m.student_id
-                        JOIN teacher_allocations ta ON ta.school_id=st.school_id
-                          AND ta.teacher_id=? AND ta.class_id=st.class_id
-                          AND ta.subject_id=m.subject_id
-                        WHERE m.school_id=? AND m.exam_id=? AND m.class_id IS NOT NULL
-                          AND lower(coalesce(st.status,'active'))='active'
-                          AND NOT EXISTS (
-                              SELECT 1 FROM student_graduations sg
-                              WHERE sg.school_id=st.school_id AND sg.student_id=st.id
-                          )""",(teacher_id_for_exam_filter,sid,eid)).fetchall()
-                    historical_class_subjects=set()
-                    for mark_row in cohort_mark_rows:
-                        old_id=int(mark_row["class_id"])
-                        if old_id in participating_ids:
-                            historical_class_subjects.add((old_id,int(mark_row["subject_id"])))
-                    for historical_class_id,historical_subject_id in historical_class_subjects:
-                        if not any(int(c["id"])==historical_class_id for c in classes):
-                            former_class=cur.execute("SELECT * FROM classes WHERE school_id=? AND id=?",
-                                                     (sid,historical_class_id)).fetchone()
-                            if former_class:
-                                classes.append(former_class)
-                        if not any(int(a["class_id"])==historical_class_id and int(a["subject_id"])==historical_subject_id for a in allocations):
-                            allocations.append({"class_id":historical_class_id,"subject_id":historical_subject_id})
-                        hist_subject=cur.execute("SELECT * FROM subjects WHERE school_id=? AND id=?",
-                                                 (sid,historical_subject_id)).fetchone()
-                        if hist_subject and not any(int(sub["id"])==int(hist_subject["id"]) for sub in subjects):
-                            subjects.append(hist_subject)
-                except Exception as hist_exc:
-                    print("MABALE_ICT TEACHER HISTORICAL CLASS FILTER:",repr(hist_exc),flush=True)
+        if eid and participating_ids:
+            historical_pairs={(int(class_key),int(subject_key))
+                for class_key,subject_key in historical_cohort_pairs_by_exam.get(eid,set())
+                if int(class_key) in participating_ids}
+            missing_classes=sorted({class_key for class_key,_ in historical_pairs
+                if not any(int(row["id"])==class_key for row in classes)})
+            missing_subjects=sorted({subject_key for _,subject_key in historical_pairs
+                if not any(int(row["id"])==subject_key for row in subjects)})
+            if missing_classes:
+                ph=",".join("?" for _ in missing_classes)
+                classes.extend(cur.execute("SELECT * FROM classes WHERE school_id=? AND id IN ("+ph+")",
+                    [sid]+missing_classes).fetchall())
+            if missing_subjects:
+                ph=",".join("?" for _ in missing_subjects)
+                subjects.extend(cur.execute("SELECT * FROM subjects WHERE school_id=? AND id IN ("+ph+")",
+                    [sid]+missing_subjects).fetchall())
+            existing={(int(row["class_id"]),int(row["subject_id"])) for row in allocations}
+            allocations.extend({"class_id":class_key,"subject_id":subject_key}
+                for class_key,subject_key in historical_pairs if (class_key,subject_key) not in existing)
+        if participating_ids is not None:
+            classes=[row for row in classes if int(row["id"]) in participating_ids]
+    else:
+        try:
+            _ensure_exam_class_participation_table(cur)
+            scope_rows=cur.execute("SELECT exam_id,class_id FROM exam_class_participation WHERE school_id=?",(sid,)).fetchall()
+            scoped={}
+            for row in scope_rows:
+                scoped.setdefault(int(row["exam_id"]),set()).add(int(row["class_id"]))
+            marked={}
+            marked_rows=cur.execute("SELECT DISTINCT exam_id,class_id FROM marks WHERE school_id=? AND class_id IS NOT NULL",(sid,)).fetchall()
+            for row in marked_rows:
+                marked.setdefault(int(row["exam_id"]),set()).add(int(row["class_id"]))
+            for exam_row in all_exams:
+                key=int(exam_row["id"])
+                known=set(scoped.get(key,set()))
+                known.update(marked.get(key,set()))
+                exam_class_scope[key]=known if known else (None if key not in scoped else set())
+            participating_ids=exam_class_scope.get(eid) if eid else None
             if participating_ids is not None:
-                classes=[c for c in classes if int(c["id"]) in participating_ids]
-        elif participating_ids is not None:
-            # Admin and Registrar must see the class that actually sat the
-            # selected exam, even if those learners have since been promoted.
-            classes=[c for c in classes if int(c["id"]) in participating_ids]
-        con.commit()
-    except Exception as exc:
-        print("MABALE_ICT EXAM CLASS SCOPE FALLBACK:",repr(exc),flush=True)
-        try: con.rollback()
-        except Exception: pass
-        participating_ids=None
-        if role=="teacher":
-            # Fail closed for teacher class options if exam participation
-            # cannot be established, rather than exposing graduated classes.
-            classes=[]
+                classes=[row for row in classes if int(row["id"]) in participating_ids]
+            con.commit()
+        except Exception as exc:
+            print("MABALE_ICT EXAM CLASS SCOPE FALLBACK:",repr(exc),flush=True)
+            try: con.rollback()
+            except Exception: pass
+            participating_ids=None
     if role=="teacher" and teacher_id:
         available_class_ids={int(c["id"]) for c in classes}
         allocations=[a for a in allocations if a["class_id"] is not None and int(a["class_id"]) in available_class_ids]
@@ -9619,37 +9527,26 @@ def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: 
             _exam_keys=[int(x["id"]) for x in exams]
             if _exam_keys:
                 _exam_placeholders=",".join("?" for _ in _exam_keys)
-                _historical_rows=cur.execute("""SELECT DISTINCT m.exam_id,m.class_id,m.subject_id
-                    FROM marks m
-                    JOIN students st ON st.school_id=m.school_id AND st.id=m.student_id
-                    JOIN teacher_allocations ta ON ta.school_id=st.school_id
-                      AND ta.teacher_id=? AND ta.class_id=st.class_id
-                      AND ta.subject_id=m.subject_id
-                    WHERE m.school_id=? AND m.exam_id IN (""" + _exam_placeholders + """)
-                      AND m.class_id IS NOT NULL
-                      AND lower(coalesce(st.status,'active'))='active'
-                      AND NOT EXISTS (
-                          SELECT 1 FROM student_graduations sg
-                          WHERE sg.school_id=st.school_id AND sg.student_id=st.id
-                      )""",[teacher_id,sid]+_exam_keys).fetchall()
-                for _historical_row in _historical_rows:
-                    _exam_key=int(_historical_row["exam_id"])
-                    _old_class_id=int(_historical_row["class_id"])
-                    _old_subject_id=int(_historical_row["subject_id"])
+                _historical_pairs=set()
+                for _exam_key,_pairs in historical_cohort_pairs_by_exam.items():
                     _scope=exam_class_scope.get(_exam_key)
-                    if _scope is not None and _old_class_id not in _scope:
-                        continue
-                    if _old_class_id not in _historic_class_map:
-                        _old_class=cur.execute("SELECT * FROM classes WHERE school_id=? AND id=?",
-                                               (sid,_old_class_id)).fetchone()
-                        if _old_class:
-                            _historic_class_map[_old_class_id]=_old_class
-                    _historic_pair_set.add((_old_class_id,_old_subject_id))
-                    if _old_subject_id not in _historic_subject_map:
-                        _old_subject=cur.execute("SELECT * FROM subjects WHERE school_id=? AND id=?",
-                                                 (sid,_old_subject_id)).fetchone()
-                        if _old_subject:
-                            _historic_subject_map[_old_subject_id]=_old_subject
+                    for _old_class_id,_old_subject_id in _pairs:
+                        if _scope is not None and _old_class_id not in _scope:
+                            continue
+                        _historical_pairs.add((_old_class_id,_old_subject_id))
+                _missing_class_ids=sorted({class_id for class_id,_ in _historical_pairs if class_id not in _historic_class_map})
+                _missing_subject_ids=sorted({subject_id for _,subject_id in _historical_pairs if subject_id not in _historic_subject_map})
+                if _missing_class_ids:
+                    _ph=",".join("?" for _ in _missing_class_ids)
+                    for _row in cur.execute("SELECT * FROM classes WHERE school_id=? AND id IN ("+_ph+")",
+                        [sid]+_missing_class_ids).fetchall():
+                        _historic_class_map[int(_row["id"])]=_row
+                if _missing_subject_ids:
+                    _ph=",".join("?" for _ in _missing_subject_ids)
+                    for _row in cur.execute("SELECT * FROM subjects WHERE school_id=? AND id IN ("+_ph+")",
+                        [sid]+_missing_subject_ids).fetchall():
+                        _historic_subject_map[int(_row["id"])]=_row
+                _historic_pair_set.update(_historical_pairs)
                 all_classes=list(_historic_class_map.values())
                 subjects=list(_historic_subject_map.values())
                 _existing_pairs={(int(a["class_id"]),int(a["subject_id"]))
