@@ -778,8 +778,8 @@ def _shell(title, name, role, body, school_id=None, request=None):
                 "Alumni List":"graduation-cap", "Staff List":"staff", "Former Staff":"users", "Leave Management":"calendar",
                 "Payroll Processing":"finance", "Payslips":"report", "Staff Appraisals":"chart", "HR Reports":"analysis",
                 "Subjects":"subject", "Teacher Allocations":"allocation", "Subject Allocations":"school", "Examination":"exam",
-                "Grade and Points":"grading", "Subject Grading and Points":"grading", "Overall Grading and Points":"grading",
-                "Examination Tracker":"audit", "Marks Correction":"correction", "Promotion":"allocation", "Class MarkSheets":"marks",
+                "Grading":"grading", "Subject Grade":"grading", "Overall Grade":"grading",
+                "Marks Status":"audit", "Marks Review":"correction", "Promotion":"allocation", "Class MarkSheets":"marks",
                 "Class MarkSheet Analysis":"analysis", "Exam Analysis":"chart", "Marks Entry":"marks", "Report Cards":"report",
                 "SBA/CBA":"book-open", "Classes and Streams":"school",
                 "Book Catalogue":"book-open", "Book Register":"book-open", "Issue Books":"book-open", "Book Returns":"book-open",
@@ -858,13 +858,13 @@ def _shell(title, name, role, body, school_id=None, request=None):
             is_open = "open" if active else ""
             submenu_items = []
             for url, item_label in items:
-                if label == "Dean Settings" and item_label == "Grade and Points":
+                if label == "Dean Settings" and item_label == "Grading":
                     grade_points_active = request_path.startswith((
                         "/app/academics/grading", "/app/academics/overall-grading"
                     ))
                     grade_points_links = (
-                        _nav_sub("/app/academics/grading", "Subject Grading and Points")
-                        + _nav_sub("/app/academics/overall-grading", "Overall Grading and Points")
+                        _nav_sub("/app/academics/grading", "Subject Grade")
+                        + _nav_sub("/app/academics/overall-grading", "Overall Grade")
                     )
                     submenu_items.append(
                         "<details class='nav-group nav-nested-group nav-grade-points-group' "
@@ -889,9 +889,9 @@ def _shell(title, name, role, body, school_id=None, request=None):
             ("/app/academics/allocations", "Teacher Allocations"),
             ("/app/academics/subject-allocation", "Subject Allocations"),
             ("/app/exams", "Examination"),
-            ("/app/academics/grading", "Grade and Points"),
-            ("/app/academics/submission-tracker", "Examination Tracker"),
-            ("/app/academics/marks-corrections", "Marks Correction"),
+            ("/app/academics/grading", "Grading"),
+            ("/app/academics/submission-tracker", "Marks Status"),
+            ("/app/academics/marks-corrections", "Marks Review"),
             ("/app/students/promotion", "Promotion"),
         ]
         spreadsheet_routes = [
