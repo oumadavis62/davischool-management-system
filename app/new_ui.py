@@ -871,7 +871,7 @@ def _shell(title, name, role, body, school_id=None, request=None):
                         + ("open" if grade_points_active else "")
                         + "><summary class='nav-sub nav-subgroup-summary' "
                         + "onclick='event.preventDefault();event.stopPropagation();this.parentElement.open=!this.parentElement.open'>"
-                        + f"<span class='nav-sub-icon'>{_modern_icon('grading')}</span><b>Grade and Points</b>"
+                        + f"<span class='nav-sub-icon'>{_modern_icon('grading')}</span><b>Grading</b>"
                         + "<span class='nav-chevron'>▾</span></summary>"
                         + f"<div class='nav-submenu nav-nested-submenu'>{grade_points_links}</div></details>"
                     )
