@@ -400,21 +400,54 @@ class DaviSchoolTabSessionMiddleware:
         try {
           var action = new URL(form.getAttribute("action") || location.href, location.href);
           if (action.origin !== location.origin || !isManagedPage(action.pathname)) return;
+          // Never trust a cached form action's ds_tab value. Bind both the
+          // request URL and submitted form data to this live browser tab.
+          action.searchParams.set(TAB, id);
+          var tabField = form.querySelector('input[name="ds_tab"]');
+          if (!tabField) {
+            tabField = document.createElement("input");
+            tabField.type = "hidden";
+            tabField.name = TAB;
+            form.appendChild(tabField);
+          }
+          tabField.value = id;
           event.preventDefault();
           var data = new FormData(form);
-          fetch(action.href, {
-            method: "POST", body: data, credentials: "same-origin",
-            redirect: "follow", cache: "no-store"
+          // Verify the exact tab session before issuing a state-changing
+          // filter request. An unauthenticated response must not be followed
+          // by a POST that can replace a valid tab cookie with an empty one.
+          var keepalive = new URL("/app/session-keepalive", location.origin);
+          keepalive.searchParams.set(TAB, id);
+          fetch(keepalive.pathname + keepalive.search, {
+            method: "GET", credentials: "same-origin", cache: "no-store"
+          }).then(function (sessionResponse) {
+            if (!sessionResponse.ok) {
+              throw new Error("Your dashboard session could not be verified. Reload the dashboard and sign in again.");
+            }
+            return fetch(action.href, {
+              method: "POST", body: data, credentials: "same-origin",
+              redirect: "follow", cache: "no-store"
+            });
           }).then(function (response) {
-            if (!response.ok) throw new Error("Filter request failed");
             var finalUrl = new URL(response.url || action.href, location.href);
             if (finalUrl.origin !== location.origin) throw new Error("Unexpected filter destination");
+            // fetch follows redirects. A login page commonly returns 200, so
+            // response.ok alone is not evidence that the filter succeeded.
+            if (response.redirected || /(?:^|\\/)(?:login|sign-in)(?:\\/|$)/i.test(finalUrl.pathname)) {
+              throw new Error("The filter request was redirected to sign-in. Your filter was not applied; reload the dashboard and try again.");
+            }
+            if (!response.ok) throw new Error("Filter request failed (HTTP " + response.status + ")");
             var state = currentState();
             var step = state.daviTwoStep && state.daviHistoryStep === "filtered" ? "filtered" : "workspace";
             if (step === "filtered") history.replaceState(stateFor(finalUrl, "filtered"), "", finalUrl.href);
             else history.pushState(stateFor(finalUrl, "filtered"), "", finalUrl.href);
             location.reload();
-          }).catch(function () { form.submit(); });
+          }).catch(function (error) {
+            // Do not retry a rejected/redirected request with form.submit():
+            // that would repeat the same unauthenticated POST and may overwrite
+            // the active tab's signed session cookie.
+            window.alert(error && error.message ? error.message : "The filter could not be applied. Please try again.");
+          });
         } catch (_) { form.submit(); }
       }, true);
       document.addEventListener("click", function (event) {
