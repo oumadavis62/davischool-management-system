@@ -10981,7 +10981,7 @@ def marks_correction_requests(request: Request):
 
 
 
-    body=f"""<div class='page marks-correction-workspace'><div class='mc-eyebrow'>ACADEMIC MANAGER / ASSESSMENT CONTROL</div><div class='mc-heading'><div><h1>Marks Correction</h1>
+    body=f"""<div class='page marks-correction-workspace'><div class='mc-eyebrow'>ACADEMIC MANAGER / ASSESSMENT CONTROL</div><div class='mc-heading'><div><h1>Marks Review</h1>
 <p>Review saved assessments, manage submission locks and respond to teacher correction requests.</p></div>
 <button type='button' class='mc-filter-trigger' onclick="document.getElementById('mcFilterDialog').showModal()">⚙ Filters</button></div>
 <section class='mc-stats'>
@@ -11091,7 +11091,7 @@ function prepareBulkAction(){{
 }}
 function searchCorrectionRows(){{var q=(document.getElementById('mcTableSearch').value||'').toLowerCase();var table=document.getElementById(document.getElementById('mcSavedPanel').hidden?'mcRequestsTable':'mcSavedTable');if(table)table.querySelectorAll('tbody tr').forEach(function(row){{row.hidden=!!q&&!row.innerText.toLowerCase().includes(q);}});}}
 </script>"""
-    return _school_page(request,"Marks Corrections",body)
+    return _school_page(request,"Marks Review",body)
 
 @router.post("/app/academics/marks-corrections/bulk")
 def bulk_update_marks_corrections(
