@@ -355,6 +355,10 @@ class DaviSchoolTabSessionMiddleware:
       function navigateFilter(url) {
         if (url.origin !== location.origin || url.pathname !== location.pathname ||
             !isManagedPage(url.pathname) || !hasFilter(url)) return false;
+        // Filter navigation is a same-tab page transition. Always bind it to
+        // the active sessionStorage identity, rather than trusting a hidden
+        // ds_tab value or an old URL retained by a cached filter dialog.
+        url.searchParams.set(TAB, id);
         var state = currentState();
         var step = state.daviTwoStep && state.daviHistoryStep === "filtered" ? "filtered" : "workspace";
         var destination = url.href;
