@@ -10951,7 +10951,7 @@ def marks_correction_requests(request: Request):
             f"<td>{escape(str(r['mark_term'] or ''))}</td><td>{escape(str(r['mark_year'] or ''))}</td>"
             f"<td>{int(r['mark_count'] or 0)}</td>"
             f"<td>{'—' if r['mark_mean'] is None else ('%.1f' % float(r['mark_mean']))}</td>"
-            f"<td>{status_html}</td><td>{action}</td></tr>"
+            f"<td>{status_html}</td><td class='mc-row-action-cell'><div class='mc-row-action-wrap'>{action}</div></td></tr>"
         )
 
     request_rows_html=""
@@ -11048,6 +11048,11 @@ def marks_correction_requests(request: Request):
 .mc-panel .btn,.mc-panel .btnlink,.mc-panel .lock-btn,.mc-panel .unlock-btn{{display:inline-block!important;opacity:1!important;visibility:visible!important;pointer-events:auto!important;border:0;border-radius:8px;padding:8px 10px;background:#176b3a;color:#fff;font-size:10px;font-weight:850;white-space:nowrap;cursor:pointer}}
 .mc-panel .unlock-btn{{background:#a16207!important}}.mc-panel .btnlink{{background:#fff!important;border:1px solid #e4c5c0!important;color:#a33c2d!important}}
 .mc-panel .correction-subject-row{{cursor:default}}.mc-panel .correction-subject-row .lock-btn,.mc-panel .correction-subject-row .unlock-btn{{display:inline-block!important}}
+ .mc-table-scroll #mcSavedTable th:last-child,.mc-table-scroll #mcSavedTable td.mc-row-action-cell{{position:sticky;right:0;z-index:3;min-width:126px;width:126px;background:#fff;box-shadow:-5px 0 9px #183b2a12;white-space:nowrap}}
+ .mc-table-scroll #mcSavedTable th:last-child{{z-index:4;background:#edf5ef}}
+ .mc-row-action-wrap{{display:flex!important;align-items:center;justify-content:center;min-width:104px;white-space:nowrap;overflow:visible}}
+ .mc-row-action-wrap form{{display:inline-flex!important;flex:0 0 auto!important;align-items:center;margin:0!important;visibility:visible!important;opacity:1!important}}
+ .mc-row-action-wrap button.lock-btn,.mc-row-action-wrap button.unlock-btn{{display:inline-flex!important;align-items:center;justify-content:center;min-width:92px;min-height:34px;padding:8px 10px!important;visibility:visible!important;opacity:1!important;position:static!important;transform:none!important;white-space:nowrap!important}}
 .mc-bulk-form{{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin:15px 0;padding:12px 14px;border:1px solid #dce9df;border-radius:12px;background:#f5faf6;color:#52705d;font-size:11px;font-weight:850}}
 .mc-bulk-form>div{{display:flex;gap:8px;flex-wrap:wrap}}
 .mc-bulk-form button{{border:0;border-radius:8px;padding:9px 12px;font-size:10px;font-weight:900;cursor:pointer}}
