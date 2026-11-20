@@ -741,6 +741,30 @@ class DaviSchoolTabSessionMiddleware:
                     rewritten_cookie = "; ".join(name + "=" + value for name, value in cookie_pairs).encode("latin-1", "ignore")
                     scope["headers"] = [(name, rewritten_cookie if name.lower() == b"cookie" else value) for name, value in scope.get("headers", [])]
                     cookie_header = rewritten_cookie.decode("latin-1", "ignore")
+        # If navigation lost ds_tab, recover only when the browser has exactly
+        # one authenticated tab session. With multiple authenticated sessions
+        # we deliberately fail closed to preserve account isolation.
+        if not tab_id and not force_new_tab:
+            authenticated_tabs = [
+                name[len("davischool_session_"): ]
+                for name, value in cookie_pairs
+                if name.startswith("davischool_session_")
+                and _TAB_RE.fullmatch(name[len("davischool_session_"):])
+                and cookie_has_authenticated_session(value)
+            ]
+            if len(authenticated_tabs) == 1:
+                tab_id = authenticated_tabs[0]
+                session_cookie = self._cookie_name(tab_id)
+                scope["davischool_tab_id"] = tab_id
+                # Make the recovered identity explicit for downstream redirects
+                # and page navigation, not just for this cookie lookup.
+                recovered_query = parse_qs(
+                    scope.get("query_string", b"").decode("utf-8", "ignore"),
+                    keep_blank_values=True,
+                )
+                recovered_query[_TAB_PARAM] = [tab_id]
+                scope["query_string"] = urlencode(recovered_query, doseq=True).encode("utf-8")
+
         selected_cookie_value = next((value for name, value in cookie_pairs if name == session_cookie), None)
         legacy_value = next((value for name, value in cookie_pairs if name == "session"), None)
         selected_cookie_present = selected_cookie_value is not None
