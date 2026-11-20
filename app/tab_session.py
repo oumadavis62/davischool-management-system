@@ -433,9 +433,13 @@ class DaviSchoolTabSessionMiddleware:
             if (finalUrl.origin !== location.origin) throw new Error("Unexpected filter destination");
             // fetch follows redirects. A login page commonly returns 200, so
             // response.ok alone is not evidence that the filter succeeded.
-            var finalPath = finalUrl.pathname.toLowerCase().replace(/\\/+$/, "") || "/";
+            var finalPath = finalUrl.pathname.toLowerCase();
+            while (finalPath.length > 1 && finalPath.charAt(finalPath.length - 1) === "/") {
+              finalPath = finalPath.slice(0, -1);
+            }
             if (finalPath === "/login" || finalPath.indexOf("/login/") === 0 ||
-                finalPath === "/sign-in" || finalPath.indexOf("/sign-in/") === 0) {
+                finalPath === "/sign-in" || finalPath.indexOf("/sign-in/") === 0 ||
+                (response.redirected && finalPath === "/")) {
               throw new Error("The filter request was redirected to sign-in. Your filter was not applied; reload the dashboard and try again.");
             }
             if (!response.ok) throw new Error("Filter request failed (HTTP " + response.status + ")");
