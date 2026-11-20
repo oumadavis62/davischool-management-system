@@ -306,7 +306,7 @@ class DaviSchoolTabSessionMiddleware:
         path = cleanPath(path);
         return roots.some(function (root) {
           return path === root || path.indexOf(root + "/") === 0;
-        }) || /^\/(super|schools|portal|teacher|student|parent|dashboard|account)(\/|$)/.test(path);
+        }) || /^\\/(super|schools|portal|teacher|student|parent|dashboard|account)(\\/|$)/.test(path);
       }
       function hasFilter(url) {
         var found = false;
