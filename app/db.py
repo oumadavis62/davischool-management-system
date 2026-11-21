@@ -197,7 +197,9 @@ class RequestDatabaseConnectionMiddleware:
     """
 
     def __init__(self, app):
-        self.app = app
+        # This middleware is already installed globally by app/main.py; compose
+        # the form-history protection here so every authenticated UI route gets it.
+        self.app = FormAutocompleteProtectionMiddleware(app)
 
     async def __call__(self, scope, receive, send):
         if scope.get("type") != "http":
