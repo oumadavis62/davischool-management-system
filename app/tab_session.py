@@ -48,6 +48,14 @@ class DaviSchoolTabSessionMiddleware:
         query = scope.get("query_string", b"").decode("utf-8", "ignore")
         values = parse_qs(query, keep_blank_values=True).get(_TAB_PARAM, [])
         value = values[0] if values else ""
+        # Mobile navigation/fetch may omit the query parameter. The page
+        # controller sends this identity in a header; signed cookies still
+        # provide authentication and isolation.
+        if not _TAB_RE.fullmatch(value or "") and scope.get("type") == "http":
+            headers = {k.lower(): v for k, v in scope.get("headers", [])}
+            candidate = headers.get(b"x-davischool-tab", b"").decode("ascii", "ignore")
+            if _TAB_RE.fullmatch(candidate or ""):
+                value = candidate
         if not _TAB_RE.fullmatch(value or ""):
             value = ""
             if scope.get("type") == "http":
@@ -514,7 +522,7 @@ class DaviSchoolTabSessionMiddleware:
           method: "GET",
           credentials: "same-origin",
           cache: "no-store",
-          headers: {"X-DaviSchool-Keepalive": "1"}
+          headers: {"X-DaviSchool-Keepalive": "1", "X-DaviSchool-Tab": id}
         }).catch(function () {});
       } catch (_) {}
     }
@@ -554,7 +562,7 @@ class DaviSchoolTabSessionMiddleware:
                 "status": 200,
                 "headers": [
                     (b"content-type", b"application/javascript; charset=utf-8"),
-                    (b"cache-control", b"public, max-age=3600"),
+                    (b"cache-control", b"no-store, no-cache, must-revalidate"),
                     (b"content-length", str(len(body)).encode("ascii")),
                 ],
             })
@@ -741,6 +749,28 @@ class DaviSchoolTabSessionMiddleware:
                     rewritten_cookie = "; ".join(name + "=" + value for name, value in cookie_pairs).encode("latin-1", "ignore")
                     scope["headers"] = [(name, rewritten_cookie if name.lower() == b"cookie" else value) for name, value in scope.get("headers", [])]
                     cookie_header = rewritten_cookie.decode("latin-1", "ignore")
+        # Repair top-level dashboard navigation before selecting a session cookie.
+        if (
+            not tab_id
+            and scope.get("type") == "http"
+            and scope.get("method", "GET").upper() in ("GET", "HEAD")
+            and scope.get("path", "").startswith("/app/")
+            and scope.get("path") != "/app/tab-session.js"
+        ):
+            request_headers = {k.lower(): v for k, v in scope.get("headers", [])}
+            accepts_html = b"text/html" in request_headers.get(b"accept", b"").lower()
+            is_navigation = request_headers.get(b"sec-fetch-mode", b"").lower() == b"navigate"
+            if accepts_html or is_navigation:
+                recovery = (
+                    "<!doctype html><html><head><meta name='viewport' content='width=device-width,initial-scale=1'>"                    "<title>Restoring secure session</title></head><body style='font:15px Arial;padding:24px;color:#173d2b'>"                    "<p id='status'>Restoring this browser tab's secure session…</p><script>"                    "(function(){try{var id=sessionStorage.getItem('davischool_tab_id')||'';"                    "if(!/^[A-Za-z0-9_-]{16,64}$/.test(id)){document.getElementById('status').textContent='This tab has no saved session identity. Return to sign-in and sign in again.';return;}"                    "var u=new URL(location.href);u.searchParams.set('ds_tab',id);location.replace(u.pathname+u.search+u.hash);}catch(e){document.getElementById('status').textContent='Could not restore this tab. Reload and sign in again.';}})();"                    "</script></body></html>"
+                ).encode("utf-8")
+                await send({
+                    "type": "http.response.start",
+                    "status": 200,
+                    "headers": [(b"content-type", b"text/html; charset=utf-8"), (b"cache-control", b"no-store"), (b"content-length", str(len(recovery)).encode("ascii"))],
+                })
+                await send({"type": "http.response.body", "body": recovery})
+                return
         # If navigation lost ds_tab, recover only when the browser has exactly
         # one authenticated tab session. With multiple authenticated sessions
         # we deliberately fail closed to preserve account isolation.
