@@ -3176,8 +3176,13 @@ def student_delete(request: Request, student_id: int):
         # Remove only admission records explicitly linked to this student.
         # Pending/accepted applications for other learners are never affected.
         cur.execute(
-            "DELETE FROM admission_applications WHERE school_id=? AND enrolled_student_id=?",
-            (sid, student_id)
+            """DELETE FROM admission_applications
+               WHERE school_id=? AND (
+                   enrolled_student_id=? OR
+                   (COALESCE(trim(admission_no),'')<>'' AND
+                    upper(trim(admission_no))=upper(trim(?)))
+               )""",
+            (sid, student_id, str(st["admission_no"] or "").strip())
         )
 
         # student_class_history is already part of cleanup_tables above, so the
