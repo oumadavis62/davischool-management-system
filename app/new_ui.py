@@ -1852,7 +1852,7 @@ def _school_page(request, title, body):
     # content before its layout rules arrive, causing a distorted-to-normal
     # flash on reload. Promote the styles into <head> so direct loads and
     # dashboard navigation paint with the correct layout from the start.
-    if title in ("Students List", "Alumni List"):
+    if title in ("Students List", "Alumni List", "Student Clearance List"):
         page_styles = re.findall(r"<style>.*?</style>", body, flags=re.IGNORECASE | re.DOTALL)
         if page_styles:
             for page_style in page_styles:
