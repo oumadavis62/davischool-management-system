@@ -2202,7 +2202,7 @@ def del_stud(sid: int, request: Request):
             (school_id, sid, student_admission_no)
         )
     except Exception as exc:
-        if "no such table" not in str(exc).lower() and "admission_applications" not in str(exc).lower():
+        if "no such table" not in str(exc).lower() and "does not exist" not in str(exc).lower():
             con.rollback()
             con.close()
             return HTMLResponse("Admission records could not be safely synchronized. Student deletion was cancelled.", 500)
