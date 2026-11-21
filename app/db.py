@@ -579,13 +579,22 @@ class FormAutocompleteProtectionMiddleware:
 
         response_start = None
         body_parts = []
+        passthrough = False
 
         async def capture(message):
-            nonlocal response_start
+            nonlocal response_start, passthrough
             if message["type"] == "http.response.start":
                 response_start = message
+                headers = message.get("headers", [])
+                content_type = next((v.decode("latin1", "ignore").lower() for k, v in headers if k.lower() == b"content-type"), "")
+                if "text/html" not in content_type:
+                    passthrough = True
+                    await send(message)
                 return
             if message["type"] == "http.response.body":
+                if passthrough:
+                    await send(message)
+                    return
                 body_parts.append(message.get("body", b""))
                 if message.get("more_body", False):
                     return
