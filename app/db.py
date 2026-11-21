@@ -556,3 +556,54 @@ def acquire_schema_migration_lock(connection) -> None:
 
 def connect(database_url: str, **kwargs) -> CompatConnection:
     return CompatConnection(database_url, **kwargs)
+
+
+class FormAutocompleteProtectionMiddleware:
+    """Disable browser form-history suggestions for school data-entry screens.
+
+    Browser/keyboard history already stored on a device cannot be erased by a
+    server response, but this prevents ordinary HTML data-entry forms from
+    advertising fields for future browser autofill. Login/password forms are
+    intentionally left untouched so password-manager behaviour remains usable.
+    """
+
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope.get("type") != "http":
+            await self.app(scope, receive, send)
+            return
+
+        response_start = None
+        body_parts = []
+
+        async def capture(message):
+            nonlocal response_start
+            if message["type"] == "http.response.start":
+                response_start = message
+                return
+            if message["type"] == "http.response.body":
+                body_parts.append(message.get("body", b""))
+                if message.get("more_body", False):
+                    return
+                body = b"".join(body_parts)
+                headers = list(response_start.get("headers", [])) if response_start else []
+                content_type = next((v.decode("latin1", "ignore").lower() for k, v in headers if k.lower() == b"content-type"), "")
+                if "text/html" in content_type and body:
+                    script = b'''<script>(function(){function protect(){document.querySelectorAll('form:not([data-allow-autofill])').forEach(function(f){if(f.querySelector('input[type=password]'))return;f.setAttribute('autocomplete','off');f.querySelectorAll('input:not([type=password]),textarea,select').forEach(function(el){el.setAttribute('autocomplete','off');el.setAttribute('autocorrect','off');el.setAttribute('spellcheck','false');});});}if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',protect,{once:true});else protect();new MutationObserver(protect).observe(document.documentElement,{childList:true,subtree:true});})();</script>'''
+                    if b"</head>" in body.lower():
+                        import re
+                        body = re.sub(br"</head>", script + b"</head>", body, count=1, flags=re.IGNORECASE)
+                    else:
+                        body = script + body
+                    headers = [(k, v) for k, v in headers if k.lower() not in (b"content-length", b"content-md5")]
+                    headers.append((b"content-length", str(len(body)).encode("ascii")))
+                    response_start["headers"] = headers
+                if response_start:
+                    await send(response_start)
+                await send({"type": "http.response.body", "body": body, "more_body": False})
+                return
+            await send(message)
+
+        await self.app(scope, receive, capture)
