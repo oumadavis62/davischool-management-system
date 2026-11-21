@@ -1671,7 +1671,45 @@ document.addEventListener('submit',function(event){{
       location.reload();
     }}
   }};
-}})();</script></main></div></body></html>"""
+}})();</script>
+<script>
+(function(){{
+  "use strict";
+  // Protect all school workspace entry fields from browser/keyboard form-history.
+  function protectSchoolEntryFields(root){{
+    if(!root || !root.querySelectorAll)return;
+    root.querySelectorAll('form:not([data-allow-autofill])').forEach(function(form){{
+      if(form.querySelector('input[type="password"]'))return;
+      form.setAttribute('autocomplete','off');
+    }});
+    root.querySelectorAll('input:not([type="password"]):not([type="hidden"]),textarea').forEach(function(field){{
+      if(field.closest && field.closest('[data-allow-autofill]'))return;
+      field.setAttribute('autocomplete','off');
+      field.setAttribute('autocorrect','off');
+      field.setAttribute('autocapitalize','off');
+      field.setAttribute('spellcheck','false');
+      field.setAttribute('data-lpignore','true');
+    }});
+  }}
+  protectSchoolEntryFields(document);
+  document.addEventListener('focusin',function(event){{
+    var field=event.target;
+    if(field && field.matches && field.matches('input:not([type="password"]):not([type="hidden"]),textarea')){{
+      field.setAttribute('autocomplete','off');
+      field.setAttribute('autocorrect','off');
+      field.setAttribute('autocapitalize','off');
+      field.setAttribute('spellcheck','false');
+    }}
+  }},true);
+  new MutationObserver(function(records){{
+    records.forEach(function(record){{
+      record.addedNodes.forEach(function(node){{
+        if(node.nodeType===1)protectSchoolEntryFields(node);
+      }});
+    }});
+  }}).observe(document.documentElement,{{childList:true,subtree:true}});
+}})();
+</script></main></div></body></html>"""
 @router.get("/app/session-keepalive")
 def session_keepalive(request: Request):
     """Refresh an active authenticated session when the user is interacting with the workspace."""
