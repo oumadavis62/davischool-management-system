@@ -2180,6 +2180,32 @@ def del_stud(sid: int, request: Request):
     if not school: return RedirectResponse("/",303)
     con = get_db(); cur = con.cursor()
     school_id = school["id"]
+    student_row = cur.execute(
+        "SELECT admission_no FROM students WHERE id=? AND school_id=?",
+        (sid, school_id)
+    ).fetchone()
+    if not student_row:
+        con.close()
+        return HTMLResponse("Student not found.", 404)
+    student_admission_no = str(student_row["admission_no"] or "").strip()
+
+    # Remove the linked admission application. Legacy records may have the
+    # admission number but not enrolled_student_id. Always scope by school.
+    try:
+        cur.execute(
+            """DELETE FROM admission_applications
+               WHERE school_id=? AND (
+                   enrolled_student_id=? OR
+                   (COALESCE(trim(admission_no),'')<>'' AND
+                    upper(trim(admission_no))=upper(trim(?)))
+               )""",
+            (school_id, sid, student_admission_no)
+        )
+    except Exception as exc:
+        if "no such table" not in str(exc).lower() and "admission_applications" not in str(exc).lower():
+            con.rollback()
+            con.close()
+            return HTMLResponse("Admission records could not be safely synchronized. Student deletion was cancelled.", 500)
 
     # Remove only this learner's parent links and saved credentials. Keep the
     # parent login itself so it can still be used for other children or later.
